@@ -1,0 +1,849 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>etch — Precise file mutations, automatic commits</title>
+<style>
+  :root {
+    --bg: #fafaf8;
+    --fg: #1a1a18;
+    --fg-dim: #6b6b66;
+    --accent: #2d5a27;
+    --accent-light: #e8f0e6;
+    --accent-dark: #1e3d1a;
+    --border: #d8d8d2;
+    --code-bg: #f0f0ec;
+    --code-fg: #333330;
+    --surface: #ffffff;
+    --red: #9b2c2c;
+    --red-light: #fef2f2;
+    --blue: #2b4c7e;
+    --blue-light: #eff6ff;
+    --orange: #92400e;
+    --orange-light: #fffbeb;
+    --font-sans: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+    --font-mono: 'JetBrains Mono', 'SF Mono', 'Fira Code', 'Cascadia Code', monospace;
+    --max-w: 680px;
+  }
+
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg: #141413;
+      --fg: #e8e8e4;
+      --fg-dim: #8a8a84;
+      --accent: #5cb950;
+      --accent-light: #1a2e18;
+      --accent-dark: #7dd672;
+      --border: #2e2e2a;
+      --code-bg: #1e1e1c;
+      --code-fg: #c8c8c4;
+      --surface: #1a1a18;
+      --red: #f87171;
+      --red-light: #2a1515;
+      --blue: #93c5fd;
+      --blue-light: #152030;
+      --orange: #fbbf24;
+      --orange-light: #2a2010;
+    }
+  }
+
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+
+  html { font-size: 17px; scroll-behavior: smooth; }
+
+  body {
+    font-family: var(--font-sans);
+    background: var(--bg);
+    color: var(--fg);
+    line-height: 1.7;
+    -webkit-font-smoothing: antialiased;
+  }
+
+  .container {
+    max-width: var(--max-w);
+    margin: 0 auto;
+    padding: 0 24px;
+  }
+
+  /* --- Header --- */
+  header {
+    padding: 80px 0 48px;
+    border-bottom: 1px solid var(--border);
+    margin-bottom: 48px;
+  }
+  header .logo {
+    font-family: var(--font-mono);
+    font-size: 3rem;
+    font-weight: 700;
+    letter-spacing: -0.04em;
+    color: var(--accent);
+  }
+  header .tagline {
+    font-size: 1.25rem;
+    color: var(--fg-dim);
+    margin-top: 8px;
+    line-height: 1.5;
+  }
+
+  /* --- Status banner --- */
+  .status-banner {
+    background: var(--orange-light);
+    border: 1px solid var(--orange);
+    border-radius: 6px;
+    padding: 12px 16px;
+    font-size: 0.85rem;
+    color: var(--orange);
+    margin-bottom: 48px;
+    line-height: 1.5;
+  }
+  .status-banner strong { font-weight: 600; }
+
+  /* --- Sections --- */
+  section { margin-bottom: 64px; }
+  h2 {
+    font-size: 1.5rem;
+    font-weight: 600;
+    margin-bottom: 16px;
+    letter-spacing: -0.02em;
+  }
+  h3 {
+    font-size: 1.1rem;
+    font-weight: 600;
+    margin-bottom: 8px;
+    margin-top: 24px;
+  }
+  p { margin-bottom: 16px; }
+  p:last-child { margin-bottom: 0; }
+  a { color: var(--accent); text-decoration-color: var(--accent); }
+  a:hover { color: var(--accent-dark); }
+
+  /* --- Code blocks --- */
+  pre {
+    background: var(--code-bg);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    padding: 16px 20px;
+    overflow-x: auto;
+    font-family: var(--font-mono);
+    font-size: 0.82rem;
+    line-height: 1.65;
+    color: var(--code-fg);
+    margin-bottom: 16px;
+  }
+  code {
+    font-family: var(--font-mono);
+    font-size: 0.88em;
+    background: var(--code-bg);
+    padding: 2px 5px;
+    border-radius: 3px;
+  }
+  pre code { background: none; padding: 0; font-size: inherit; }
+
+  /* --- Interactive demo --- */
+  .demo {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    overflow: hidden;
+    margin-bottom: 20px;
+  }
+  .demo-bar {
+    background: var(--code-bg);
+    border-bottom: 1px solid var(--border);
+    padding: 8px 16px;
+    font-family: var(--font-mono);
+    font-size: 0.75rem;
+    color: var(--fg-dim);
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+  .demo-bar .dot {
+    width: 10px; height: 10px; border-radius: 50%;
+    display: inline-block;
+  }
+  .demo-bar .dot:nth-child(1) { background: #ef4444; }
+  .demo-bar .dot:nth-child(2) { background: #eab308; }
+  .demo-bar .dot:nth-child(3) { background: #22c55e; }
+  .demo-body {
+    padding: 20px;
+    font-family: var(--font-mono);
+    font-size: 0.82rem;
+    line-height: 1.65;
+    min-height: 120px;
+  }
+  .demo-body .prompt { color: var(--accent); }
+  .demo-body .output { color: var(--fg-dim); }
+  .demo-body .comment { color: var(--fg-dim); font-style: italic; }
+  .demo-body .line { margin-bottom: 4px; white-space: pre-wrap; word-break: break-all; }
+  .demo-body .cursor {
+    display: inline-block;
+    width: 8px;
+    height: 1.1em;
+    background: var(--accent);
+    vertical-align: text-bottom;
+    animation: blink 1s step-end infinite;
+  }
+  @keyframes blink { 50% { opacity: 0; } }
+
+  /* --- Tabs --- */
+  .tabs {
+    display: flex;
+    gap: 0;
+    border-bottom: 2px solid var(--border);
+    margin-bottom: 0;
+  }
+  .tab-btn {
+    background: none;
+    border: none;
+    border-bottom: 2px solid transparent;
+    padding: 8px 16px;
+    font-family: var(--font-sans);
+    font-size: 0.85rem;
+    font-weight: 500;
+    color: var(--fg-dim);
+    cursor: pointer;
+    margin-bottom: -2px;
+    transition: color 0.15s, border-color 0.15s;
+  }
+  .tab-btn:hover { color: var(--fg); }
+  .tab-btn.active {
+    color: var(--accent);
+    border-bottom-color: var(--accent);
+  }
+  .tab-panel { display: none; padding-top: 16px; }
+  .tab-panel.active { display: block; }
+
+  /* --- Comparison table --- */
+  .compare-table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 0.88rem;
+    margin-bottom: 16px;
+  }
+  .compare-table th, .compare-table td {
+    text-align: left;
+    padding: 10px 14px;
+    border-bottom: 1px solid var(--border);
+  }
+  .compare-table th {
+    font-weight: 600;
+    font-size: 0.8rem;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    color: var(--fg-dim);
+    background: var(--code-bg);
+  }
+  .compare-table td:first-child { font-weight: 500; }
+  .yes { color: var(--accent); font-weight: 600; }
+  .no { color: var(--red); font-weight: 600; }
+
+  /* --- Pipeline visualization --- */
+  .pipeline {
+    display: flex;
+    align-items: stretch;
+    gap: 0;
+    margin: 20px 0;
+    font-size: 0.82rem;
+    overflow-x: auto;
+  }
+  .pipeline-stage {
+    flex: 1;
+    min-width: 110px;
+    padding: 14px 12px;
+    text-align: center;
+    border: 1px solid var(--border);
+    background: var(--surface);
+    position: relative;
+    transition: background 0.3s, border-color 0.3s;
+  }
+  .pipeline-stage:first-child { border-radius: 6px 0 0 6px; }
+  .pipeline-stage:last-child { border-radius: 0 6px 6px 0; }
+  .pipeline-stage:not(:last-child) { border-right: none; }
+  .pipeline-stage .stage-label {
+    font-weight: 600;
+    font-family: var(--font-mono);
+    font-size: 0.78rem;
+    display: block;
+    margin-bottom: 4px;
+  }
+  .pipeline-stage .stage-desc {
+    color: var(--fg-dim);
+    font-size: 0.75rem;
+    line-height: 1.4;
+  }
+  .pipeline-stage.active {
+    background: var(--accent-light);
+    border-color: var(--accent);
+    z-index: 1;
+  }
+  .pipeline-stage.active .stage-label { color: var(--accent); }
+  .pipeline-stage.done {
+    background: var(--accent-light);
+    border-color: var(--accent);
+    opacity: 0.6;
+  }
+
+  /* --- Key-value list --- */
+  .kv-list {
+    list-style: none;
+    margin-bottom: 16px;
+  }
+  .kv-list li {
+    padding: 10px 0;
+    border-bottom: 1px solid var(--border);
+    display: flex;
+    gap: 12px;
+    align-items: baseline;
+  }
+  .kv-list li:last-child { border-bottom: none; }
+  .kv-key {
+    font-family: var(--font-mono);
+    font-size: 0.82rem;
+    font-weight: 600;
+    white-space: nowrap;
+    min-width: 120px;
+    flex-shrink: 0;
+    color: var(--accent);
+  }
+  .kv-val { font-size: 0.92rem; }
+
+  /* --- Callout --- */
+  .callout {
+    border-left: 3px solid var(--accent);
+    padding: 14px 18px;
+    background: var(--accent-light);
+    border-radius: 0 6px 6px 0;
+    margin: 20px 0;
+    font-size: 0.92rem;
+  }
+  .callout.blue {
+    border-left-color: var(--blue);
+    background: var(--blue-light);
+  }
+  .callout.red {
+    border-left-color: var(--red);
+    background: var(--red-light);
+  }
+
+  /* --- Security grid --- */
+  .sec-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 12px;
+    margin: 20px 0;
+  }
+  .sec-card {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    padding: 16px;
+  }
+  .sec-card .sec-icon {
+    font-size: 1.4rem;
+    margin-bottom: 6px;
+    display: block;
+  }
+  .sec-card .sec-title {
+    font-weight: 600;
+    font-size: 0.88rem;
+    margin-bottom: 4px;
+  }
+  .sec-card .sec-body {
+    font-size: 0.82rem;
+    color: var(--fg-dim);
+    line-height: 1.5;
+  }
+
+  /* --- Footer --- */
+  footer {
+    border-top: 1px solid var(--border);
+    padding: 32px 0 64px;
+    color: var(--fg-dim);
+    font-size: 0.85rem;
+    text-align: center;
+  }
+
+  /* --- Scrolling animation --- */
+  .reveal {
+    opacity: 0;
+    transform: translateY(16px);
+    transition: opacity 0.5s ease, transform 0.5s ease;
+  }
+  .reveal.visible {
+    opacity: 1;
+    transform: translateY(0);
+  }
+
+  /* --- Script builder --- */
+  .builder {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    overflow: hidden;
+    margin: 20px 0;
+  }
+  .builder-controls {
+    padding: 16px;
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+    border-bottom: 1px solid var(--border);
+  }
+  .builder-controls select, .builder-controls input {
+    font-family: var(--font-sans);
+    font-size: 0.85rem;
+    padding: 6px 10px;
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    background: var(--bg);
+    color: var(--fg);
+  }
+  .builder-controls select { cursor: pointer; }
+  .builder-output {
+    padding: 16px 20px;
+    font-family: var(--font-mono);
+    font-size: 0.82rem;
+    line-height: 1.65;
+    background: var(--code-bg);
+    min-height: 80px;
+    color: var(--code-fg);
+  }
+  .builder-output .gen-comment { color: var(--fg-dim); }
+  .builder-output .gen-cmd { color: var(--fg); }
+  .builder-output .gen-commit { color: var(--accent); }
+
+  /* --- Responsive --- */
+  @media (max-width: 600px) {
+    header { padding: 48px 0 32px; }
+    header .logo { font-size: 2.2rem; }
+    .sec-grid { grid-template-columns: 1fr; }
+    .pipeline { flex-direction: column; }
+    .pipeline-stage { border-right: 1px solid var(--border) !important; }
+    .pipeline-stage:not(:last-child) { border-bottom: none; }
+    .pipeline-stage:first-child { border-radius: 6px 6px 0 0; }
+    .pipeline-stage:last-child { border-radius: 0 0 6px 6px; }
+    .kv-list li { flex-direction: column; gap: 2px; }
+  }
+</style>
+</head>
+<body>
+
+<div class="container">
+
+<!-- HEADER -->
+<header>
+  <div class="logo">etch</div>
+  <div class="tagline">Precise file mutations, automatic commits.<br>Built for agents working against git repos.</div>
+</header>
+
+<!-- STATUS -->
+<div class="status-banner">
+  <strong>Status:</strong> etch is under active development and not yet released. This page describes the design intent. Specific verb names, flags, and behaviors may change before the first release.
+</div>
+
+<!-- INTRO -->
+<section class="reveal">
+  <h2>The problem</h2>
+  <p>AI coding agents spend a surprising number of tokens on simple, mechanical edits: setting a frontmatter field, updating a JSON key, replacing a markdown section. They construct patches, hope the whitespace is right, and sometimes hallucinate diffs. When the edit lands, they then need to <em>also</em> construct a git commit.</p>
+  <p>For structured, predictable mutations, a general-purpose patch tool is the wrong level of abstraction. You wouldn't use <code>sed</code> to set a JSON key. So why use a diff to set a frontmatter field?</p>
+</section>
+
+<!-- WHAT IT IS -->
+<section class="reveal">
+  <h2>What etch is</h2>
+  <p>etch is a small CLI for <strong>mechanical mutations to text and data files</strong>. It knows about a fixed set of file formats&mdash;Markdown, JSON, YAML&mdash;and a fixed set of operations on them. Every successful mutating call becomes a git commit by default.</p>
+  <p>The scope is intentionally narrow. No network. No subprocesses. No Turing-complete scripting. Just precise structural edits that land as atomic commits.</p>
+
+  <ul class="kv-list">
+    <li><span class="kv-key">Formats</span><span class="kv-val">Markdown (with frontmatter), JSON, YAML&mdash;inferred from file extension</span></li>
+    <li><span class="kv-key">Operations</span><span class="kv-val">Set, delete, append, replace on structured paths and sections</span></li>
+    <li><span class="kv-key">Output</span><span class="kv-val">A git commit (by default) or working-tree change (with <code>--no-commit</code>)</span></li>
+    <li><span class="kv-key">Language</span><span class="kv-val">Go, single static binary, no runtime dependencies</span></li>
+  </ul>
+</section>
+
+<!-- DEMO -->
+<section class="reveal">
+  <h2>See it work</h2>
+  <p>Pick a scenario to see what etch does:</p>
+
+  <div class="tabs" role="tablist">
+    <button class="tab-btn active" role="tab" data-tab="demo-single" aria-selected="true">Single edit</button>
+    <button class="tab-btn" role="tab" data-tab="demo-multi">Script</button>
+    <button class="tab-btn" role="tab" data-tab="demo-plan">Plan mode</button>
+  </div>
+
+  <div class="tab-panel active" id="demo-single">
+    <div class="demo">
+      <div class="demo-bar">
+        <span class="dot"></span><span class="dot"></span><span class="dot"></span>
+        <span>terminal</span>
+      </div>
+      <div class="demo-body" id="demo-single-body">
+        <div class="line"><span class="comment"># Set the title in a blog post's frontmatter</span></div>
+        <div class="line"><span class="prompt">$</span> etch set posts/hello.md frontmatter.title "Hello, world"</div>
+        <div class="line">&nbsp;</div>
+        <div class="line"><span class="output">[main a1f9c3e] etch: set frontmatter.title in posts/hello.md</span></div>
+        <div class="line"><span class="output"> 1 file changed, 1 insertion(+), 1 deletion(-)</span></div>
+      </div>
+    </div>
+    <p>One command. The frontmatter field is updated and the result is committed. No patch construction, no staging, no commit message to write.</p>
+  </div>
+
+  <div class="tab-panel" id="demo-multi">
+    <div class="demo">
+      <div class="demo-bar">
+        <span class="dot"></span><span class="dot"></span><span class="dot"></span>
+        <span>terminal</span>
+      </div>
+      <div class="demo-body">
+        <div class="line"><span class="comment"># A script with multiple operations, run as a transaction</span></div>
+        <div class="line"><span class="prompt">$</span> etch tx &lt;&lt;'SCRIPT'</div>
+        <div class="line">set posts/hello.md frontmatter.title "Hello, world"</div>
+        <div class="line">set posts/hello.md frontmatter.tags '["intro","announcement"]'</div>
+        <div class="line">delete posts/hello.md frontmatter.draft</div>
+        <div class="line">replace-section posts/hello.md "## Summary" &lt;&lt;EOF</div>
+        <div class="line">This post introduces the project and its goals.</div>
+        <div class="line">EOF</div>
+        <div class="line">SCRIPT</div>
+        <div class="line">&nbsp;</div>
+        <div class="line"><span class="output">[main b7e4d12] etch: 4 changes in posts/hello.md</span></div>
+        <div class="line"><span class="output"> 1 file changed, 5 insertions(+), 4 deletions(-)</span></div>
+      </div>
+    </div>
+    <p>All four operations land as a single atomic commit. If any one fails, none of them are applied. Each line in the script is the same syntax you'd use on the command line directly.</p>
+  </div>
+
+  <div class="tab-panel" id="demo-plan">
+    <div class="demo">
+      <div class="demo-bar">
+        <span class="dot"></span><span class="dot"></span><span class="dot"></span>
+        <span>terminal</span>
+      </div>
+      <div class="demo-body">
+        <div class="line"><span class="comment"># Preview what would happen, without writing anything</span></div>
+        <div class="line"><span class="prompt">$</span> etch --plan set posts/hello.md frontmatter.title "Hello, world"</div>
+        <div class="line">&nbsp;</div>
+        <div class="line"><span class="output">{</span></div>
+        <div class="line"><span class="output">  "operations": [{</span></div>
+        <div class="line"><span class="output">    "verb": "set",</span></div>
+        <div class="line"><span class="output">    "path": "posts/hello.md",</span></div>
+        <div class="line"><span class="output">    "selector": "frontmatter.title"</span></div>
+        <div class="line"><span class="output">  }],</span></div>
+        <div class="line"><span class="output">  "files": {</span></div>
+        <div class="line"><span class="output">    "posts/hello.md": {</span></div>
+        <div class="line"><span class="output">      "before_sha256": "e3b0c4...",</span></div>
+        <div class="line"><span class="output">      "after_sha256": "84983e..."</span></div>
+        <div class="line"><span class="output">    }</span></div>
+        <div class="line"><span class="output">  }</span></div>
+        <div class="line"><span class="output">}</span></div>
+      </div>
+    </div>
+    <p>The plan is a structured JSON description of <em>exactly</em> what would change. It's produced by the same code path as real execution, stopped one step before writing. A host runtime can present this to a human for approval, hash it, and then execute only if the same plan would result.</p>
+  </div>
+</section>
+
+<!-- PRINCIPLES -->
+<section class="reveal">
+  <h2>Three design principles</h2>
+
+  <h3>1. Commits are the default</h3>
+  <p>A successful mutating etch call produces a git commit. That's the whole point. You opt <em>out</em> with <code>--no-commit</code>, not in. Read operations never commit.</p>
+
+  <h3>2. CLI and script syntax are identical</h3>
+  <p>A line in an etch script is the same tokens you'd type at the shell. Agents can prototype interactively and paste commands into scripts without translation.</p>
+  <pre><code># These are equivalent:
+$ etch set config.json settings.theme "dark"
+
+$ echo 'set config.json settings.theme "dark"' | etch tx -</code></pre>
+
+  <h3>3. No escape hatches</h3>
+  <p>The script syntax has no variables, no expansions, no subshells, no pipes. <code>$FOO</code> is literally the four characters <code>$</code>, <code>F</code>, <code>O</code>, <code>O</code>. Composition happens at the shell level, <em>outside</em> etch. This is what makes "always allow etch" a defensible authorization stance.</p>
+</section>
+
+<!-- PIPELINE VIZ -->
+<section class="reveal">
+  <h2>How execution works</h2>
+  <p>Click each stage to see what happens at that step of a mutating invocation:</p>
+
+  <div class="pipeline" id="pipeline">
+    <div class="pipeline-stage active" data-stage="0" onclick="setStage(0)">
+      <span class="stage-label">Parse</span>
+      <span class="stage-desc">Tokenize input</span>
+    </div>
+    <div class="pipeline-stage" data-stage="1" onclick="setStage(1)">
+      <span class="stage-label">Plan</span>
+      <span class="stage-desc">Compute changes</span>
+    </div>
+    <div class="pipeline-stage" data-stage="2" onclick="setStage(2)">
+      <span class="stage-label">Validate</span>
+      <span class="stage-desc">Check inputs</span>
+    </div>
+    <div class="pipeline-stage" data-stage="3" onclick="setStage(3)">
+      <span class="stage-label">Write</span>
+      <span class="stage-desc">Apply to tree</span>
+    </div>
+    <div class="pipeline-stage" data-stage="4" onclick="setStage(4)">
+      <span class="stage-label">Commit</span>
+      <span class="stage-desc">Update ref</span>
+    </div>
+  </div>
+
+  <div id="stage-detail" class="callout">
+    <strong>Parse.</strong> The input (CLI args or script lines) is tokenized using shell quoting rules. No expansion of any kind&mdash;what you wrote is what the operations receive. Heredocs are resolved at this stage.
+  </div>
+</section>
+
+<!-- CONCURRENCY -->
+<section class="reveal">
+  <h2>Concurrency: optimistic STM</h2>
+  <p>Multiple agents (or humans) can work on the same repo simultaneously. etch handles this using the same approach as software transactional memory:</p>
+
+  <div class="demo">
+    <div class="demo-bar">
+      <span class="dot"></span><span class="dot"></span><span class="dot"></span>
+      <span>two agents, one repo</span>
+    </div>
+    <div class="demo-body" id="concurrency-demo">
+      <div class="line"><span class="comment"># Agent A and Agent B both running at the same time</span></div>
+      <div class="line">&nbsp;</div>
+      <div class="line"><span class="prompt">A$</span> etch set posts/hello.md frontmatter.title "New title"</div>
+      <div class="line"><span class="prompt">B$</span> etch set config.yaml site.name "My Wiki"</div>
+      <div class="line">&nbsp;</div>
+      <div class="line"><span class="output"># Different files &rarr; both succeed, two commits</span></div>
+      <div class="line"><span class="output"># Same file &rarr; one wins, the other re-plans and retries</span></div>
+    </div>
+  </div>
+
+  <p>Each invocation works in an isolated temporary index&mdash;it never touches your staging area or unrelated dirty files. On conflict, etch automatically re-reads the current state and retries (up to <code>--retries</code>, default 3). The caller never sees the retry unless the budget is exhausted.</p>
+
+  <div class="callout blue">
+    <strong>Two checks, not one.</strong> etch validates that the files it read haven't changed on disk (read-set validation) <em>and</em> that the branch ref hasn't moved (ref CAS). Both are necessary: dirty working-tree edits don't move refs, and concurrent commits don't touch the working tree.
+  </div>
+</section>
+
+<!-- SECURITY -->
+<section class="reveal">
+  <h2>Why "always allow etch" is safe</h2>
+  <p>The goal: a user can grant blanket permission for etch on a repo without that grant becoming equivalent to "always allow shell."</p>
+
+  <div class="sec-grid">
+    <div class="sec-card">
+      <span class="sec-icon" aria-hidden="true">&#x1f6ab;</span>
+      <div class="sec-title">No network</div>
+      <div class="sec-body">etch makes zero network calls. No HTTP, no DNS, no sockets. Data stays local.</div>
+    </div>
+    <div class="sec-card">
+      <span class="sec-icon" aria-hidden="true">&#x1f512;</span>
+      <div class="sec-title">No process spawning</div>
+      <div class="sec-body">etch does not exec anything except git, and only for the specific operations it needs (read refs, write objects, update refs).</div>
+    </div>
+    <div class="sec-card">
+      <span class="sec-icon" aria-hidden="true">&#x1f4c1;</span>
+      <div class="sec-title">No filesystem escape</div>
+      <div class="sec-body">Reads and writes stay within the git repo root. No symlink chasing past the boundary.</div>
+    </div>
+    <div class="sec-card">
+      <span class="sec-icon" aria-hidden="true">&#x1f6e1;&#xfe0f;</span>
+      <div class="sec-title">No DSL escape hatch</div>
+      <div class="sec-body">No variables, no expansion, no subshells. The blast radius is statically bounded by the script text.</div>
+    </div>
+  </div>
+
+  <p>For an additional layer, a host runtime can use plan hashing as an authorization primitive:</p>
+  <pre><code># Step 1: compute and inspect the plan
+plan=$(etch --plan set posts/hello.md frontmatter.title "Hi")
+
+# Step 2: present to user, get approval, extract hash
+
+# Step 3: execute only if the plan hasn't changed
+etch --require-plan-hash abc123 set posts/hello.md frontmatter.title "Hi"</code></pre>
+  <p>If <em>anything</em> changed between planning and execution&mdash;file contents, branch state, even etch's own behavior across a version upgrade&mdash;the hash won't match and etch refuses to run.</p>
+</section>
+
+<!-- COMPARISON -->
+<section class="reveal">
+  <h2>How it compares</h2>
+  <p>etch occupies a specific niche. Here's how it relates to tools you might reach for today:</p>
+
+  <table class="compare-table">
+    <thead>
+      <tr>
+        <th>Property</th>
+        <th>etch</th>
+        <th>sed/awk</th>
+        <th>jq</th>
+        <th>patch/diff</th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr>
+        <td>Format-aware</td>
+        <td class="yes">Yes</td>
+        <td class="no">No</td>
+        <td class="yes">JSON only</td>
+        <td class="no">No</td>
+      </tr>
+      <tr>
+        <td>Auto-commits</td>
+        <td class="yes">Yes</td>
+        <td class="no">No</td>
+        <td class="no">No</td>
+        <td class="no">No</td>
+      </tr>
+      <tr>
+        <td>Atomic transactions</td>
+        <td class="yes">Yes</td>
+        <td class="no">No</td>
+        <td class="no">No</td>
+        <td class="no">No</td>
+      </tr>
+      <tr>
+        <td>Preview/plan mode</td>
+        <td class="yes">Yes</td>
+        <td class="no">No</td>
+        <td class="no">No</td>
+        <td>Partial</td>
+      </tr>
+      <tr>
+        <td>Sandboxable</td>
+        <td class="yes">Yes</td>
+        <td class="no">No</td>
+        <td class="yes">Yes*</td>
+        <td class="no">No</td>
+      </tr>
+      <tr>
+        <td>Multi-format</td>
+        <td class="yes">Yes</td>
+        <td class="yes">Yes</td>
+        <td class="no">No</td>
+        <td class="yes">Yes</td>
+      </tr>
+    </tbody>
+  </table>
+  <p style="font-size: 0.82rem; color: var(--fg-dim);">* jq is read-only by design; writing requires shell redirection, which reintroduces the blast-radius problem.</p>
+</section>
+
+<!-- INTERACTIVE BUILDER -->
+<section class="reveal">
+  <h2>Build an etch command</h2>
+  <p>Choose an operation and file format to see what the etch invocation looks like:</p>
+
+  <div class="builder">
+    <div class="builder-controls">
+      <select id="builder-verb" onchange="updateBuilder()">
+        <option value="set">set</option>
+        <option value="delete">delete</option>
+        <option value="append">append</option>
+        <option value="replace-section">replace-section</option>
+      </select>
+      <select id="builder-format" onchange="updateBuilder()">
+        <option value="md">Markdown (.md)</option>
+        <option value="json">JSON (.json)</option>
+        <option value="yaml">YAML (.yaml)</option>
+      </select>
+    </div>
+    <div class="builder-output" id="builder-output"></div>
+  </div>
+</section>
+
+<!-- WHO IS IT FOR -->
+<section class="reveal">
+  <h2>Who it's for</h2>
+  <p>etch is designed for a specific workflow: <strong>agentic coding tools operating against git-backed content repositories</strong>. Think wikis, documentation sites, config-as-code repos, and knowledge bases where multiple agents and humans are making frequent, small, structural edits.</p>
+
+  <p>If you're building an AI agent that needs to:</p>
+  <ul style="margin: 0 0 16px 20px; list-style: disc;">
+    <li>Update metadata fields across dozens of markdown files</li>
+    <li>Modify JSON/YAML config with guaranteed structural correctness</li>
+    <li>Replace specific sections of documentation</li>
+    <li>Do all of the above atomically, with a commit as proof of work</li>
+  </ul>
+  <p>&hellip;then etch exists so your agent doesn't have to construct diffs, manage staging, write commit messages, or worry about concurrent editors.</p>
+</section>
+
+<!-- FOOTER -->
+<footer>
+  <p>etch is open-source software. More details at <code>github.com/brandonbloom/etch</code> when available.</p>
+</footer>
+
+</div>
+
+<script>
+// --- Tabs ---
+document.querySelectorAll('.tab-btn').forEach(btn => {
+  btn.addEventListener('click', () => {
+    const group = btn.closest('section');
+    group.querySelectorAll('.tab-btn').forEach(b => { b.classList.remove('active'); b.setAttribute('aria-selected', 'false'); });
+    group.querySelectorAll('.tab-panel').forEach(p => p.classList.remove('active'));
+    btn.classList.add('active');
+    btn.setAttribute('aria-selected', 'true');
+    document.getElementById(btn.dataset.tab).classList.add('active');
+  });
+});
+
+// --- Pipeline ---
+const stageDetails = [
+  '<strong>Parse.</strong> The input (CLI args or script lines) is tokenized using shell quoting rules. No expansion of any kind—what you wrote is what the operations receive. Heredocs are resolved at this stage.',
+  '<strong>Plan.</strong> Each operation is evaluated against the current file state to compute the exact bytes that would result. The plan captures before/after hashes for every touched file, the resulting tree OID, and the commit message. This is the same structure emitted by <code>--plan</code>.',
+  '<strong>Validate.</strong> etch re-hashes every file it read during planning and confirms they haven\'t changed on disk (read-set validation). It also records the current branch ref for the CAS check at commit time. If inputs are stale, etch re-plans automatically.',
+  '<strong>Write.</strong> File changes are applied to a temporary git index—never your working index. The new tree object is built. At this point the working tree files are updated, but no commit exists yet.',
+  '<strong>Commit.</strong> etch creates the commit object and updates the branch ref using a compare-and-swap: it only succeeds if the ref still points to the expected base commit. If another writer snuck in, the whole cycle restarts from Plan.'
+];
+
+function setStage(n) {
+  document.querySelectorAll('.pipeline-stage').forEach((el, i) => {
+    el.classList.remove('active', 'done');
+    if (i < n) el.classList.add('done');
+    if (i === n) el.classList.add('active');
+  });
+  document.getElementById('stage-detail').innerHTML = stageDetails[n];
+}
+
+// --- Builder ---
+const examples = {
+  'set-md':    { cmd: 'etch set posts/hello.md frontmatter.title "Hello, world"',   commit: 'etch: set frontmatter.title in posts/hello.md', note: 'Updates the YAML frontmatter field "title" inside the markdown file.' },
+  'set-json':  { cmd: 'etch set config.json settings.theme "dark"',                  commit: 'etch: set settings.theme in config.json', note: 'Navigates the JSON structure and sets the nested key.' },
+  'set-yaml':  { cmd: 'etch set config.yaml site.name "My Site"',                    commit: 'etch: set site.name in config.yaml', note: 'Sets a value in the YAML file, preserving comments and formatting.' },
+  'delete-md': { cmd: 'etch delete posts/hello.md frontmatter.draft',                commit: 'etch: delete frontmatter.draft in posts/hello.md', note: 'Removes the "draft" key from the markdown file\'s frontmatter.' },
+  'delete-json': { cmd: 'etch delete config.json settings.deprecated_flag',          commit: 'etch: delete settings.deprecated_flag in config.json', note: 'Removes the key from the JSON object.' },
+  'delete-yaml': { cmd: 'etch delete config.yaml old.unused_key',                    commit: 'etch: delete old.unused_key in config.yaml', note: 'Removes the key from the YAML file.' },
+  'append-md': { cmd: 'etch append posts/hello.md frontmatter.tags \'"new-tag"\'',   commit: 'etch: append frontmatter.tags in posts/hello.md', note: 'Appends a value to the list in frontmatter.' },
+  'append-json': { cmd: 'etch append config.json features.enabled \'"new-feature"\'',commit: 'etch: append features.enabled in config.json', note: 'Appends to a JSON array.' },
+  'append-yaml': { cmd: 'etch append config.yaml plugins \'"analytics"\'',           commit: 'etch: append plugins in config.yaml', note: 'Appends to a YAML sequence.' },
+  'replace-section-md': { cmd: 'etch replace-section posts/hello.md "## Summary" <<EOF\nThis section has been updated.\nEOF', commit: 'etch: replace-section "## Summary" in posts/hello.md', note: 'Replaces everything under the ## Summary heading until the next heading of equal or higher level.' },
+  'replace-section-json': { cmd: '# replace-section is a markdown operation.\n# For JSON, use set with the target path instead:\netch set config.json settings.block \'{"key": "value"}\'', commit: 'etch: set settings.block in config.json', note: 'Section replacement is a markdown concept. For structured formats, use set.' },
+  'replace-section-yaml': { cmd: '# replace-section is a markdown operation.\n# For YAML, use set with the target path instead:\netch set config.yaml settings.block \'{"key": "value"}\'', commit: 'etch: set settings.block in config.yaml', note: 'Section replacement is a markdown concept. For structured formats, use set.' },
+};
+
+function updateBuilder() {
+  const verb = document.getElementById('builder-verb').value;
+  const fmt = document.getElementById('builder-format').value;
+  const key = verb + '-' + fmt;
+  const ex = examples[key];
+  if (!ex) return;
+  const out = document.getElementById('builder-output');
+  out.innerHTML =
+    '<div class="gen-comment"># ' + ex.note + '</div>\n' +
+    '<div class="gen-cmd">' + ex.cmd.replace(/\n/g, '</div><div class="gen-cmd">') + '</div>\n' +
+    '<div>&nbsp;</div>' +
+    '<div class="gen-commit">→ commit: ' + ex.commit + '</div>';
+}
+updateBuilder();
+
+// --- Scroll reveal ---
+const revealEls = document.querySelectorAll('.reveal');
+const observer = new IntersectionObserver((entries) => {
+  entries.forEach(entry => {
+    if (entry.isIntersecting) {
+      entry.target.classList.add('visible');
+    }
+  });
+}, { threshold: 0.12 });
+revealEls.forEach(el => observer.observe(el));
+</script>
+
+</body>
+</html>
