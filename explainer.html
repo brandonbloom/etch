@@ -445,9 +445,16 @@
 
 <!-- INTRO -->
 <section class="reveal">
-  <h2>The problem</h2>
-  <p>AI coding agents spend a surprising number of tokens on simple, mechanical edits: setting a frontmatter field, updating a JSON key, replacing a markdown section. They construct patches, hope the whitespace is right, and sometimes hallucinate diffs. When the edit lands, they then need to <em>also</em> construct a git commit.</p>
-  <p>For structured, predictable mutations, a general-purpose patch tool is the wrong level of abstraction. You wouldn't use <code>sed</code> to set a JSON key. So why use a diff to set a frontmatter field?</p>
+  <h2>Git as a database</h2>
+  <p>Something interesting is happening with AI agents: they're getting <strong>home directories</strong>. Not just scratch space&mdash;persistent, git-backed repositories where the filesystem <em>is</em> the database. Markdown files with YAML frontmatter as records. JSON and YAML for config and state. CSV for tabular data. Wiki-links and inline metadata tags connecting it all together. Git commits as the transaction log.</p>
+  <p>In these environments, agents aren't writing code that ships to production&mdash;they're maintaining living knowledge bases, personal CRMs, task trackers, daily logs, and structured notes. The workflow is <strong>always commit, always roll forward</strong>. A single agent session might mark a task complete, add a snooze date to an action item, update a person's contact info, and append to a daily log&mdash;all as separate, auditable commits.</p>
+</section>
+
+<section class="reveal">
+  <h2>Why patches are the wrong tool</h2>
+  <p>Today, agents do these mechanical edits through general-purpose patch tools: construct a diff, apply it, hope the whitespace is right, stage the file, write a commit message. Each of those steps burns tokens and introduces failure modes. Hallucinated diffs. Off-by-one line numbers. Trailing newline mismatches. And the stakes are higher than they look&mdash;when your filesystem is your database, a botched edit corrupts your data.</p>
+  <p>The edits themselves are boringly predictable: <em>set this frontmatter field, delete that YAML key, replace this markdown section, append to that list.</em> For structured, mechanical mutations on known formats, a diff is the wrong level of abstraction. You wouldn't use <code>sed</code> to set a JSON key. So why use a patch to update a frontmatter tag?</p>
+  <p>You want to <strong>reserve</strong> patches and diffs for the cases that actually need them&mdash;novel edits to code, prose rewriting, complex refactors. The mechanical stuff should be a solved problem.</p>
 </section>
 
 <!-- WHAT IT IS -->
@@ -482,10 +489,10 @@
         <span>terminal</span>
       </div>
       <div class="demo-body" id="demo-single-body">
-        <div class="line"><span class="comment"># Set the title in a blog post's frontmatter</span></div>
-        <div class="line"><span class="prompt">$</span> etch set posts/hello.md frontmatter.title "Hello, world"</div>
+        <div class="line"><span class="comment"># Mark a task as complete in a markdown file</span></div>
+        <div class="line"><span class="prompt">$</span> etch set tasks/onboarding.md frontmatter.status "complete"</div>
         <div class="line">&nbsp;</div>
-        <div class="line"><span class="output">[main a1f9c3e] etch: set frontmatter.title in posts/hello.md</span></div>
+        <div class="line"><span class="output">[main a1f9c3e] etch: set frontmatter.status in tasks/onboarding.md</span></div>
         <div class="line"><span class="output"> 1 file changed, 1 insertion(+), 1 deletion(-)</span></div>
       </div>
     </div>
@@ -499,18 +506,19 @@
         <span>terminal</span>
       </div>
       <div class="demo-body">
-        <div class="line"><span class="comment"># A script with multiple operations, run as a transaction</span></div>
+        <div class="line"><span class="comment"># Snooze an action item and update its tracking metadata</span></div>
         <div class="line"><span class="prompt">$</span> etch tx &lt;&lt;'SCRIPT'</div>
-        <div class="line">set posts/hello.md frontmatter.title "Hello, world"</div>
-        <div class="line">set posts/hello.md frontmatter.tags '["intro","announcement"]'</div>
-        <div class="line">delete posts/hello.md frontmatter.draft</div>
-        <div class="line">replace-section posts/hello.md "## Summary" &lt;&lt;EOF</div>
-        <div class="line">This post introduces the project and its goals.</div>
+        <div class="line">set tasks/review-proposal.md frontmatter.snooze "2026-05-10"</div>
+        <div class="line">set tasks/review-proposal.md frontmatter.status "deferred"</div>
+        <div class="line">append people/alice.md frontmatter.tags '"pending-review"'</div>
+        <div class="line">replace-section log/2026-04-27.md "## Activity" &lt;&lt;EOF</div>
+        <div class="line">- Deferred proposal review to May 10</div>
+        <div class="line">- Added pending-review tag to Alice's dossier</div>
         <div class="line">EOF</div>
         <div class="line">SCRIPT</div>
         <div class="line">&nbsp;</div>
-        <div class="line"><span class="output">[main b7e4d12] etch: 4 changes in posts/hello.md</span></div>
-        <div class="line"><span class="output"> 1 file changed, 5 insertions(+), 4 deletions(-)</span></div>
+        <div class="line"><span class="output">[main b7e4d12] etch: 4 changes across 3 files</span></div>
+        <div class="line"><span class="output"> 3 files changed, 6 insertions(+), 2 deletions(-)</span></div>
       </div>
     </div>
     <p>All four operations land as a single atomic commit. If any one fails, none of them are applied. Each line in the script is the same syntax you'd use on the command line directly.</p>
@@ -524,16 +532,16 @@
       </div>
       <div class="demo-body">
         <div class="line"><span class="comment"># Preview what would happen, without writing anything</span></div>
-        <div class="line"><span class="prompt">$</span> etch --plan set posts/hello.md frontmatter.title "Hello, world"</div>
+        <div class="line"><span class="prompt">$</span> etch --plan set tasks/review.md frontmatter.status "complete"</div>
         <div class="line">&nbsp;</div>
         <div class="line"><span class="output">{</span></div>
         <div class="line"><span class="output">  "operations": [{</span></div>
         <div class="line"><span class="output">    "verb": "set",</span></div>
-        <div class="line"><span class="output">    "path": "posts/hello.md",</span></div>
-        <div class="line"><span class="output">    "selector": "frontmatter.title"</span></div>
+        <div class="line"><span class="output">    "path": "tasks/review.md",</span></div>
+        <div class="line"><span class="output">    "selector": "frontmatter.status"</span></div>
         <div class="line"><span class="output">  }],</span></div>
         <div class="line"><span class="output">  "files": {</span></div>
-        <div class="line"><span class="output">    "posts/hello.md": {</span></div>
+        <div class="line"><span class="output">    "tasks/review.md": {</span></div>
         <div class="line"><span class="output">      "before_sha256": "e3b0c4...",</span></div>
         <div class="line"><span class="output">      "after_sha256": "84983e..."</span></div>
         <div class="line"><span class="output">    }</span></div>
@@ -607,10 +615,10 @@ $ echo 'set config.json settings.theme "dark"' | etch tx -</code></pre>
       <span>two agents, one repo</span>
     </div>
     <div class="demo-body" id="concurrency-demo">
-      <div class="line"><span class="comment"># Agent A and Agent B both running at the same time</span></div>
+      <div class="line"><span class="comment"># Two agents working on the same knowledge base</span></div>
       <div class="line">&nbsp;</div>
-      <div class="line"><span class="prompt">A$</span> etch set posts/hello.md frontmatter.title "New title"</div>
-      <div class="line"><span class="prompt">B$</span> etch set config.yaml site.name "My Wiki"</div>
+      <div class="line"><span class="prompt">A$</span> etch set people/alice.md frontmatter.last_contact "2026-04-27"</div>
+      <div class="line"><span class="prompt">B$</span> etch set tasks/review.md frontmatter.status "complete"</div>
       <div class="line">&nbsp;</div>
       <div class="line"><span class="output"># Different files &rarr; both succeed, two commits</span></div>
       <div class="line"><span class="output"># Same file &rarr; one wins, the other re-plans and retries</span></div>
@@ -654,12 +662,12 @@ $ echo 'set config.json settings.theme "dark"' | etch tx -</code></pre>
 
   <p>For an additional layer, a host runtime can use plan hashing as an authorization primitive:</p>
   <pre><code># Step 1: compute and inspect the plan
-plan=$(etch --plan set posts/hello.md frontmatter.title "Hi")
+plan=$(etch --plan set tasks/review.md frontmatter.status "complete")
 
 # Step 2: present to user, get approval, extract hash
 
 # Step 3: execute only if the plan hasn't changed
-etch --require-plan-hash abc123 set posts/hello.md frontmatter.title "Hi"</code></pre>
+etch --require-plan-hash abc123 set tasks/review.md frontmatter.status "complete"</code></pre>
   <p>If <em>anything</em> changed between planning and execution&mdash;file contents, branch state, even etch's own behavior across a version upgrade&mdash;the hash won't match and etch refuses to run.</p>
 </section>
 
@@ -751,17 +759,20 @@ etch --require-plan-hash abc123 set posts/hello.md frontmatter.title "Hi"</code>
 
 <!-- WHO IS IT FOR -->
 <section class="reveal">
-  <h2>Who it's for</h2>
-  <p>etch is designed for a specific workflow: <strong>agentic coding tools operating against git-backed content repositories</strong>. Think wikis, documentation sites, config-as-code repos, and knowledge bases where multiple agents and humans are making frequent, small, structural edits.</p>
+  <h2>The home directory pattern</h2>
+  <p>A new kind of repository is emerging: the <strong>agent home directory</strong>. Not a codebase that ships to production, but a git-backed knowledge store where agents and humans collaborate on structured data. Think:</p>
 
-  <p>If you're building an AI agent that needs to:</p>
   <ul style="margin: 0 0 16px 20px; list-style: disc;">
-    <li>Update metadata fields across dozens of markdown files</li>
-    <li>Modify JSON/YAML config with guaranteed structural correctness</li>
-    <li>Replace specific sections of documentation</li>
-    <li>Do all of the above atomically, with a commit as proof of work</li>
+    <li><strong>Personal knowledge bases</strong> &mdash; daily logs, notes, and dossiers in markdown with rich frontmatter</li>
+    <li><strong>Task trackers</strong> &mdash; markdown files where <code>status: complete</code> or <code>[snoozed:: 2026-05-10]</code> are real, queryable data</li>
+    <li><strong>People/CRM directories</strong> &mdash; a folder of markdown files, one per person, with structured metadata and append-only interaction logs</li>
+    <li><strong>Config-as-data repos</strong> &mdash; YAML and JSON files that represent system state, not just system configuration</li>
+    <li><strong>Wiki-style collaboration</strong> &mdash; multiple agents and humans editing overlapping files, always committing, always rolling forward</li>
   </ul>
-  <p>&hellip;then etch exists so your agent doesn't have to construct diffs, manage staging, write commit messages, or worry about concurrent editors.</p>
+
+  <p>In these repos, commits aren't milestones&mdash;they're <strong>the transaction log</strong>. Every small mutation should be its own commit, because git history <em>is</em> the audit trail. The filesystem conventions (frontmatter fields, inline tags like <code>[due:: 2026-03-01]</code>, section headers as stable anchors) form a lightweight schema that agents navigate constantly.</p>
+
+  <p>etch is the primitive for this pattern. It lets an agent say "set this field" or "append to this list" in a way that's precise, auditable, and committed&mdash;without falling through to the full generality (and full risk) of shell access or patch construction.</p>
 </section>
 
 <!-- FOOTER -->
@@ -804,17 +815,17 @@ function setStage(n) {
 
 // --- Builder ---
 const examples = {
-  'set-md':    { cmd: 'etch set posts/hello.md frontmatter.title "Hello, world"',   commit: 'etch: set frontmatter.title in posts/hello.md', note: 'Updates the YAML frontmatter field "title" inside the markdown file.' },
-  'set-json':  { cmd: 'etch set config.json settings.theme "dark"',                  commit: 'etch: set settings.theme in config.json', note: 'Navigates the JSON structure and sets the nested key.' },
-  'set-yaml':  { cmd: 'etch set config.yaml site.name "My Site"',                    commit: 'etch: set site.name in config.yaml', note: 'Sets a value in the YAML file, preserving comments and formatting.' },
-  'delete-md': { cmd: 'etch delete posts/hello.md frontmatter.draft',                commit: 'etch: delete frontmatter.draft in posts/hello.md', note: 'Removes the "draft" key from the markdown file\'s frontmatter.' },
-  'delete-json': { cmd: 'etch delete config.json settings.deprecated_flag',          commit: 'etch: delete settings.deprecated_flag in config.json', note: 'Removes the key from the JSON object.' },
+  'set-md':    { cmd: 'etch set tasks/review.md frontmatter.snooze "2026-05-10"',   commit: 'etch: set frontmatter.snooze in tasks/review.md', note: 'Adds a snooze date to the task\'s YAML frontmatter.' },
+  'set-json':  { cmd: 'etch set state.json agents.assistant.last_run "2026-04-27"',  commit: 'etch: set agents.assistant.last_run in state.json', note: 'Navigates the JSON structure and sets the nested key.' },
+  'set-yaml':  { cmd: 'etch set config.yaml feeds.daily_digest.enabled true',        commit: 'etch: set feeds.daily_digest.enabled in config.yaml', note: 'Sets a value in the YAML file, preserving comments and formatting.' },
+  'delete-md': { cmd: 'etch delete tasks/review.md frontmatter.draft',               commit: 'etch: delete frontmatter.draft in tasks/review.md', note: 'Removes the "draft" key from the markdown file\'s frontmatter.' },
+  'delete-json': { cmd: 'etch delete state.json cache.stale_entry',                  commit: 'etch: delete cache.stale_entry in state.json', note: 'Removes the key from the JSON object.' },
   'delete-yaml': { cmd: 'etch delete config.yaml old.unused_key',                    commit: 'etch: delete old.unused_key in config.yaml', note: 'Removes the key from the YAML file.' },
-  'append-md': { cmd: 'etch append posts/hello.md frontmatter.tags \'"new-tag"\'',   commit: 'etch: append frontmatter.tags in posts/hello.md', note: 'Appends a value to the list in frontmatter.' },
-  'append-json': { cmd: 'etch append config.json features.enabled \'"new-feature"\'',commit: 'etch: append features.enabled in config.json', note: 'Appends to a JSON array.' },
+  'append-md': { cmd: 'etch append people/alice.md frontmatter.tags \'"vip"\'',      commit: 'etch: append frontmatter.tags in people/alice.md', note: 'Appends a tag to the list in the dossier\'s frontmatter.' },
+  'append-json': { cmd: 'etch append log.json entries \'{"date":"2026-04-27","event":"sync"}\'', commit: 'etch: append entries in log.json', note: 'Appends an object to a JSON array.' },
   'append-yaml': { cmd: 'etch append config.yaml plugins \'"analytics"\'',           commit: 'etch: append plugins in config.yaml', note: 'Appends to a YAML sequence.' },
-  'replace-section-md': { cmd: 'etch replace-section posts/hello.md "## Summary" <<EOF\nThis section has been updated.\nEOF', commit: 'etch: replace-section "## Summary" in posts/hello.md', note: 'Replaces everything under the ## Summary heading until the next heading of equal or higher level.' },
-  'replace-section-json': { cmd: '# replace-section is a markdown operation.\n# For JSON, use set with the target path instead:\netch set config.json settings.block \'{"key": "value"}\'', commit: 'etch: set settings.block in config.json', note: 'Section replacement is a markdown concept. For structured formats, use set.' },
+  'replace-section-md': { cmd: 'etch replace-section people/alice.md "## Notes" <<EOF\nDiscussed project timeline. Agreed on May deadline.\nEOF', commit: 'etch: replace-section "## Notes" in people/alice.md', note: 'Replaces everything under ## Notes until the next heading of equal or higher level.' },
+  'replace-section-json': { cmd: '# replace-section is a markdown operation.\n# For JSON, use set with the target path instead:\netch set state.json status.block \'{"key": "value"}\'', commit: 'etch: set status.block in state.json', note: 'Section replacement is a markdown concept. For structured formats, use set.' },
   'replace-section-yaml': { cmd: '# replace-section is a markdown operation.\n# For YAML, use set with the target path instead:\netch set config.yaml settings.block \'{"key": "value"}\'', commit: 'etch: set settings.block in config.yaml', note: 'Section replacement is a markdown concept. For structured formats, use set.' },
 };
 
