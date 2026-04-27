@@ -443,11 +443,22 @@
   <strong>Status:</strong> etch is under active development and not yet released. This page describes the design intent. Specific verb names, flags, and behaviors may change before the first release.
 </div>
 
-<!-- INTRO -->
+<!-- THE LANDSCAPE -->
 <section class="reveal">
-  <h2>Git as a database</h2>
-  <p>Something interesting is happening with AI agents: they're getting <strong>home directories</strong>. Not just scratch space&mdash;persistent, git-backed repositories where the filesystem <em>is</em> the database. Markdown files with YAML frontmatter as records. JSON and YAML for config and state. CSV for tabular data. Wiki-links and inline metadata tags connecting it all together. Git commits as the transaction log.</p>
-  <p>In these environments, agents aren't writing code that ships to production&mdash;they're maintaining living knowledge bases, personal CRMs, task trackers, daily logs, and structured notes. The workflow is <strong>always commit, always roll forward</strong>. A single agent session might mark a task complete, add a snooze date to an action item, update a person's contact info, and append to a daily log&mdash;all as separate, auditable commits.</p>
+  <h2>The home directory pattern</h2>
+  <p>A new kind of repository is emerging: the <strong>agent home directory</strong>. Not a codebase that ships to production, but a git-backed knowledge store where agents and humans collaborate on structured data. Think:</p>
+
+  <ul style="margin: 0 0 16px 20px; list-style: disc;">
+    <li><strong>Personal knowledge bases</strong> &mdash; daily logs, notes, and dossiers in markdown with rich frontmatter</li>
+    <li><strong>Task trackers</strong> &mdash; markdown files where <code>status: complete</code> or <code>[snoozed:: 2026-05-10]</code> are real, queryable data</li>
+    <li><strong>People/CRM directories</strong> &mdash; a folder of markdown files, one per person, with structured metadata and append-only interaction logs</li>
+    <li><strong>Config-as-data repos</strong> &mdash; YAML and JSON files that represent system state, not just system configuration</li>
+    <li><strong>Wiki-style collaboration</strong> &mdash; multiple agents and humans editing overlapping files, always committing, always rolling forward</li>
+  </ul>
+
+  <p>In these repos, git isn't version control for code&mdash;it's the <strong>database engine</strong>. Commits aren't milestones; they're the transaction log. Every small mutation should be its own commit, because git history <em>is</em> the audit trail. The filesystem conventions&mdash;frontmatter fields, inline tags like <code>[due:: 2026-03-01]</code>, section headers as stable anchors&mdash;form a lightweight schema that agents navigate constantly.</p>
+
+  <p>A single agent session might mark a task complete, add a snooze date to an action item, update a person's contact info, and append to a daily log&mdash;each one its own auditable commit. This is the <strong>always commit, always roll forward</strong> workflow.</p>
 </section>
 
 <section class="reveal">
@@ -755,24 +766,6 @@ etch --require-plan-hash abc123 set tasks/review.md frontmatter.status "complete
     </div>
     <div class="builder-output" id="builder-output"></div>
   </div>
-</section>
-
-<!-- WHO IS IT FOR -->
-<section class="reveal">
-  <h2>The home directory pattern</h2>
-  <p>A new kind of repository is emerging: the <strong>agent home directory</strong>. Not a codebase that ships to production, but a git-backed knowledge store where agents and humans collaborate on structured data. Think:</p>
-
-  <ul style="margin: 0 0 16px 20px; list-style: disc;">
-    <li><strong>Personal knowledge bases</strong> &mdash; daily logs, notes, and dossiers in markdown with rich frontmatter</li>
-    <li><strong>Task trackers</strong> &mdash; markdown files where <code>status: complete</code> or <code>[snoozed:: 2026-05-10]</code> are real, queryable data</li>
-    <li><strong>People/CRM directories</strong> &mdash; a folder of markdown files, one per person, with structured metadata and append-only interaction logs</li>
-    <li><strong>Config-as-data repos</strong> &mdash; YAML and JSON files that represent system state, not just system configuration</li>
-    <li><strong>Wiki-style collaboration</strong> &mdash; multiple agents and humans editing overlapping files, always committing, always rolling forward</li>
-  </ul>
-
-  <p>In these repos, commits aren't milestones&mdash;they're <strong>the transaction log</strong>. Every small mutation should be its own commit, because git history <em>is</em> the audit trail. The filesystem conventions (frontmatter fields, inline tags like <code>[due:: 2026-03-01]</code>, section headers as stable anchors) form a lightweight schema that agents navigate constantly.</p>
-
-  <p>etch is the primitive for this pattern. It lets an agent say "set this field" or "append to this list" in a way that's precise, auditable, and committed&mdash;without falling through to the full generality (and full risk) of shell access or patch construction.</p>
 </section>
 
 <!-- FOOTER -->
