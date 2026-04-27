@@ -4,9 +4,9 @@
 
 ## 1. What etch is
 
-A small CLI for **mechanical mutations to text and data files**, where each successful invocation is also a git commit. Operations are atomic (per op) and transactional (per invocation): all the operations in one invocation either land as a single commit or none of them do.
+A small CLI for **mechanical mutations to text and data files**, where each successful mutating invocation becomes a git commit by default. Operations are atomic (per op) and transactional (per invocation): all the operations in one mutating invocation either land as a single commit or none of them do.
 
-The primary audience is agentic coding tools operating against git-backed wiki-style repositories — multiple agents and humans iterating forward, where mechanical edits ("set this frontmatter field," "replace this markdown section," "delete this JSON key") are common enough that doing them through a general-purpose patch tool burns tokens and risks subtle errors. etch trades generality for precision: it knows about a small, fixed set of file formats and a small, fixed set of operations, and it does them quickly and predictably.
+The primary audience is agentic coding tools operating against git-backed wiki-style repositories — multiple agents and humans iterating forward, where git history is the transaction log and mechanical edits ("set this frontmatter field," "replace this markdown section," "delete this JSON key") are common enough that doing them through a general-purpose patch tool burns tokens and risks subtle errors. etch trades generality for precision: it knows about a small, fixed set of file formats and a small, fixed set of operations, and it does them quickly and predictably.
 
 The headline product is a binary. There may eventually be a Go library underneath suitable for embedding; that question is deferred.
 
@@ -14,7 +14,7 @@ The headline product is a binary. There may eventually be a Go library underneat
 
 Three principles:
 
-1. **Commits are not optional.** A successful etch invocation produces a commit, period. Outside a git repo, etch errors out. The escape hatch (`ETCH_UNTRACKED=1` / `--untracked`) exists so etch can operate as a pure mutator in non-git contexts, but the default is that the commit is the whole point.
+1. **Commits are the default contract for mutating verbs.** A successful mutating etch invocation produces a commit unless the caller explicitly opts out with `--no-commit`, or runs outside git with `--untracked`. Read verbs are a separate class: they print results and never commit. The default remains that the commit is the whole point.
 
 2. **The script line and the CLI argv are the same thing.** A line in an etch script is the same tokens you'd type at the shell, modulo the binary name. This symmetry is the primary ergonomic property. It means agents can prototype on the command line and concatenate script files without translation, and it means the help page documents both surfaces simultaneously.
 
@@ -22,7 +22,7 @@ Three principles:
 
 ## 3. Invocation surface
 
-Verb-first, with a small set of top-level flags that apply to any verb.
+Verb-first, with a small set of top-level flags.
 
 ```
 etch <verb> [args...]                  one-shot
@@ -36,22 +36,23 @@ etch verbs --json                      machine-readable verb catalog
 etch --help                            terse one-screen reference
 ```
 
-Top-level flags that apply to any verb form:
+Top-level flags:
 
 | Flag | Env | Effect |
 |---|---|---|
 | `--plan` | — | Emit JSON plan to stdout, do not write or commit. |
 | `--dry-run` | — | Emit format-patch preview to stdout, do not write or commit. |
 | `--no-commit` | — | Apply changes to working tree, skip commit. |
+| `--no-checkout` | — | After committing, do not materialize touched paths into the working tree. Invalid with `--no-commit`. |
 | `--untracked` | `ETCH_UNTRACKED=1` | Permit running outside a git repo. |
-| `--message <m>` | — | Override auto-generated commit message. |
-| `--message-prefix <m>` | — | Prepend to auto-generated message. |
-| `--message-suffix <m>` | — | Append to auto-generated message. |
+| `--message <m>` | — | Override auto-generated commit message. Invalid with `--no-commit`. |
+| `--message-prefix <m>` | — | Prepend to auto-generated message. Invalid with `--no-commit`. |
+| `--message-suffix <m>` | — | Append to auto-generated message. Invalid with `--no-commit`. |
 | `--retries <n>` | — | Retry budget on optimistic-concurrency conflict. `-1` = retry forever. Default `3`. |
-| `--require-plan-hash <hex>` | — | Refuse to execute unless the computed plan hashes to this value. |
-| `--allow-empty` | — | Permit a commit with no content change. |
+| `--require-plan-hash <hex>` | — | Refuse to execute unless the computed plan hashes to this value. Invalid with `--no-commit`. |
+| `--allow-empty` | — | Permit a commit with no content change. Invalid with `--no-commit`. |
 
-`--plan`, `--dry-run`, `--no-commit` are mutually exclusive. The first two skip execution entirely; the third writes but doesn't commit.
+`--plan`, `--dry-run`, and `--no-commit` are mutually exclusive. The first two skip execution entirely; the third writes but doesn't commit. `--no-checkout` applies only to successful committing invocations; it has no meaning with `--plan`, `--dry-run`, or `--no-commit`. Read verbs do not accept mutation or commit-control flags, because they have no write, plan, commit, or materialization phase.
 
 ## 4. Script syntax
 
@@ -94,19 +95,30 @@ Two tiers:
 
 **Plumbing** verbs are format-explicit (`set-yaml`, `set-json`, `set-frontmatter`, `replace-section-md`). They have no inference and no surprises, suitable for scripts where the file extension might lie or where the porcelain heuristics would pick the wrong format.
 
-The full verb surface is **deferred** — it will be designed against the constraints set by §3 (uniform `verb path selector value` shape) and §10 (must fit in a dense help page). Likely categories:
+The MVP verb surface is constrained by §3 (uniform `verb path selector value` shape where possible) and §10 (must fit in a dense help page). Verbs fall into two semantic classes:
 
-- Scalar set/delete on structured paths (json/yaml/frontmatter).
-- List append/prepend/insert/remove.
-- Markdown section replace/append/prepend/delete.
-- File-level create / move / delete (these are commits even though they aren't "edits" in the usual sense).
-- Read verbs (`get`, `exists`, `keys`) that don't commit and exist mainly for scripting symmetry and testing.
+- **Mutating verbs** compute new file contents. They may internally read one or more paths, but their user-visible effect is the plan/commit/materialization pipeline.
+- **Read verbs** print information to stdout and have no write, plan, commit, or materialization phase. In MVP, `tx` accepts mutating verbs only; mixed read/write scripts and batched read-only scripts are deferred.
 
-Each verb is annotated as idempotent or non-idempotent in the help table. Idempotent ops that produce no content change are no-ops and don't contribute to the commit; non-idempotent ops (`append`) always produce changes.
+MVP mutating surface:
+
+| Format | Verbs | Selector/value behavior |
+|---|---|---|
+| JSON | `set`, `delete`, `append` | Selectors are dotted object paths. `set` creates a missing leaf and missing object containers; it fails if an intermediate component exists but is not an object. Values are parsed as JSON when they are valid JSON literals, otherwise treated as strings. `delete` removes an existing key. `append` requires the selector to name an array and appends the parsed value. |
+| YAML | `set`, `delete`, `append` | Same selector and value semantics as JSON, but using a round-tripping YAML representation so comments, key order, indentation style, and scalar spelling are preserved where the parser can preserve them. |
+| Markdown frontmatter | `set`, `delete`, `append` | Selectors under `frontmatter.*` operate on YAML frontmatter using the YAML rules above. If a Markdown file has no frontmatter, `set frontmatter.*` creates a frontmatter block; `delete` and `append` require an existing block. |
+| Markdown body | `replace-section` | The selector is a heading line such as `## Notes`. Replacement covers the content under that heading up to the next heading of equal or higher level. Missing or ambiguous headings are errors. |
+| Files | `create`, `delete-file`, `move-file` | File-level verbs participate in the same commit machinery even though they are not structural edits within a file. Signatures are `create <path> <content>`, `delete-file <path>`, and `move-file <src> <dst>`. `create` fails if the path exists. `delete-file` fails if the path is absent. `move-file` fails if the source is absent or destination exists. |
+
+Deferred mutating operations include list `prepend`, `insert`, and value-based `remove`; Markdown `append-section`, `prepend-section`, `delete-section`, `move-section`, and `split-section`; and cross-file transforms that read from one location and write/remove/insert elsewhere. These are still mutating verbs, not read verbs, because their contract is new file contents rather than stdout.
+
+Initial read verbs are `get`, `exists`, and `keys` for JSON/YAML/frontmatter paths, plus `get-section` and `list-sections` for Markdown bodies. They print to stdout, never commit, and exist mainly for scripting symmetry, tests, and shell composition.
+
+Each mutating verb is annotated as idempotent or non-idempotent in the help table. Idempotent ops that produce no content change are no-ops and don't contribute to the commit; non-idempotent ops (`append`) always produce changes. Read verbs are explicitly marked read-only and are outside the plan/commit machinery described below.
 
 ## 6. Plans
 
-A **plan** is etch's structured answer to "if I were to run, what exactly would happen — every byte that would change, in what file, ending in which commit?" It is produced by the same code path as actual execution, stopped one step before write-back. Same parser, same operation evaluator, same commit-tree builder — everything except writing files to disk and updating the ref. The plan cannot drift from reality because it *is* reality minus the side effects.
+A **plan** is etch's structured answer to "if I were to run this mutating invocation, what exactly would happen — every byte that would change, in what file, ending in which commit?" It is produced by the same code path as actual execution, stopped one step before side effects. Same parser, same operation evaluator, same commit-tree builder — everything except writing objects, updating the ref, and materializing touched paths into the checkout. The plan cannot drift from reality because it *is* reality minus the side effects. Read verbs have no plan form in MVP.
 
 ### Plan contents
 
@@ -170,7 +182,15 @@ etch executes optimistically and uses git's existing CAS primitives to detect co
 
 ### Per-transaction temp index
 
-Every invocation creates a temp index (`GIT_INDEX_FILE` set to a tempfile, current index copied in). etch updates only the paths it's touching, builds a tree, creates the commit object, and updates the ref. The user's working index is never touched — unstaged changes elsewhere are completely invisible to etch. This is the same isolation pattern `git stash` uses.
+Every mutating invocation creates a temp index (`GIT_INDEX_FILE` set to a tempfile) initialized from `HEAD^{tree}` (or the empty tree for an unborn branch), not by copying the user's live index. etch writes candidate blobs for touched paths into that temp index, builds a tree, creates the commit object, and updates the ref. The user's live index is never used to build the transaction, and unrelated staged or unstaged changes are invisible to etch.
+
+### Working-tree materialization
+
+After a successful ref update, etch materializes touched paths into the caller's working tree by default. Materialization is a checkout phase, not part of commit construction: it updates the working tree and live index entries for touched paths only so they match the committed tree. Unrelated paths are not touched.
+
+`--no-checkout` skips this phase. It is useful for agent workflows that care only about the commit graph and do not need the shared checkout to reflect the new commit immediately.
+
+If materialization cannot safely update a touched path because it changed after validation, the commit remains in history and etch reports a materialization failure. The transaction's durability boundary is the ref update; checkout is the post-commit synchronization step.
 
 ### The two CAS checks
 
@@ -191,12 +211,12 @@ When the caller passes `--require-plan-hash=<hex>`, etch computes the plan, hash
 
 | Mode | Trigger | Behavior |
 |---|---|---|
-| Optimistic | default | Plan, validate, commit, retry on conflict. STM-style. |
-| Pinned | `--require-plan-hash` | Plan, validate against expected hash, commit-or-fail. Caller owns retry. |
+| Optimistic | default | Plan, validate, commit, materialize, retry on transaction conflict. STM-style. |
+| Pinned | `--require-plan-hash` | Plan, validate against expected hash, commit-or-fail, then materialize. Caller owns transaction retry. |
 
 ## 8. Commits
 
-Every successful etch invocation produces exactly one commit (or zero, if all operations were idempotent no-ops and `--allow-empty` was not passed).
+Every successful mutating etch invocation produces exactly one commit by default (or zero, if all operations were idempotent no-ops and `--allow-empty` was not passed). `--no-commit` is the explicit escape hatch for "apply, but do not record a commit." Read verbs never create commits.
 
 ### Auto-generated messages
 
@@ -213,7 +233,7 @@ Operations that produce no content change contribute nothing to the commit. If e
 
 ### Working-tree state of touched files
 
-If a file etch is targeting has unstaged changes in the user's working tree, etch reads the working-tree state, applies operations to it, writes back, and commits the result. The file becomes clean (changes committed). Other dirty files are unaffected. Rationale: agents shouldn't have to negotiate with human staging.
+If a file etch is targeting differs between `HEAD`, the index, and the working tree, etch reads the working-tree state, applies operations to it, and commits that result by default. The working tree wins over the index for touched paths; unrelated staged changes are not pulled into the etch commit. After the commit lands, default materialization updates the touched working-tree files and index entries to the committed content. Under `--no-commit`, no commit is created; etch rewrites the file in place and leaves the result dirty. Other dirty files are unaffected. Rationale: agents shouldn't have to negotiate with human staging.
 
 ## 9. Security model
 
@@ -294,11 +314,13 @@ No custom config file in MVP. Repo-level policy file (§9) is deferred.
 
 ## 14. Open questions
 
-- **Verb surface.** Full set of verbs and their signatures.
+- **Inline Markdown fields.** Whether body-level inline fields such as `[due:: 2026-03-01]` are first-class selectors/verbs in MVP or deferred to a later Markdown extension.
+- **Selector escaping.** How dotted selectors address keys that themselves contain dots, and whether array indexes are in MVP.
 - **Error taxonomy.** Specific exit code allocations within 20–63.
 - **Ref scope.** HEAD-only in MVP; `--ref refs/heads/<branch>` for non-checked-out branches is plausible but adds complexity.
 - **Backoff strategy.** Implementation detail, not in spec.
-- **Plan inline values.** Currently always-hashed for uniformity. May reconsider if plans become hard to read.
+- **Plan inline values.** Plan values are always hashed for uniformity. May reconsider if plans become hard to read.
+- **Materialization failures.** Exact exit code and stderr shape when the commit succeeds but post-commit checkout of touched paths fails.
 
 ## 15. Implementation notes
 
