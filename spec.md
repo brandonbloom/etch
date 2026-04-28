@@ -389,10 +389,6 @@ The hard case is host permission matching. Some agents approve commands by execu
 
 A runtime can compute `etch --plan <args...>`, render the JSON to a human, hash it, cache the approval, and later execute only if the same plan would result. The execution pin is deferred, but the plan format should remain suitable for this use.
 
-### Repo-level policy (deferred)
-
-A `.etch/policy.toml` file restricting verbs/paths is anticipated but not in MVP. When designed, policy violations refuse the entire transaction (not partial execution) and exit before running operations. No specific design is committed to here.
-
 ### Auth protocol on stdio (out of scope)
 
 An interactive `AUTH-REQUEST`/`AUTH-GRANT` protocol on stdio was considered and rejected — it leaks runtime concerns into etch and competes with whatever the host runtime already does. Etch instead exposes structured exit info that runtimes can drive themselves.
@@ -427,13 +423,13 @@ Environment variables:
 | `GIT_AUTHOR_DATE`, `GIT_COMMITTER_DATE` | Standard git semantics; used in commits and plan hashes. |
 | `GIT_AUTHOR_NAME`, `GIT_AUTHOR_EMAIL` | Standard git semantics. |
 
-No custom config file in MVP. Repo-level policy file (§9) is deferred.
+No custom config file in MVP.
 
 ## 13. Non-goals
 
 - **Generic text editing.** Use `sed`, `awk`, `sd`. etch is for *structural* mutations on known formats.
 - **Turing-complete scripting.** Use a real language and shell out to etch.
-- **Conflict resolution.** etch detects conflict and aborts; merging is the caller's problem.
+- **Semantic conflict resolution.** etch does not understand user intent well enough to merge competing semantic edits. Working-tree synchronization may still use ordinary text conflict markers if that proves to be the best agent-facing failure mode.
 - **Network operations.** No `git push`, no `git pull`. The "git side effect" is local commits only.
 - **Authorization UX.** Surfaces (plan format, exit codes) are provided; the UX is the host runtime's job.
 
@@ -447,8 +443,160 @@ No custom config file in MVP. Repo-level policy file (§9) is deferred.
 - **Backoff strategy.** Implementation detail, not in spec.
 - **Plan inline values.** Plan values are always hashed for uniformity. May reconsider if plans become hard to read.
 - **Materialization failures.** Exact exit code and stderr shape when the commit succeeds but post-commit checkout of touched paths fails.
+- **Working-tree conflict materialization.** Whether post-commit materialization should fail cleanly when a touched path changed after validation, or attempt a three-way text merge and leave conflict markers in the working tree when it cannot merge automatically. Agents already need to cope with conflict markers, so this may be a better recovery surface than refusing to update the checkout.
 
-## 15. Validation strategy
+## 15. Architecture
+
+etch is a thin command surface around a deterministic planning and execution core. The core accepts normalized operations, obtains bounded workspace snapshots through one store abstraction, computes byte-level results, and then either renders a plan/patch or commits the planned tree through git.
+
+```mermaid
+flowchart TD
+  Caller["Caller (human, agent, script)"] --> CLI["CLI front door"]
+  CLI --> Parser["Argv and script parser"]
+  Parser --> Catalog["Verb catalog"]
+  Catalog --> Normalizer["Command decoder"]
+  Normalizer --> Planner["Planner"]
+  Planner --> Store["Workspace snapshot store"]
+  Store --> Evaluators["Operation evaluators"]
+  Evaluators --> Planner
+  Planner --> JSONPlan["Canonical JSON plan"]
+  Planner --> Patch["Dry-run patch renderer"]
+  JSONPlan --> Executor["Transaction executor"]
+  Executor --> GitBackend["Git object and ref backend"]
+  GitBackend --> Commit["Local commit"]
+  Executor --> Materializer["Working-tree materializer"]
+  Host["Host runtime approval (deferred)"] -.-> JSONPlan
+```
+
+The architecture has one important shape constraint: semantic mutation happens before git side effects. Parsing, selector evaluation, format rewriting, plan hashing, patch rendering, and execution all share the same normalized operation model, so preview and execution cannot become separate interpretations of the same command.
+
+### CLI front door
+
+The CLI front door owns top-level flag parsing, env-var defaults, command dispatch, and the split between one-shot invocation, `run`, help, verb catalog, plan, dry-run, no-commit, and committing execution. It also enforces global flag incompatibilities before any file reads.
+
+Dependency posture: use `urfave/cli/v3` for top-level command, flag, help, and environment-variable behavior. The Go standard library flag parser follows older Plan 9-style conventions and is the wrong user-facing surface for a modern CLI. etch still keeps verb decoding in project code so the catalog remains the source of truth for argv, scripts, help, and `verbs --json`. The `urfave/cli` boundary must stop before verb operands, for example with root `StopOnNthArg=1`, so values beginning with `-` remain etch arguments rather than being consumed as top-level flags.
+
+### Argv and script parser
+
+The parser turns either process argv or script lines into the same token stream. Script parsing supports comments, blank lines, shell-style quotes/backslash escaping, and etch-level heredocs, but no variable expansion, command substitution, globbing, process execution, pipes, or conditionals.
+
+Dependency posture: implement this parser directly. General shell parsers are intentionally too expressive for etch's security model, and the grammar is small enough that a hand-written tokenizer should be easier to audit and test.
+
+### Verb catalog
+
+The verb catalog is the single source of truth for command names, command paths, signatures, format namespaces, read vs mutating classification, idempotency, selector/value expectations, one-line help text, and machine-readable `verbs --json` output. Execution dispatch should use this catalog rather than duplicating verb metadata in the parser, help renderer, and evaluator registration.
+
+Catalog entries project into the CLI through a generic command decoder. Each entry declares its accepted token path (`set`, `json set`, `frontmatter set`), command class, allowed top-level flags, command-local flags, positional schema, selector namespace rules, evaluator ID, help row, and JSON catalog fields. The CLI resolves the longest matching token path, validates flags and arity from the entry, and emits either a normalized mutating operation or a read command. `run` uses the same resolver for each parsed statement, so a script line and process argv stay equivalent.
+
+Verification plan: unit tests cover longest-match command resolution, command-local flag parsing, global flag admission/rejection by command class, positional arity errors, normalized operation output, `run` statement equivalence with direct argv, help-row generation, and `verbs --json` projection from the same catalog entries.
+
+Dependency posture: no external dependency is expected. Keeping this as ordinary Go data makes the help and JSON catalog easy to snapshot.
+
+### Selector engine
+
+The selector engine parses and evaluates the singular JSONPath subset used for JSON, YAML, and frontmatter fields. It rejects any syntax that can produce multiple matches before evaluation, normalizes selectors for plans, and reports zero-match or type errors according to the verb's semantics.
+
+Dependency posture: use `github.com/theory/jsonpath` as the recommended parser candidate. It targets RFC 9535, has no runtime dependencies, and exposes a stable `spec` AST surface. etch parses once, inspects `Path.Query().Segments()` and each segment's selectors, rejects descendants, selector lists with more than one selector, wildcards, slices, filters, function extensions, and disallowed indexes before evaluation, then adapter-walks only admitted `Name` and `Index` selectors. `github.com/speakeasy-api/jsonpath` was evaluated and is not recommended because its public surface is an evaluator over YAML nodes rather than an inspectable parser AST.
+
+### Format adapters
+
+Format adapters convert bytes into editable representations and back to bytes. JSON, YAML, Markdown/frontmatter, Markdown sections, future Markdown tables, and possible CSV support each live behind this boundary. Adapters are responsible for preserving formatting where the format contract requires it, especially YAML comments, key order, indentation, scalar spelling, and Markdown body text outside the addressed part.
+
+Dependency posture: use `encoding/json/v2` for JSON if the selected Go toolchain supports it without unacceptable experiment flags, `goccy/go-yaml` for YAML, and `yuin/goldmark` with GFM extensions for Markdown. YAML uses parser/token/AST APIs for comments, key order, anchors, aliases, token positions, and generated snippets; etch owns selector evaluation and localized byte rewrites. Markdown uses goldmark for CommonMark/GFM structure, source segments, headings, task-list semantics, and table nodes; goldmark renderers are not used to rewrite Markdown source.
+
+### Operation evaluators
+
+Operation evaluators implement verbs against format adapters and selectors. They receive file snapshots from the planner, then produce new file bytes, operation descriptors, value hashes, no-op information, and structured errors. They do not read files, write files, update refs, or commit. Read verbs share parser/catalog/selector/adapter infrastructure but bypass the planning and commit pipeline.
+
+Dependency posture: evaluators should be project code. Their contracts are etch's product semantics, not generic library behavior.
+
+### Planner
+
+The planner is the pure core for mutating invocations. It owns read-set construction, but it does not perform raw filesystem reads itself: it asks the workspace snapshot store for file content, path metadata, and base-ref state. It applies all operations atomically in memory, computes per-file before/after hashes, asks the git backend to build the planned tree, generates the commit message, and emits the canonical plan structure.
+
+Dependency posture: plan hashes are computed over RFC 8785 JSON Canonicalization Scheme bytes. etch canonicalizes original UTF-8 JSON input bytes, not Go values produced by `encoding/json`. Inputs must satisfy the JCS/I-JSON domain: valid UTF-8, no duplicate object member names after escape decoding, no lone surrogates or noncharacters, and finite IEEE-754 binary64 numbers in the accepted range. Object members are sorted by RFC 8785 UTF-16 code-unit order, and canonical output is exact UTF-8 bytes with no trailing newline. The selected candidate is `github.com/lattice-substrate/json-canon/jcs`, pending etch integration fixtures and acceptance of its Go version/platform constraints. Hashing uses the Go standard library.
+
+### Workspace snapshot store
+
+The workspace snapshot store is the read boundary for planning and read verbs. It resolves paths against the active root, enforces tracked/untracked mode, rejects path traversal and symlink escapes, reads working-tree bytes for touched paths, records read-set hashes, and exposes base commit/tree information. It presents immutable snapshots to evaluators so retry planning starts from a fresh store view rather than mutating prior state.
+
+Dependency posture: implement this boundary directly on top of filesystem and git backend primitives. The correctness work is in containment, tracked-path semantics, and read-set hashing, not in a generic file access abstraction.
+
+### Patch renderer
+
+The patch renderer lowers a plan to the `--dry-run` mailbox patch format. It owns the `From`, `Date`, `Subject`, `Etch-*` headers, diffstat, and hunks, and it must preserve the distinction between canonical plan identity and human review output.
+
+Dependency posture: use native git output for MVP patch rendering. Standalone Go diff/patch libraries and `go-git` diff helpers were evaluated; none is selected as the `--dry-run` renderer. `github.com/bluekeyes/go-gitdiff` is the strongest support candidate for parsing, applying, or inspecting Git-shaped patches in fixtures, and `github.com/aymanbagabas/go-udiff` is the strongest future candidate for an in-process text hunk engine. Any replacement renderer must produce mailbox output with compatible metadata, diffstat, mode changes, creates/deletes, renames, stable path quoting, no-newline markers, binary patch payload/applicability, and hunks that apply cleanly with `git am` to the planned tree.
+
+### Git backend
+
+The git backend abstracts repository discovery, tracked/untracked checks, blob and tree construction, commit-object creation, ref reads, ref CAS updates, author metadata, and any fallback calls to the git executable. It is the only component allowed to perform git side effects.
+
+The git backend requirements are:
+
+- discover the active repository and current checked-out ref from an arbitrary CWD;
+- read `HEAD`, unborn-branch state, refs, trees, blobs, and tracked-path status;
+- build blobs, trees, and commit objects without using the caller's live index as the transaction state;
+- support an isolated temp-index-equivalent transaction model;
+- update refs with old-value CAS semantics equivalent to `git update-ref <ref> <new> <old>`;
+- materialize only touched paths into the working tree and live index;
+- preserve unrelated staged and unstaged changes;
+- support author identity/date semantics compatible with git;
+- produce or delegate `git am`-compatible patch output for `--dry-run`.
+
+Dependency posture: use a native-git-first backend for MVP. `go-git` has useful read/object/ref primitives, including repository discovery, object access, and reference compare-and-set support, but it is not sufficient as the sole backend for etch's compatibility contract. Native git remains the reference for temp-index construction, exact `update-ref` old-value CAS, live-index materialization, and `git am`/`format-patch` output. Reconsider `go-git` later for an in-process read/object layer behind the same backend fixture suite.
+
+### Transaction executor
+
+The executor takes a planned mutation through validation, retries, commit creation, ref CAS, and post-commit materialization. It treats the ref update as the durability boundary: a materialization failure reports an error after the commit exists rather than pretending the transaction never happened.
+
+Dependency posture: this should mostly compose the planner and git backend. Retry backoff can be implemented directly unless a dependency becomes useful for shared observability or cancellation later.
+
+### Working-tree materializer
+
+The materializer updates only touched paths in the working tree and live index after a successful commit. It must preserve unrelated staged and unstaged changes, refuse unsafe overwrites of touched paths that changed after validation, and support `--no-checkout` by being skipped entirely.
+
+Dependency posture: use the git backend for index updates and checkout-like behavior where possible. Avoid a generic filesystem synchronization dependency; the update set is intentionally small and path-bounded.
+
+### Security boundary
+
+The security boundary enforces active-root containment, symlink refusal or containment, no network access, no process spawning outside the permitted git surface, and no DSL escape hatches. Host authorization hooks sit outside the MVP execution path but should attach to the plan boundary rather than to lower-level file writes.
+
+Dependency posture: path validation should use standard filesystem/path primitives plus focused tests.
+
+## 16. Dependency candidates and decisions
+
+This section records dependency candidates, recommendations, explicit user selections, and evaluation work still needed. Final approval to add or vendor a dependency comes from Brandon.
+
+| Area | Decision | Status | Rationale |
+|---|---|---|---|
+| Language/runtime | Go standard library | Baseline | Use for hashing, path handling, filesystem access, CSV parsing, process execution, and small data structures. Do not use `flag` for the user-facing CLI. |
+| CLI framework | `github.com/urfave/cli/v3` | Selected, passthrough-gated | Supports modern command callbacks, typed/env-backed flags, subcommands, generated/custom help, and shell completion. Use a passthrough boundary such as root `StopOnNthArg=1`; keep etch's command decoder catalog-driven above it. |
+| Script parsing | Hand-written tokenizer | Spec-selected | The grammar is intentionally smaller than shell; no expansion or execution semantics should be imported. |
+| Embedded shell parsing | `mvdan/sh`-style shell parser | Rejected by spec | Shell syntax was evaluated and rejected because command substitution, expansion, and broader shell semantics break auditability. |
+| Verb catalog | Plain Go catalog data | Spec-selected | The catalog should project to dispatch, help, and `verbs --json` without a schema/codegen dependency. |
+| Selector parsing | `github.com/theory/jsonpath` | Recommended candidate | RFC 9535 implementation with no runtime dependencies and stable `spec` AST surface. Etch can reject non-singular syntax before evaluation, then adapter-walk admitted selectors. |
+| Selector parsing | `github.com/speakeasy-api/jsonpath` | Evaluated, not recommended | Public API is a YAML-node evaluator with private AST. Its tokenizer is not enough of a parser-only validation surface for etch's singular selector contract. |
+| JSON | `encoding/json/v2` | Brandon-selected with toolchain caveat | Prefer v2 semantics for stricter JSON behavior and deterministic output options. Confirm target Go version and `GOEXPERIMENT=jsonv2` status before implementation. |
+| CSV | `encoding/csv` | Candidate if CSV enters MVP | CSV is standard-library covered; table selector semantics are still deferred. |
+| YAML | `github.com/goccy/go-yaml` | Selected, fixture-gated | Use parser/token/AST APIs for comments, key order, anchors, aliases, token positions, and generated YAML snippets. Etch owns selector evaluation and localized byte rewrites; whole-document emission is allowed only where fixtures prove acceptable preservation. |
+| Markdown | `github.com/yuin/goldmark` plus `extension.GFM` | Selected, parser-only | Use goldmark for CommonMark/GFM structure, source segments, headings, task-list semantics, and table nodes. Markdown adapters preserve untouched bytes by splicing original source ranges. |
+| JCS canonicalization | `github.com/lattice-substrate/json-canon/jcs` | Selected candidate, fixture-gated | Best fit for plan hashing: byte-in/byte-out API, strict parser, duplicate-key rejection, UTF-16 key sorting, and broad conformance fixtures. Requires acceptance of Go version/platform constraints. |
+| JCS canonicalization | `github.com/gowebpki/jcs` | Evaluated, not recommended | Usable byte-in/byte-out API, but parser behavior is too loose for etch plan hashes unless wrapped in a strict JSON/I-JSON validator. |
+| JCS canonicalization | `github.com/ucarion/jcs` | Evaluated, not recommended | Canonicalizes Go values rather than original JSON bytes, so duplicate keys and input-domain violations can be lost before canonicalization. |
+| JCS reference fixtures | `github.com/cyberphone/json-canonicalization` | Reference, not dependency | Upstream/reference source for JCS fixtures and provenance. The Go implementation is GOPATH-shaped and not the best etch dependency. |
+| Git compatibility | System `git` executable | Reference implementation | Native git defines expected behavior for `git am`, ref CAS, object format, index updates, and checkout semantics. |
+| Git in-process backend | `github.com/go-git/go-git/v6` | Evaluated, deferred for MVP primary backend | Strong read/object/ref primitives, but not sufficient as the sole backend for temp-index construction, exact `update-ref` CAS, live-index materialization, and `git am`/`format-patch` output. |
+| Git diff/patch helpers | `github.com/go-git/go-git/v6` | Evaluated, not selected for `--dry-run` | Can compute tree/commit diffs and emit raw git-style unified text diffs, but lacks mailbox output, format-patch diffstat, binary patch payloads, stable path quoting, similarity/copy headers, and native hunk shape. |
+| Diff/patch rendering | Git-generated patch output first | Spec-selected | `--dry-run` promises `git am` compatibility, so git's patch format is the reference surface. No in-process renderer is selected for MVP. |
+| Git patch parser/helper | `github.com/bluekeyes/go-gitdiff` | Evaluated support candidate | Strongest non-git support library for parsing, formatting, and applying Git-shaped patch files, including modes, renames, copies, binary fragments, path quoting, and no-newline markers. It does not compute diffs, emit mailbox patches or diffstat, or perform full tree application. |
+| Text hunk engine | `github.com/aymanbagabas/go-udiff` | Evaluated possible future candidate | Best standalone text hunk engine evaluated: maintained, Go-tools-derived, with unified output, no-newline handling, and patch-application tests. It does not provide the Git mailbox, diffstat, extended headers, mode/create/delete/rename, binary, or path-quoting surface etch needs for `--dry-run`. |
+| Text diff libraries | `github.com/pkg/diff`, `github.com/hexops/gotextdiff`, `github.com/sourcegraph/go-diff-patch`, `github.com/sourcegraph/go-diff` | Evaluated, not selected | These provide bare unified diff generation, single-file patch generation, or unified-diff parsing/printing, but none covers etch's full git-am-compatible mailbox and tree-equivalence contract. |
+| Retry/backoff | In-repo implementation | Spec-selected | The retry policy is small and should not pull in a dependency before observability or cancellation needs are clearer. |
+
+## 17. Verification strategy
+
+Verification is fully automated evidence that the implementation matches this spec. Product validation is separate: Brandon and users decide whether etch solves the right problem.
 
 Most CLI behavior should be covered by snapshot tests over generated output:
 
@@ -463,10 +611,34 @@ Most CLI behavior should be covered by snapshot tests over generated output:
 
 Unit tests should carry the parser, selector evaluator, format round-trippers, and commit-tree builder. End-to-end tests should prefer real temporary git repositories so the snapshots exercise the same object and ref behavior users get.
 
-## 16. Implementation notes
+## 18. Validation strategy
+
+Validation asks whether etch reduces agent work enough to justify its own command surface. It is measured with repeatable benchmark tasks, but interpreted as a product question: the numbers inform Brandon and users rather than defining pass/fail correctness.
+
+Validation should compare at least these workflows:
+
+- baseline agent edits using ordinary file reads, patch generation, and shell/git commands;
+- etch one-shot invocations for single structural changes;
+- etch `run` scripts for multi-file or multi-operation changes;
+- etch dry-run/plan review followed by execution;
+- recovery flows for dirty worktrees, changed touched paths, and conflict-marker materialization if admitted.
+
+For each workflow, run a fixed task suite across representative repositories and file shapes:
+
+- JSON field set/delete/append operations on small and large files;
+- YAML frontmatter and standalone YAML updates with comments, anchors, aliases, and ordering;
+- Markdown section replacement, frontmatter edits, task/list edits, and GFM table edits if admitted;
+- mixed multi-file changes that touch disjoint files, same files, dirty files, and concurrent branches;
+- negative cases where etch should refuse the operation and the agent must recover.
+
+The benchmark harness should invoke several target agents in fresh sessions with the same task prompt, repository fixture, and success criteria. It should record wall-clock time, tool-call count, model input tokens, model output tokens, total tokens, retry count, generated patch size, final diff size, whether the task succeeded without human help, and whether the final repository state matches the expected tree. Token counts should come from host/provider usage metadata when available; otherwise the harness should use a documented tokenizer approximation and mark those runs as estimated.
+
+Validation reports should present distributions, not single runs: median, p90, and failure rate per task family and workflow. A result is product-positive when etch reduces total tokens and elapsed time without increasing failure rate, review burden, or repair complexity. Cases where etch saves tokens but produces confusing review surfaces should be treated as validation failures even if verification passes.
+
+## 19. Implementation notes
 
 - Language: Go.
 - Module: `github.com/brandonbloom/etch`.
-- git operations: prefer `go-git` for in-process git access; fall back to invoking `git` only where `go-git` lags. Decision deferred until prototyping reveals which surface area we actually need.
+- git operations: use the dependency decisions in §16; native git behavior is the compatibility reference.
 - Parser: hand-written tokenizer for the script DSL. ~200 lines target.
-- Plan canonicalization: implement JCS directly or use a vetted library; verify byte-equivalence in tests.
+- Plan canonicalization: use `github.com/lattice-substrate/json-canon/jcs` if etch integration fixtures confirm byte-equivalence and platform/toolchain fit; otherwise fall back to a small in-repo JCS implementation.
