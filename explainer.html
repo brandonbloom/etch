@@ -503,7 +503,7 @@
         <div class="line"><span class="comment"># Mark a task as complete in a markdown file</span></div>
         <div class="line"><span class="prompt">$</span> etch set tasks/onboarding.md frontmatter.status "complete"</div>
         <div class="line">&nbsp;</div>
-        <div class="line"><span class="output">[main a1f9c3e] etch: set frontmatter.status in tasks/onboarding.md</span></div>
+        <div class="line"><span class="output">[main a1f9c3e] etch set tasks/onboarding.md frontmatter.status</span></div>
         <div class="line"><span class="output"> 1 file changed, 1 insertion(+), 1 deletion(-)</span></div>
       </div>
     </div>
@@ -518,7 +518,7 @@
       </div>
       <div class="demo-body">
         <div class="line"><span class="comment"># Snooze an action item and update its tracking metadata</span></div>
-        <div class="line"><span class="prompt">$</span> etch tx &lt;&lt;'SCRIPT'</div>
+        <div class="line"><span class="prompt">$</span> etch run - &lt;&lt;'SCRIPT'</div>
         <div class="line">set tasks/review-proposal.md frontmatter.snooze "2026-05-10"</div>
         <div class="line">set tasks/review-proposal.md frontmatter.status "deferred"</div>
         <div class="line">append people/alice.md frontmatter.tags '"pending-review"'</div>
@@ -542,14 +542,17 @@
         <span>terminal</span>
       </div>
       <div class="demo-body">
-        <div class="line"><span class="comment"># Preview what would happen, without writing anything</span></div>
+        <div class="line"><span class="comment"># Get the canonical JSON plan, without writing anything</span></div>
         <div class="line"><span class="prompt">$</span> etch --plan set tasks/review.md frontmatter.status "complete"</div>
         <div class="line">&nbsp;</div>
         <div class="line"><span class="output">{</span></div>
         <div class="line"><span class="output">  "operations": [{</span></div>
         <div class="line"><span class="output">    "verb": "set",</span></div>
-        <div class="line"><span class="output">    "path": "tasks/review.md",</span></div>
-        <div class="line"><span class="output">    "selector": "frontmatter.status"</span></div>
+        <div class="line"><span class="output">    "target": {</span></div>
+        <div class="line"><span class="output">      "path": "tasks/review.md",</span></div>
+        <div class="line"><span class="output">      "part": "frontmatter",</span></div>
+        <div class="line"><span class="output">      "selector": "$.status"</span></div>
+        <div class="line"><span class="output">    }</span></div>
         <div class="line"><span class="output">  }],</span></div>
         <div class="line"><span class="output">  "files": {</span></div>
         <div class="line"><span class="output">    "tasks/review.md": {</span></div>
@@ -560,7 +563,7 @@
         <div class="line"><span class="output">}</span></div>
       </div>
     </div>
-    <p>The plan is a structured JSON description of <em>exactly</em> what would change. It's produced by the same code path as real execution, stopped one step before writing. A host runtime can present this to a human for approval, hash it, and then execute only if the same plan would result.</p>
+    <p>The plan is a structured JSON description of <em>exactly</em> what would change. It's produced by the same code path as real execution, stopped one step before side effects. A host runtime can present this to a human for approval and cache that approval by plan hash. For human review and mechanical replay, <code>--dry-run</code> lowers the same plan to a base-locked <code>git am</code>-compatible patch when representable.</p>
   </div>
 </section>
 
@@ -576,10 +579,10 @@
   <pre><code># These are equivalent:
 $ etch set config.json settings.theme "dark"
 
-$ echo 'set config.json settings.theme "dark"' | etch tx -</code></pre>
+$ echo 'set config.json settings.theme "dark"' | etch run -</code></pre>
 
   <h3>3. No escape hatches</h3>
-  <p>The script syntax has no variables, no expansions, no subshells, no pipes. <code>$FOO</code> is literally the four characters <code>$</code>, <code>F</code>, <code>O</code>, <code>O</code>. Composition happens at the shell level, <em>outside</em> etch. This is what makes "always allow etch" a defensible authorization stance.</p>
+  <p>The script syntax has no variables, no expansions, no subshells, no pipes. <code>$FOO</code> is literally the four characters <code>$</code>, <code>F</code>, <code>O</code>, <code>O</code>. Composition happens at the shell level, <em>outside</em> etch. This is what keeps etch's own blast radius statically bounded.</p>
 </section>
 
 <!-- PIPELINE VIZ -->
@@ -640,7 +643,7 @@ $ echo 'set config.json settings.theme "dark"' | etch tx -</code></pre>
     </div>
   </div>
 
-  <p>Each invocation builds its commit in an isolated temporary index&mdash;it never uses your staging area as transaction state, and unrelated dirty files are ignored. After the commit lands, etch materializes only the touched paths into your working tree by default. On conflict, etch automatically re-reads the current state and retries (up to <code>--retries</code>, default 3). The caller never sees the retry unless the budget is exhausted.</p>
+  <p>Each invocation builds its commit in an isolated temporary index&mdash;it never uses your staging area as transaction state, and unrelated dirty files are ignored. After the commit lands, etch materializes only the touched paths into your working tree by default. On conflict, etch automatically re-reads the latest observed state and retries (up to <code>--retries</code>, default 3). The caller never sees the retry unless the budget is exhausted.</p>
 
   <div class="callout blue">
     <strong>Two checks, not one.</strong> etch validates that the files it read haven't changed on disk (read-set validation) <em>and</em> that the branch ref hasn't moved (ref CAS). Both are necessary: dirty working-tree edits don't move refs, and concurrent commits don't touch the working tree.
@@ -649,8 +652,8 @@ $ echo 'set config.json settings.theme "dark"' | etch tx -</code></pre>
 
 <!-- SECURITY -->
 <section class="reveal">
-  <h2>Why "always allow etch" is safe</h2>
-  <p>The goal: a user can grant blanket permission for etch on a repo without that grant becoming equivalent to "always allow shell."</p>
+  <h2>Why etch can be safe to allow</h2>
+  <p>The goal: a user can grant permission for etch on a repo without that grant becoming equivalent to "always allow shell." Exact blanket allow-list guidance depends on the host agent's permission model.</p>
 
   <div class="sec-grid">
     <div class="sec-card">
@@ -666,7 +669,7 @@ $ echo 'set config.json settings.theme "dark"' | etch tx -</code></pre>
     <div class="sec-card">
       <span class="sec-icon" aria-hidden="true">&#x1f4c1;</span>
       <div class="sec-title">No filesystem escape</div>
-      <div class="sec-body">Reads and writes stay within the git repo root. No symlink chasing past the boundary.</div>
+      <div class="sec-body">In default mode, reads and writes stay within the git repo root. No symlink chasing past the boundary.</div>
     </div>
     <div class="sec-card">
       <span class="sec-icon" aria-hidden="true">&#x1f6e1;&#xfe0f;</span>
@@ -679,11 +682,10 @@ $ echo 'set config.json settings.theme "dark"' | etch tx -</code></pre>
   <pre><code># Step 1: compute and inspect the plan
 plan=$(etch --plan set tasks/review.md frontmatter.status "complete")
 
-# Step 2: present to user, get approval, extract hash
+# Step 2: present to user, get approval, cache the plan hash
 
-# Step 3: execute only if the plan hasn't changed
-etch --require-plan-hash abc123 set tasks/review.md frontmatter.status "complete"</code></pre>
-  <p>If <em>anything</em> changed between planning and execution&mdash;file contents, branch state, even etch's own behavior across a version upgrade&mdash;the hash won't match and etch refuses to run.</p>
+# Step 3: future host integrations can execute only if the plan still matches</code></pre>
+  <p>If <em>anything</em> changed after approval&mdash;file contents, branch state, even etch's own behavior across a version upgrade&mdash;the recomputed hash changes. The execution pin is an integration feature, not required for the standalone CLI MVP.</p>
 </section>
 
 <!-- COMPARISON -->
@@ -795,8 +797,8 @@ document.querySelectorAll('.tab-btn').forEach(btn => {
 // --- Pipeline ---
 const stageDetails = [
   '<strong>Parse.</strong> The input (CLI args or script lines) is tokenized using shell quoting rules. No expansion of any kind—what you wrote is what the operations receive. Heredocs are resolved at this stage.',
-  '<strong>Plan.</strong> Each operation is evaluated against the current file state to compute the exact bytes that would result. The plan captures before/after hashes for every touched file, the resulting tree OID, and the commit message. This is the same structure emitted by <code>--plan</code>.',
-  '<strong>Validate.</strong> etch re-hashes every file it read during planning and confirms they haven\'t changed on disk (read-set validation). It also records the current branch ref for the CAS check at commit time. If inputs are stale, etch re-plans automatically.',
+  '<strong>Plan.</strong> Each operation is evaluated against the input file state to compute the exact bytes that would result. The plan captures before/after hashes for every touched file, the resulting tree OID, and the commit message. This is the same structure emitted by <code>--plan</code>.',
+  '<strong>Validate.</strong> etch re-hashes every file it read during planning and confirms they haven\'t changed on disk (read-set validation). It also records the branch ref for the CAS check at commit time. If inputs are stale, etch re-plans automatically.',
   '<strong>Build.</strong> Candidate file contents are written to an isolated temporary git index—never the user\'s live index. etch builds the tree object that the commit will point at.',
   '<strong>Commit.</strong> etch creates the commit object and updates the branch ref using a compare-and-swap: it only succeeds if the ref still points to the expected base commit. If another writer snuck in, the transaction restarts from Plan.',
   '<strong>Materialize.</strong> By default, etch checks out the touched paths from the committed tree into the working tree and live index so the checkout reflects the new HEAD. <code>--no-checkout</code> skips this phase.'
@@ -813,18 +815,18 @@ function setStage(n) {
 
 // --- Builder ---
 const examples = {
-  'set-md':    { cmd: 'etch set tasks/review.md frontmatter.snooze "2026-05-10"',   commit: 'etch: set frontmatter.snooze in tasks/review.md', note: 'Adds a snooze date to the task\'s YAML frontmatter.' },
-  'set-json':  { cmd: 'etch set state.json agents.assistant.last_run "2026-04-27"',  commit: 'etch: set agents.assistant.last_run in state.json', note: 'Navigates the JSON structure and sets the nested key.' },
-  'set-yaml':  { cmd: 'etch set config.yaml feeds.daily_digest.enabled true',        commit: 'etch: set feeds.daily_digest.enabled in config.yaml', note: 'Sets a value in the YAML file, preserving comments and formatting.' },
-  'delete-md': { cmd: 'etch delete tasks/review.md frontmatter.draft',               commit: 'etch: delete frontmatter.draft in tasks/review.md', note: 'Removes the "draft" key from the markdown file\'s frontmatter.' },
-  'delete-json': { cmd: 'etch delete state.json cache.stale_entry',                  commit: 'etch: delete cache.stale_entry in state.json', note: 'Removes the key from the JSON object.' },
-  'delete-yaml': { cmd: 'etch delete config.yaml old.unused_key',                    commit: 'etch: delete old.unused_key in config.yaml', note: 'Removes the key from the YAML file.' },
-  'append-md': { cmd: 'etch append people/alice.md frontmatter.tags \'"vip"\'',      commit: 'etch: append frontmatter.tags in people/alice.md', note: 'Appends a tag to the list in the dossier\'s frontmatter.' },
-  'append-json': { cmd: 'etch append log.json entries \'{"date":"2026-04-27","event":"sync"}\'', commit: 'etch: append entries in log.json', note: 'Appends an object to a JSON array.' },
-  'append-yaml': { cmd: 'etch append config.yaml plugins \'"analytics"\'',           commit: 'etch: append plugins in config.yaml', note: 'Appends to a YAML sequence.' },
-  'replace-section-md': { cmd: 'etch replace-section people/alice.md "## Notes" <<EOF\nDiscussed project timeline. Agreed on May deadline.\nEOF', commit: 'etch: replace-section "## Notes" in people/alice.md', note: 'Replaces everything under ## Notes until the next heading of equal or higher level.' },
-  'replace-section-json': { cmd: '# replace-section is a markdown operation.\n# For JSON, use set with the target path instead:\netch set state.json status.block \'{"key": "value"}\'', commit: 'etch: set status.block in state.json', note: 'Section replacement is a markdown concept. For structured formats, use set.' },
-  'replace-section-yaml': { cmd: '# replace-section is a markdown operation.\n# For YAML, use set with the target path instead:\netch set config.yaml settings.block \'{"key": "value"}\'', commit: 'etch: set settings.block in config.yaml', note: 'Section replacement is a markdown concept. For structured formats, use set.' },
+  'set-md':    { cmd: 'etch set tasks/review.md frontmatter.snooze "2026-05-10"',   commit: 'etch set tasks/review.md frontmatter.snooze', note: 'Adds a snooze date to the task\'s YAML frontmatter.' },
+  'set-json':  { cmd: 'etch set state.json agents.assistant.last_run "2026-04-27"',  commit: 'etch set state.json agents.assistant.last_run', note: 'Navigates the JSON structure and sets the nested key.' },
+  'set-yaml':  { cmd: 'etch set config.yaml feeds.daily_digest.enabled true',        commit: 'etch set config.yaml feeds.daily_digest.enabled', note: 'Sets a value in the YAML file, preserving comments and formatting.' },
+  'delete-md': { cmd: 'etch delete tasks/review.md frontmatter.draft',               commit: 'etch delete tasks/review.md frontmatter.draft', note: 'Removes the "draft" key from the markdown file\'s frontmatter.' },
+  'delete-json': { cmd: 'etch delete state.json cache.stale_entry',                  commit: 'etch delete state.json cache.stale_entry', note: 'Removes the key from the JSON object.' },
+  'delete-yaml': { cmd: 'etch delete config.yaml old.unused_key',                    commit: 'etch delete config.yaml old.unused_key', note: 'Removes the key from the YAML file.' },
+  'append-md': { cmd: 'etch append people/alice.md frontmatter.tags \'"vip"\'',      commit: 'etch append people/alice.md frontmatter.tags', note: 'Appends a tag to the list in the dossier\'s frontmatter.' },
+  'append-json': { cmd: 'etch append log.json entries \'{"date":"2026-04-27","event":"sync"}\'', commit: 'etch append log.json entries', note: 'Appends an object to a JSON array.' },
+  'append-yaml': { cmd: 'etch append config.yaml plugins \'"analytics"\'',           commit: 'etch append config.yaml plugins', note: 'Appends to a YAML sequence.' },
+  'replace-section-md': { cmd: 'etch replace-section people/alice.md "## Notes" <<EOF\nDiscussed project timeline. Agreed on May deadline.\nEOF', commit: 'etch replace-section people/alice.md "## Notes"', note: 'Replaces everything under ## Notes until the next heading of equal or higher level.' },
+  'replace-section-json': { cmd: '# replace-section is a markdown operation.\n# For JSON, use set with the target path instead:\netch set state.json status.block \'{"key": "value"}\'', commit: 'etch set state.json status.block', note: 'Section replacement is a markdown concept. For structured formats, use set.' },
+  'replace-section-yaml': { cmd: '# replace-section is a markdown operation.\n# For YAML, use set with the target path instead:\netch set config.yaml settings.block \'{"key": "value"}\'', commit: 'etch set config.yaml settings.block', note: 'Section replacement is a markdown concept. For structured formats, use set.' },
 };
 
 function updateBuilder() {
