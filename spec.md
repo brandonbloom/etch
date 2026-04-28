@@ -111,7 +111,7 @@ Two tiers:
 
 The MVP verb surface is constrained by §3 (regular command shapes) and §10 (must fit in a dense help page). The committed MVP verb surface is mutating: verbs compute new file contents and flow through the plan/commit/materialization pipeline.
 
-Read/query verbs are not committed MVP surface until the open question in §14 is resolved.
+Query/read verbs are out of scope for MVP.
 
 ### Selector syntax
 
@@ -210,7 +210,9 @@ Each mutating verb is annotated as idempotent or non-idempotent in the help tabl
 
 ## 6. Plans
 
-A **plan** is etch's structured answer to "if I were to run this mutating invocation, what exactly would happen — every byte that would change, in what file, ending in which commit?" It is produced by the same code path as actual execution, stopped one step before side effects. Same parser, same operation evaluator, same commit-tree builder — everything except writing objects, updating the ref, and materializing touched paths into the checkout. The plan cannot drift from reality because it *is* reality minus the side effects.
+A **plan** is etch's structured answer to "if I were to run this mutating invocation, what exactly would happen — every byte that would change in `HEAD`, in what file, ending in which commit?" It is produced by the same code path as actual execution, stopped one step before side effects. Same parser, same operation evaluator, same commit-tree builder — everything except writing objects, updating the ref, and materializing touched paths into the checkout. The plan cannot drift from reality because it *is* reality minus the side effects.
+
+Plans are computed from the base commit, not from dirty checkout bytes. The planned tree is therefore a clean descendant of `HEAD` containing only etch's structural mutation. Staged and unstaged checkout edits are treated as concurrent local state during materialization, not as implicit inputs to the commit.
 
 The canonical plan format is JSON. It is the machine contract for hashing, authorization caches, tests, and host integrations. It should not be replaced by a prose or email-shaped format, because plan identity depends on stable parsing, canonicalization, and schema evolution.
 
@@ -326,7 +328,7 @@ The `$schema` key identifies the canonical plan schema and includes a CalVer pat
 ### What's in the hash, and why
 
 - **Operations** anchor to user intent.
-- **Per-file before/after sha256** anchors to both input state and computed output. A change in etch's *behavior* (a verb's semantics changed across versions) invalidates plans even when operations look textually identical, because the after-hashes differ. This means a runtime caching "I approved hash H" doesn't also need to track etch versions.
+- **Per-file before/after sha256** anchors to both base-tree input state and computed output. A change in etch's *behavior* (a verb's semantics changed across versions) invalidates plans even when operations look textually identical, because the after-hashes differ. This means a runtime caching "I approved hash H" doesn't also need to track etch versions.
 - **Base commit** pins to a point in history; if HEAD has moved, the plan is stale.
 - **Tree OID** is the strongest possible "what would actually land" anchor — two plans with the same tree OID produce byte-identical commits.
 - **Commit metadata** captures message and author. Author/timestamp are normalized during planning unless `GIT_AUTHOR_DATE`/`GIT_COMMITTER_DATE` are set.
@@ -345,13 +347,21 @@ etch executes optimistically and uses git's existing CAS primitives to detect co
 
 MVP execution targets the current checkout only. There is no `--ref` flag. On a branch, etch updates the checked-out branch ref with old-value CAS. In detached `HEAD`, etch creates a normal child commit and updates `HEAD` directly with old-value CAS. Editing non-checked-out refs is deferred until there is a concrete wiki-transaction use case.
 
+### HEAD-sourced commits
+
+etch computes commits from the base tree at `HEAD`, not from the caller's live index or working tree. For tracked paths, operation evaluators receive bytes from `HEAD^{tree}`. The resulting commit contains only etch's structural mutation relative to that base tree. Uncommitted human or agent edits in touched files are intentionally modeled as concurrent checkout state and are reconciled after the ref update.
+
+This is a core safety property. etch must not accidentally sweep half-finished prose, staged experiments, or unrelated same-file edits into the commit just because they were present in the working tree. Dirty checkout state can still conflict with etch's change, but the conflict belongs in the working tree during materialization, not in the committed tree.
+
+For `--untracked` source paths that do not exist in `HEAD`, the working-tree bytes are the only possible input and are recorded in the input set. Created destinations and copied/moved destinations that are absent from `HEAD` are still planned as additions to the base tree.
+
 ### Per-transaction temp index
 
-Every mutating invocation creates a temp index (`GIT_INDEX_FILE` set to a tempfile) initialized from `HEAD^{tree}` (or the empty tree for an unborn branch), not by copying the user's live index. etch writes candidate blobs for touched paths into that temp index, builds a tree, creates the commit object, and updates the ref. The user's live index is never used to build the transaction, and unrelated staged or unstaged changes are invisible to etch.
+Every mutating invocation creates a temp index (`GIT_INDEX_FILE` set to a tempfile) initialized from `HEAD^{tree}` (or the empty tree for an unborn branch), not by copying the user's live index. etch writes candidate blobs for touched paths into that temp index, builds a tree, creates the commit object, and updates the ref. The user's live index is never used to build the transaction, and staged or unstaged checkout changes are invisible to commit construction.
 
 ### Working-tree materialization
 
-After a successful ref update, etch materializes touched paths into the caller's working tree by default. Materialization is a checkout phase, not part of commit construction: it updates the working tree and live index entries for touched paths only so they match the committed tree. Unrelated paths are not touched.
+After a successful ref update, etch materializes touched paths into the caller's working tree by default. Materialization is a checkout synchronization phase, not part of commit construction. Its job is to rebase the caller's live index and working tree for touched paths from old `HEAD` onto new `HEAD` while preserving unrelated paths.
 
 `--no-checkout` skips this phase. It is useful for agent workflows that care only about the commit graph and do not need the shared checkout to reflect the new commit immediately.
 
@@ -364,7 +374,18 @@ etch: working tree and index were not updated for touched paths
 
 Agents using `--no-checkout` repeatedly are responsible for refreshing, comparing, or discarding checkout state before relying on local files. This is explicit divergence mode, not a materialization failure.
 
-If a touched path changed after validation, the commit remains in history and etch attempts recovery materialization. For text paths, etch performs a three-way merge using the validated bytes as the base, the committed etch bytes as ours, and the current working-tree bytes as theirs. If the merge is clean, etch writes the merged file and updates the live index to that merged content. If the merge conflicts, etch writes conflict markers to the working tree, leaves the path dirty, and exits 1. The index is not put into an unmerged multi-stage state in MVP. For binary paths, or if text merge machinery cannot produce a usable result, etch fails cleanly without overwriting the current working-tree file.
+For each touched path, materialization considers three layers captured immediately before checkout synchronization:
+
+- **base:** the old `HEAD` bytes used for planning;
+- **index:** the caller's live index entry before materialization;
+- **worktree:** the caller's working-tree bytes before materialization.
+
+If both index and worktree match base, materialization is an ordinary checkout of the new `HEAD` bytes into both the live index and working tree. If either layer differs, etch treats that difference as concurrent local work and performs text three-way merges:
+
+1. Rebase the live index layer with `base = old HEAD`, `ours = new HEAD`, and `theirs = pre-materialization index`.
+2. Rebase the working-tree layer with `base = pre-materialization index`, `ours = post-materialization index`, and `theirs = pre-materialization worktree`.
+
+Clean merges preserve staged and unstaged layers relative to the new `HEAD`: pre-existing staged changes remain staged after being rebased, and pre-existing unstaged changes remain unstaged after being rebased. If a text merge conflicts, etch writes familiar conflict markers to the working tree, leaves the path dirty, and exits 1 after the commit exists. The index is not put into an unmerged multi-stage state in MVP. If an index-layer conflict cannot be represented without an unmerged index, etch writes the conflict to the working tree and leaves the live index at the new `HEAD` entry for that path, making the recovery visible rather than silently preserving a stale staged blob. For binary paths, or if text merge machinery cannot produce a usable result, etch fails cleanly without overwriting the current working-tree file.
 
 The transaction's durability boundary is the ref update; checkout is the post-commit synchronization step. Materialization failure never rolls back the commit. Stderr must be a recovery prompt for agents:
 
@@ -384,21 +405,21 @@ For clean failures where conflict markers were not written:
 etch: committed 7f4e8d9, but could not materialize 1 path
 etch: HEAD was updated; the commit exists and will not be rolled back
 etch: failed paths:
-etch:   assets/logo.png: binary file changed after validation
+etch:   assets/logo.png: binary local change could not be merged
 etch: working tree and index may not match HEAD for this path
 etch: run `etch help conflicts` for recovery steps
 ```
 
-### The two CAS checks
+### The two conflict checks
 
-1. **Read-set validation.** The plan records `before_sha256` for every file etch read. At execution time, etch re-hashes those files; if any differ, the transaction aborts. This is the read-set check from optimistic STM — the transaction is valid iff its inputs haven't been invalidated.
+1. **Input validation.** The plan records `before_sha256` for every base-tree file etch read and for any admitted untracked source path. For tracked files, the base commit plus ref CAS pins the bytes; etch does not reject dirty working-tree edits to those files. For untracked source paths and path metadata, etch revalidates that the input still matches the plan before committing.
 2. **Ref CAS.** etch updates the ref using the old-value form (`update-ref <ref> <new> <old-expected>`), where old-expected is the plan's `base_commit`. If another writer committed to the ref between plan and execution, this fails atomically.
 
-Both checks are necessary. Read-set validation prevents stale computation when other writers have edited the working tree without committing. Ref CAS prevents losing concurrent commits when other writers have committed without touching our files.
+Both checks are necessary. Input validation prevents stale computation for non-HEAD inputs such as admitted untracked sources and path metadata. Ref CAS prevents losing concurrent commits and pins all tracked base-tree bytes used by the plan. Working-tree and live-index changes to tracked paths are not transaction conflicts; they are concurrent checkout state handled by materialization.
 
 ### Retry policy
 
-Retry exists to make multiple agents editing the same git-backed directory converge during normal bursts of disjoint work. On a retryable conflict, etch re-plans from the latest observed state and tries again. A ref-only conflict means another writer committed first but the read set still validates; this should usually converge after re-planning on the new `HEAD`. A read-set conflict means a file etch read changed; etch re-plans from the new working-tree state and re-runs the semantic operation. If re-planning turns the operation into a semantic failure, such as a missing selector, wrong type, or non-unique table row, etch stops with `etch: <message>` and exits 1.
+Retry exists to make multiple agents editing the same git-backed directory converge during normal bursts of disjoint work. On a retryable conflict, etch re-plans from the latest observed state and tries again. A ref conflict means another writer committed first; this should usually converge after re-planning on the new `HEAD`. An input-validation conflict means an admitted non-HEAD input changed; etch re-plans from the new input state where that is safe. If re-planning turns the operation into a semantic failure, such as a missing selector, wrong type, or non-unique table row, etch stops with `etch: <message>` and exits 1.
 
 Retries are bounded by `--retries` (default 8). `--retries 0` disables retries. Infinite retry is not in MVP; sustained contention should return to the caller rather than hide a hot loop.
 
@@ -423,7 +444,11 @@ That said, pinned execution is not required for the standalone CLI MVP. The MVP 
 
 ## 8. Commits
 
-Every successful mutating etch invocation produces exactly one commit by default (or zero, if all operations were idempotent no-ops and `--allow-empty` was not passed). A non-committing mutation mode is deferred until etch has a concrete multi-execution transaction model, such as `begin`/`apply`/`commit`/`rollback`.
+Every successful mutating etch invocation produces exactly one commit by default (or zero, if all operations were idempotent no-ops and `--allow-empty` was not passed). A non-committing mutation mode is deferred until etch has a concrete multi-execution transaction model.
+
+A future multi-execution model should have two layers. The plumbing layer uses explicit transaction IDs, for example `etch tx begin`, `etch tx <id> -- <ordinary etch command...>`, `etch tx <id> -- run <script>`, `etch tx plan <id>`, `etch tx commit <id>`, and `etch tx abort <id>`. The porcelain layer provides a current transaction context, with aliases such as `etch begin`, `etch commit`, and `etch abort`; ordinary `etch set ...` and `etch run ...` commands may run inside the current transaction without rewriting the script or coloring every verb. Nested transactions should behave like savepoints: an inner commit merges into its parent transaction, and only the outer commit writes git.
+
+The current-transaction binding mechanism is deferred. It may involve environment variables, a context file, shell/session integration, or another host-visible handle, but it must work for agent execution models where commands may not share a long-lived shell PID. Transaction IDs, crash cleanup, locking, approval pins, query integration, and storage location are all deferred design work.
 
 ### Auto-generated messages
 
@@ -470,9 +495,11 @@ Value: "This summary is long enough that it needs a bounded preview..."
 
 Operations that produce no content change contribute nothing to the commit. If every op is a no-op, no commit is created and etch exits 0 with a `nothing to do` notice on stderr. `--allow-empty` forces an empty commit in the rare case where this is desired.
 
-### Working-tree state of touched files
+### Checkout state of touched files
 
-If a file etch is targeting differs between `HEAD`, the index, and the working tree, etch reads the working-tree state, applies operations to it, and commits that result. The working tree wins over the index for touched paths; unrelated staged changes are not pulled into the etch commit. After the commit lands, default materialization updates the touched working-tree files and index entries to the committed content. Other dirty files are unaffected. Rationale: agents shouldn't have to negotiate with human staging.
+If a tracked file etch is targeting differs between `HEAD`, the index, and the working tree, `HEAD` wins for commit construction. etch reads the base-tree state, applies operations to it, and commits that result. The live index and working tree are not inputs to the committed tree. After the commit lands, default materialization rebases touched live-index and working-tree entries onto the new `HEAD` as described in §7. Other dirty files are unaffected.
+
+Rationale: the git commit is etch's durable transaction record, so it should contain the structural mutation etch was asked to make, not incidental checkout state. Human and agent edits already present in the checkout are treated as concurrent local work; they either merge cleanly into the checkout after the ref advances or become visible conflict markers for the caller to resolve.
 
 ## 9. Security model
 
@@ -539,6 +566,8 @@ No custom config file in MVP.
 ## 13. Non-goals
 
 - **Generic text editing.** Use `sed`, `awk`, `sd`. etch is for *structural* mutations on known formats.
+- **Querying and reporting.** MVP etch does not provide `get`, `exists`, `keys`, listing, search, or report-style commands. Use native file-read tools, shell tools, or a future query design outside the MVP mutation surface.
+- **Multi-execution transactions.** MVP etch does not provide persistent transaction sessions such as `begin`/`apply`/`commit`/`rollback`. The only multi-operation transaction surface is `run`, including `run -` for dynamically generated batches.
 - **Turing-complete scripting.** Use a real language and shell out to etch.
 - **Semantic conflict resolution.** etch does not understand user intent well enough to merge competing semantic edits. Working-tree synchronization may use ordinary text conflict markers as a recovery surface, but etch does not decide which semantic edit should win.
 - **Network operations.** No `git push`, no `git pull`. The "git side effect" is local commits only.
@@ -546,9 +575,6 @@ No custom config file in MVP.
 
 ## 14. Open questions
 
-- **Read/query surface.** Reads are not committed MVP surface. Candidate commands include `get`, `exists`, and `keys` for JSON/YAML/frontmatter paths, plus `get-section` and `list-sections` for Markdown bodies, but they need a separate design pass before they appear in help, `verbs --json`, or the implementation. The design pass must decide whether reads observe the working tree, `HEAD`, or an explicit planned state; whether `run` may mix reads and writes; how stdout and exit status compose in shell pipelines; and whether read results participate in any transaction or plan hash.
-- **Multi-step agent workflows.** The commit-per-invocation model is simple, but agents often need read/decide/write loops that are logically one operation. Decide whether the deferred transaction model (`begin`/`apply`/`commit`/`rollback`, or another shape) is central enough for MVP, and how it relates to read/query commands without pushing agents back toward temp scripts and shell composition.
-- **Working tree as source of truth.** etch reads touched paths from the working tree and commits the computed result, which can capture unrelated half-finished human or agent edits in the same file. Decide whether this is an acceptable wiki-style transaction model, whether it needs a stronger warning/recovery surface, or whether MVP needs a mode that starts from `HEAD` and applies only the structural mutation.
 - **Default retry budget.** The default retry budget is 8 with capped backoff, which handles bursts of concurrent writers but can add several seconds of tail latency under contention. Decide whether the default should stay generous for multi-agent convergence or drop closer to 3 so sustained contention returns to the caller sooner.
 - **CWD-scoped script portability.** CWD-scoped paths are an important security boundary, but scripts that use project-relative paths only work from the expected directory. Decide whether checked-in etch scripts should declare or infer a root, whether documentation should mandate `cd` conventions, or whether non-portability is an acceptable consequence of CWD scoping.
 - **Validation value proposition.** Token reduction is only one reason for etch. Correctness, quoting reliability, structural intent, atomic commits, conflict recovery, and avoidance of hallucinated diffs may be stronger validation targets. Decide how validation reports should weigh token savings against task success, repair cost, review burden, and partial-failure avoidance.
@@ -620,15 +646,15 @@ Dependency posture: evaluators should be project code. Their contracts are etch'
 
 ### Planner
 
-The planner is the pure core for mutating invocations. It owns read-set construction, but it does not perform raw filesystem reads itself: it asks the workspace snapshot store for file content, path metadata, and base-ref state. It applies all operations atomically in memory, computes per-file before/after hashes, asks the git backend to build the planned tree, generates the commit message, and emits the canonical plan structure.
+The planner is the pure core for mutating invocations. It owns input-set construction, but it does not perform raw filesystem or object-store reads itself: it asks the workspace snapshot store for base-tree file content, admitted untracked source content, path metadata, and base-ref state. It applies all operations atomically in memory, computes per-file before/after hashes, asks the git backend to build the planned tree, generates the commit message, and emits the canonical plan structure.
 
 Dependency posture: plan hashes are computed over RFC 8785 JSON Canonicalization Scheme bytes. etch canonicalizes original UTF-8 JSON input bytes, not Go values produced by `encoding/json`. Inputs must satisfy the JCS/I-JSON domain: valid UTF-8, no duplicate object member names after escape decoding, no lone surrogates or noncharacters, and finite IEEE-754 binary64 numbers in the accepted range. Object members are sorted by RFC 8785 UTF-16 code-unit order, and canonical output is exact UTF-8 bytes with no trailing newline. The selected candidate is `github.com/lattice-substrate/json-canon/jcs`, pending etch integration fixtures and acceptance of its Go version/platform constraints. Hashing uses the Go standard library.
 
 ### Workspace snapshot store
 
-The workspace snapshot store is the file-content boundary for planning. It resolves paths against CWD, enforces tracked/untracked admission, rejects absolute paths, `..` segments, `.git` path segments, symlink loops, and symlink escapes, applies text encoding checks and resource guardrails, reads working-tree bytes for touched paths, records read-set hashes, and exposes base commit/tree information. It presents immutable snapshots to evaluators so retry planning starts from a fresh store view rather than mutating prior state.
+The workspace snapshot store is the file-content boundary for planning. It resolves paths against CWD, enforces tracked/untracked admission, rejects absolute paths, `..` segments, `.git` path segments, symlink loops, and symlink escapes, applies text encoding checks and resource guardrails, reads tracked touched-path bytes from the base tree, reads admitted untracked source bytes from the working tree, records input hashes, and exposes base commit/tree information. It presents immutable snapshots to evaluators so retry planning starts from a fresh store view rather than mutating prior state.
 
-Dependency posture: implement this boundary directly on top of filesystem and git backend primitives. The correctness work is in containment, tracked-path semantics, and read-set hashing, not in a generic file access abstraction.
+Dependency posture: implement this boundary directly on top of filesystem and git backend primitives. The correctness work is in containment, tracked-path semantics, and input hashing, not in a generic file access abstraction.
 
 ### Patch renderer
 
@@ -644,6 +670,7 @@ The git backend requirements are:
 
 - discover the active repository and current checked-out ref from an arbitrary CWD;
 - read `HEAD`, unborn-branch state, refs, trees, blobs, and tracked-path status;
+- read live-index entries and working-tree bytes for post-commit materialization;
 - build blobs, trees, and commit objects without using the caller's live index as the transaction state;
 - support an isolated temp-index-equivalent transaction model;
 - update refs with old-value CAS semantics equivalent to `git update-ref <ref> <new> <old>`;
@@ -662,7 +689,7 @@ Dependency posture: this should mostly compose the planner and git backend. Retr
 
 ### Working-tree materializer
 
-The materializer updates only touched paths in the working tree and live index after a successful commit. It must preserve unrelated staged and unstaged changes, perform three-way recovery materialization for touched text paths that changed after validation, write conflict markers when the text merge conflicts, fail cleanly for binary or unmergeable paths, and support `--no-checkout` by being skipped entirely.
+The materializer updates only touched paths in the working tree and live index after a successful commit. It must preserve unrelated staged and unstaged changes, rebase touched staged and unstaged layers from old `HEAD` to new `HEAD`, write conflict markers when a touched text merge conflicts, fail cleanly for binary or unmergeable paths, and support `--no-checkout` by being skipped entirely.
 
 Dependency posture: use the git backend for index updates and checkout-like behavior where possible. Use a small text merge implementation or a narrowly scoped dependency only if fixtures prove it produces familiar conflict markers without dragging in a larger VCS abstraction. Avoid a generic filesystem synchronization dependency; the update set is intentionally small and path-bounded.
 
@@ -712,7 +739,9 @@ Most CLI behavior should be covered by snapshot tests over generated output:
 - `--dry-run` snapshots use `git format-patch` output with etch metadata headers and are the primary golden surface for human-readable file mutation previews. For every representable dry-run fixture, tests should apply the output with `git am` in a temp repo at the planned base and assert the resulting tree OID matches the plan's tree. The same fixture should assert that `git am` creates the planned commit subject/body and author metadata, and that `Etch-*` headers do not appear in the commit log. Tests should not assert commit OID equality because committer metadata is supplied by the applying environment.
 - `--plan` snapshots cover canonical JSON shape, redacted values, hashes, tree OIDs, and commit messages. Commit-message fixtures should cover exact value previews, ellipsis truncation, descriptor line budgets, and single-op subject/body fallback. Tests should also verify canonical plan bytes and plan hash stability.
 - Successful commit tests compare `git show --stat --patch --format=fuller HEAD` against snapshots, with author and dates normalized by environment.
+- HEAD-sourced commit tests must make the touched path dirty before execution and assert that `git show HEAD:<path>` contains only the structural etch mutation from old `HEAD`, not the pre-existing staged or unstaged checkout edits.
 - `--no-checkout` tests assert working tree, live index, `HEAD` state, and the explicit skipped-checkout stderr notice separately.
+- Materialization tests must use temporary git repositories that distinguish old `HEAD`, live index, and working tree contents for touched paths. Fixtures should cover clean checkout, unstaged clean merge, unstaged conflict markers, staged clean merge, staged conflict surfaced in the working tree, staged-plus-unstaged clean merge, staged-plus-unstaged conflict, binary/unmergeable refusal, and untouched dirty paths. Each fixture should assert the final commit tree, live index entry, working-tree bytes, exit code, and recovery stderr.
 - Script tests cover tokenization, quoting, comments, configurable heredoc delimiters, literal heredoc bodies, missing terminators, stdin via `run -`, and failure atomicity across multi-op runs.
 - Format tests cover JSON, YAML, frontmatter, Markdown sections, Markdown tables, Markdown fields/tasks as they land, and CSV if admitted.
 - Concurrency tests use multiple temp indexes and explicit ref CAS races to prove disjoint-path retry, same-path conflict behavior, and retry-budget exhaustion.
