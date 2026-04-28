@@ -48,7 +48,7 @@ Top-level flags:
 | `--message <m>` | — | Override auto-generated commit message. |
 | `--message-prefix <m>` | — | Prepend to auto-generated message. |
 | `--message-suffix <m>` | — | Append to auto-generated message. |
-| `--retries <n>` | — | Retry budget on optimistic-concurrency conflict. `-1` = retry forever. Default `3`. |
+| `--retries <n>` | — | Retry budget on optimistic-concurrency conflict. `0` disables retries. Default `8`. |
 | `--allow-empty` | — | Permit a commit with no content change. |
 
 `--plan` and `--dry-run` are mutually exclusive and skip execution entirely. `--no-checkout` applies only to successful committing invocations; it has no meaning with `--plan` or `--dry-run`. Read verbs do not accept mutation or commit-control flags, because they have no write, plan, commit, or materialization phase.
@@ -325,6 +325,8 @@ A plan serves three purposes from one structure:
 
 etch executes optimistically and uses git's existing CAS primitives to detect conflict.
 
+MVP execution targets the current checkout only. There is no `--ref` flag. On a branch, etch updates the checked-out branch ref with old-value CAS. In detached `HEAD`, etch creates a normal child commit and updates `HEAD` directly with old-value CAS. Editing non-checked-out refs is deferred until there is a concrete wiki-transaction use case.
+
 ### Per-transaction temp index
 
 Every mutating invocation creates a temp index (`GIT_INDEX_FILE` set to a tempfile) initialized from `HEAD^{tree}` (or the empty tree for an unborn branch), not by copying the user's live index. etch writes candidate blobs for touched paths into that temp index, builds a tree, creates the commit object, and updates the ref. The user's live index is never used to build the transaction, and unrelated staged or unstaged changes are invisible to etch.
@@ -335,7 +337,30 @@ After a successful ref update, etch materializes touched paths into the caller's
 
 `--no-checkout` skips this phase. It is useful for agent workflows that care only about the commit graph and do not need the shared checkout to reflect the new commit immediately.
 
-If materialization cannot safely update a touched path because it changed after validation, the commit remains in history and etch reports a materialization failure. The transaction's durability boundary is the ref update; checkout is the post-commit synchronization step.
+If a touched path changed after validation, the commit remains in history and etch attempts recovery materialization. For text paths, etch performs a three-way merge using the validated bytes as the base, the committed etch bytes as ours, and the current working-tree bytes as theirs. If the merge is clean, etch writes the merged file and updates the live index to that merged content. If the merge conflicts, etch writes conflict markers to the working tree, leaves the path dirty, and exits 1. The index is not put into an unmerged multi-stage state in MVP. For binary paths, or if text merge machinery cannot produce a usable result, etch fails cleanly without overwriting the current working-tree file.
+
+The transaction's durability boundary is the ref update; checkout is the post-commit synchronization step. Materialization failure never rolls back the commit. Stderr must be a recovery prompt for agents:
+
+```text
+etch: committed 7f4e8d9, but materialization wrote conflicts in 2 paths
+etch: HEAD was updated; the commit exists and will not be rolled back
+etch: conflicted paths:
+etch:   posts/a.md
+etch:   data/tasks.json
+etch: resolve conflict markers, then commit or discard the working-tree resolution
+etch: run `etch help conflicts` for recovery steps
+```
+
+For clean failures where conflict markers were not written:
+
+```text
+etch: committed 7f4e8d9, but could not materialize 1 path
+etch: HEAD was updated; the commit exists and will not be rolled back
+etch: failed paths:
+etch:   assets/logo.png: binary file changed after validation
+etch: working tree and index may not match HEAD for this path
+etch: run `etch help conflicts` for recovery steps
+```
 
 ### The two CAS checks
 
@@ -346,7 +371,22 @@ Both checks are necessary. Read-set validation prevents stale computation when o
 
 ### Retry policy
 
-On either CAS failure, etch re-plans from the latest observed state and tries again. Retries are bounded by `--retries` (default 3, `-1` = forever). Backoff strategy is an implementation detail (likely exponential with jitter, capped). Retry is internal and invisible to the caller in the success case.
+Retry exists to make multiple agents editing the same git-backed directory converge during normal bursts of disjoint work. On a retryable conflict, etch re-plans from the latest observed state and tries again. A ref-only conflict means another writer committed first but the read set still validates; this should usually converge after re-planning on the new `HEAD`. A read-set conflict means a file etch read changed; etch re-plans from the new working-tree state and re-runs the semantic operation. If re-planning turns the operation into a semantic failure, such as a missing selector, wrong type, or non-unique table row, etch stops with `etch: <message>` and exits 1.
+
+Retries are bounded by `--retries` (default 8). `--retries 0` disables retries. Infinite retry is not in MVP; sustained contention should return to the caller rather than hide a hot loop.
+
+The first retry is immediate to handle the common single-conflict case without artificial latency. Later retries use randomized capped exponential backoff so many agents do not retry in lockstep:
+
+| Retry | Sleep window |
+|---|---|
+| 1 | immediate |
+| 2 | 50-150ms |
+| 3 | 100-300ms |
+| 4 | 200-600ms |
+| 5 | 400-1200ms |
+| 6+ | 800-2000ms |
+
+Exact randomization and timer mechanics are implementation details, but default retry sleep should remain on the order of seconds, not minutes.
 
 ### Pinned execution is deferred
 
@@ -444,6 +484,8 @@ Three layers, designed so an agent can load the entire feature set in a small to
 
 The verb table is the bulk of the help. It's strictly tabular: name, signature, one-line description, idempotent Y/N. Deviations get one line of prose, not a section. The discipline is enforced by writing the help page first when designing each verb — if it doesn't fit, the verb is wrong (§5).
 
+Help topics mirror verbs and subcommands where that helps navigation (`etch help table`, `etch help table row`, `etch help csv`). General topics stay flat rather than becoming a hierarchy; MVP includes `etch help selectors`, `etch help values`, `etch help plans`, `etch help security`, and `etch help conflicts`.
+
 ## 11. Exit codes
 
 - `0` — success.
@@ -451,6 +493,8 @@ The verb table is the bulk of the help. It's strictly tabular: name, signature, 
 - `2` — usage error (unknown flag, malformed argv).
 
 MVP should not allocate a large taxonomy up front. Add distinct exit codes only when callers have a distinct automated response. For example, retry-budget exhaustion may eventually deserve a separate code if callers should retry later, while "selector not found" and "target file missing" can both be ordinary operation failures for a human-facing CLI.
+
+Errors printed to stderr use ordinary command-line style: `etch: <message>`. MVP does not define machine-readable error codes or a JSON error mode without a concrete integration use case.
 
 ## 12. Configuration
 
@@ -467,20 +511,11 @@ No custom config file in MVP.
 
 - **Generic text editing.** Use `sed`, `awk`, `sd`. etch is for *structural* mutations on known formats.
 - **Turing-complete scripting.** Use a real language and shell out to etch.
-- **Semantic conflict resolution.** etch does not understand user intent well enough to merge competing semantic edits. Working-tree synchronization may still use ordinary text conflict markers if that proves to be the best agent-facing failure mode.
+- **Semantic conflict resolution.** etch does not understand user intent well enough to merge competing semantic edits. Working-tree synchronization may use ordinary text conflict markers as a recovery surface, but etch does not decide which semantic edit should win.
 - **Network operations.** No `git push`, no `git pull`. The "git side effect" is local commits only.
 - **Authorization UX.** Surfaces (plan format, exit codes) are provided; the UX is the host runtime's job.
 
-## 14. Open questions
-
-- **Exit-code splits.** Whether retry exhaustion or materialization failure needs a distinct code because callers can do something useful with it.
-- **Ref scope.** HEAD-only in MVP; `--ref refs/heads/<branch>` for non-checked-out branches is plausible but adds complexity.
-- **Backoff strategy.** Implementation detail, not in spec.
-- **Plan inline values.** Plan values are always hashed for uniformity. May reconsider if plans become hard to read.
-- **Materialization failures.** Exact exit code and stderr shape when the commit succeeds but post-commit checkout of touched paths fails.
-- **Working-tree conflict materialization.** Whether post-commit materialization should fail cleanly when a touched path changed after validation, or attempt a three-way text merge and leave conflict markers in the working tree when it cannot merge automatically. Agents already need to cope with conflict markers, so this may be a better recovery surface than refusing to update the checkout.
-
-## 15. Architecture
+## 14. Architecture
 
 etch is a thin command surface around a deterministic planning and execution core. The core accepts normalized operations, obtains bounded workspace snapshots through one store abstraction, computes byte-level results, and then either renders a plan/patch or commits the planned tree through git.
 
@@ -500,7 +535,7 @@ flowchart TD
   Executor --> GitBackend["Git object and ref backend"]
   GitBackend --> Commit["Local commit"]
   Executor --> Materializer["Working-tree materializer"]
-  Host["Host runtime approval (deferred)"] -.-> JSONPlan
+  Materializer --> Merge["Text merge helper"]
 ```
 
 The architecture has one important shape constraint: semantic mutation happens before git side effects. Parsing, selector evaluation, format rewriting, plan hashing, patch rendering, and execution all share the same normalized operation model, so preview and execution cannot become separate interpretations of the same command.
@@ -585,21 +620,21 @@ Dependency posture: use a native-git-first backend for MVP. `go-git` has useful 
 
 The executor takes a planned mutation through validation, retries, commit creation, ref CAS, and post-commit materialization. It treats the ref update as the durability boundary: a materialization failure reports an error after the commit exists rather than pretending the transaction never happened.
 
-Dependency posture: this should mostly compose the planner and git backend. Retry backoff can be implemented directly unless a dependency becomes useful for shared observability or cancellation later.
+Dependency posture: this should mostly compose the planner and git backend. Retry backoff is fixed by the spec and small enough to implement directly.
 
 ### Working-tree materializer
 
-The materializer updates only touched paths in the working tree and live index after a successful commit. It must preserve unrelated staged and unstaged changes, refuse unsafe overwrites of touched paths that changed after validation, and support `--no-checkout` by being skipped entirely.
+The materializer updates only touched paths in the working tree and live index after a successful commit. It must preserve unrelated staged and unstaged changes, perform three-way recovery materialization for touched text paths that changed after validation, write conflict markers when the text merge conflicts, fail cleanly for binary or unmergeable paths, and support `--no-checkout` by being skipped entirely.
 
-Dependency posture: use the git backend for index updates and checkout-like behavior where possible. Avoid a generic filesystem synchronization dependency; the update set is intentionally small and path-bounded.
+Dependency posture: use the git backend for index updates and checkout-like behavior where possible. Use a small text merge implementation or a narrowly scoped dependency only if fixtures prove it produces familiar conflict markers without dragging in a larger VCS abstraction. Avoid a generic filesystem synchronization dependency; the update set is intentionally small and path-bounded.
 
 ### Security boundary
 
-The security boundary enforces active-root containment, symlink refusal or containment, no network access, no process spawning outside the permitted git surface, and no DSL escape hatches. Host authorization hooks sit outside the MVP execution path but should attach to the plan boundary rather than to lower-level file writes.
+The security boundary enforces CWD containment, symlink refusal or containment, no network access, no process spawning outside the permitted git surface, and no DSL escape hatches.
 
 Dependency posture: path validation should use standard filesystem/path primitives plus focused tests.
 
-## 16. Dependency candidates and decisions
+## 15. Dependency candidates and decisions
 
 This section records dependency candidates, recommendations, explicit user selections, and evaluation work still needed. Final approval to add or vendor a dependency comes from Brandon.
 
@@ -627,9 +662,10 @@ This section records dependency candidates, recommendations, explicit user selec
 | Git patch parser/helper | `github.com/bluekeyes/go-gitdiff` | Evaluated support candidate | Strongest non-git support library for parsing, formatting, and applying Git-shaped patch files, including modes, renames, copies, binary fragments, path quoting, and no-newline markers. It does not compute diffs, emit mailbox patches or diffstat, or perform full tree application. |
 | Text hunk engine | `github.com/aymanbagabas/go-udiff` | Evaluated possible future candidate | Best standalone text hunk engine evaluated: maintained, Go-tools-derived, with unified output, no-newline handling, and patch-application tests. It does not provide the Git mailbox, diffstat, extended headers, mode/create/delete/rename, binary, or path-quoting surface etch needs for `--dry-run`. |
 | Text diff libraries | `github.com/pkg/diff`, `github.com/hexops/gotextdiff`, `github.com/sourcegraph/go-diff-patch`, `github.com/sourcegraph/go-diff` | Evaluated, not selected | These provide bare unified diff generation, single-file patch generation, or unified-diff parsing/printing, but none covers etch's full git-am-compatible mailbox and tree-equivalence contract. |
-| Retry/backoff | In-repo implementation | Spec-selected | The retry policy is small and should not pull in a dependency before observability or cancellation needs are clearer. |
+| Text merge/conflict markers | In-repo implementation or narrow text-merge dependency | Needs evaluation | Materialization needs a three-way text merge that can produce familiar conflict markers. Evaluate only against etch fixtures for clean merges, conflicting merges, binary/unmergeable refusal, and index/working-tree state. |
+| Retry/backoff | In-repo implementation | Spec-selected | The retry policy has fixed small timing windows and should not pull in a dependency. |
 
-## 17. Verification strategy
+## 16. Verification strategy
 
 Verification is fully automated evidence that the implementation matches this spec. Product validation is separate: Brandon and users decide whether etch solves the right problem.
 
@@ -646,7 +682,7 @@ Most CLI behavior should be covered by snapshot tests over generated output:
 
 Unit tests should carry the parser, selector evaluator, format round-trippers, and commit-tree builder. End-to-end tests should prefer real temporary git repositories so the snapshots exercise the same object and ref behavior users get.
 
-## 18. Validation strategy
+## 17. Validation strategy
 
 Validation asks whether etch reduces agent work enough to justify its own command surface. It is measured with repeatable benchmark tasks, but interpreted as a product question: the numbers inform Brandon and users rather than defining pass/fail correctness.
 
@@ -656,7 +692,7 @@ Validation should compare at least these workflows:
 - etch one-shot invocations for single structural changes;
 - etch `run` scripts for multi-file or multi-operation changes;
 - etch dry-run/plan review followed by execution;
-- recovery flows for dirty worktrees, changed touched paths, and conflict-marker materialization if admitted.
+- recovery flows for dirty worktrees, changed touched paths, and conflict-marker materialization.
 
 For each workflow, run a fixed task suite across representative repositories and file shapes:
 
