@@ -159,7 +159,7 @@ A **plan** is etch's structured answer to "if I were to run this mutating invoca
 
 The canonical plan format is JSON. It is the machine contract for hashing, authorization caches, tests, and host integrations. It should not be replaced by a prose or email-shaped format, because plan identity depends on stable parsing, canonicalization, and versioning.
 
-Human preview is a separate surface. `--dry-run` lowers the semantic JSON plan to a base-locked `git format-patch` artifact with metadata headers, the etch command or transaction script that produced the plan, diffstat, and patch hunks. It is optimized for review and mechanical replay, not for canonical plan identity.
+Human preview is a separate surface. `--dry-run` lowers the semantic JSON plan to a base-locked mailbox patch compatible with `git am`, following `git format-patch` conventions: metadata headers, commit-message block, a three-dash separator, diffstat, and patch hunks. It is optimized for review and mechanical replay, not for canonical plan identity.
 
 ### Plan contents
 
@@ -196,29 +196,37 @@ Human preview is a separate surface. `--dry-run` lowers the semantic JSON plan t
   },
   "tree": "7f4e8d...",
   "commit": {
-    "message": "etch: 2 changes in posts/hello.md\n\nChanges:\n- set posts/hello.md frontmatter.title\n- replace-section posts/hello.md \"## Summary\""
+    "message": "etch: 2 changes in posts/hello.md\n\nChanges:\n- set posts/hello.md frontmatter.title \"Hello, world\"\n- replace-section posts/hello.md \"## Summary\" \"A tighter summary.\""
   }
 }
 ```
 
-All operation values are stored as `value_sha256` (no inline values) for uniformity and small plan size. The actual content is recoverable from the file's before/after states when needed for display.
+All operation values are stored as `value_sha256` (no inline values) for uniformity and small plan size. Commit messages may contain bounded value previews, but the actual content is recoverable from the file's before/after states when needed for display.
 
 ### Dry-run preview
 
 `--dry-run` renders the plan as a reviewable patch message rather than canonical JSON. It is a lowered artifact: applying it replays the already-computed byte-level change against the planned base, but it does not re-run etch's semantic selectors, validation, retries, or materialization logic.
 
+The output follows `git am`'s mailbox conventions:
+
+- The first `From <oid> Mon Sep 17 00:00:00 2001` line is the mbox delimiter, not commit metadata. etch uses the zero object ID there, following `git format-patch --zero-commit`; plan identity lives in `Etch-Plan-Hash`.
+- The mail `Subject:` is the commit-message subject. etch should not wrap it in `[PATCH]` or `[ETCH PLAN]`, because `git am` strips common `[PATCH ...]` prefixes.
+- The body before the first three-dash line (`---`), `diff -`, or `Index:` line becomes the commit-message body.
+- Everything after the first three-dash line is patch input or patch commentary, not commit-message text.
+- `Etch-*` lines live in the mail header block. They are for etch-aware readers, not commit-message trailers, and should not appear in `git log`.
+- The `From:` and `Date:` mail headers carry the planned author identity and author date for `git am`.
+- The applying committer identity and committer date come from the `git am` environment and options, so `git am` compatibility promises the same tree, commit message, and author metadata, not the same commit OID.
+
 When a planned change can be represented as a Git patch, `--dry-run` output should be compatible with `git am`. The exact text is not part of the plan hash, but it should be stable enough for snapshot tests and easy human review:
 
 ```text
-From <plan-hash> Mon Sep 17 00:00:00 2001
-Subject: etch set posts/hello.md frontmatter.title
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: <author-name> <author-email>
+Date: <author-date>
+Subject: etch set posts/hello.md frontmatter.title "Hello, world"
 Etch-Plan-Hash: sha256:<hex>
 Etch-Base-Commit: a1b2c3...
 Etch-Tree: 7f4e8d...
-
-Etch script:
-
-    set posts/hello.md frontmatter.title "Hello, world"
 
 ---
  posts/hello.md | 2 +-
@@ -228,7 +236,29 @@ diff --git a/posts/hello.md b/posts/hello.md
 ...
 ```
 
-The patch body always uses `Etch script:` followed by the script-shaped input that produced the plan. A one-shot invocation drops the leading binary name and is rendered as a one-line script; `run` uses the script body. No separate prose summary is invented for the body. The subject line remains the generated commit-message subject for `git am`; the patch hunks remain the executable mechanical change.
+The commit-message portion before `---` is exactly the generated commit message from §8. A multi-op plan's `Changes:` body therefore appears before `---`. After `---`, etch emits the diffstat and patch hunks. It does not embed the original command or script in the dry-run output; the generated commit message plus the patch hunks are the review surface, and the JSON plan is the canonical semantic record.
+
+For a multi-op `run`, the generated commit body appears before `---`:
+
+```text
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: <author-name> <author-email>
+Date: <author-date>
+Subject: etch: 2 changes in posts/hello.md
+Etch-Plan-Hash: sha256:<hex>
+Etch-Base-Commit: a1b2c3...
+Etch-Tree: 7f4e8d...
+
+Changes:
+- set posts/hello.md frontmatter.title "Hello, world"
+- replace-section posts/hello.md "## Summary" "A tighter summary."
+
+---
+ posts/hello.md | 6 +++---
+
+diff --git a/posts/hello.md b/posts/hello.md
+...
+```
 
 If a future operation cannot be represented as a `git am`-compatible patch, `--dry-run` must either report that limitation or use an explicitly different format marker. Silent fallback to a non-applicable lookalike is not allowed.
 
@@ -291,9 +321,22 @@ Every successful mutating etch invocation produces exactly one commit by default
 
 ### Auto-generated messages
 
-The default commit message is generated from normalized operation descriptors. These descriptors are script-shaped, but omit raw value payloads so commit messages stay compact and the canonical JSON plan does not smuggle large values through commit metadata.
+The default commit message is generated from normalized operation descriptors. These descriptors are script-shaped and may include bounded value previews for operations whose main effect is writing a value. They never include unbounded raw payloads; full values live in file contents and are represented in plans by `value_sha256`.
 
-- Single op: subject only, `etch <verb> <path> <selector>` (e.g., `etch set posts/hello.md frontmatter.title`).
+Descriptor shape is `<verb> <path> <selector> [<value-preview>]`, adjusted for verbs without selectors or values.
+
+Value previews are deterministic:
+
+- Values are previewed after parsing, not from raw argv spelling. JSON/YAML/frontmatter values render as compact JSON. Markdown body text renders as a JSON string after line-ending normalization.
+- Exact previews are allowed only for single-line UTF-8 values whose rendered preview is at most 80 characters.
+- Longer or multi-line UTF-8 values render with `...` truncation only. For strings, the ellipsis lives inside the JSON string (`"prefix..."`). For objects and arrays, the compact JSON rendering is cut on a character boundary and ends with `...`; truncated previews are not required to be parseable JSON.
+- Non-UTF-8 values render as `<binary, N bytes>`.
+- Value previews should fit within 80 characters. If a descriptor would exceed 120 characters, the preview budget is reduced so the descriptor fits; if the target alone consumes the line budget, the value preview is omitted from that descriptor.
+- Single-op subjects include an exact value preview only if the full subject fits on one line within 72 characters. Otherwise the subject omits the value and the body contains `Value: <value-preview>`.
+- Commit messages do not include value hashes. Hashes are plan metadata; commit-message values are human previews.
+
+- Single op with a short value: subject only, `etch <verb> <path> <selector> <value-preview>` (e.g., `etch set posts/hello.md frontmatter.title "Hello, world"`).
+- Single op without a value preview in the subject: subject `etch <verb> <path> <selector>`, with a body containing `Value: <value-preview>` when the operation has a value.
 - Multi-op in one file: subject `etch: N changes in <path>`, with a body headed `Changes:` and one descriptor per operation.
 - Multi-op across files: subject `etch: N changes across M files`, with the same `Changes:` body.
 
@@ -303,8 +346,16 @@ Example multi-op message:
 etch: 2 changes in posts/hello.md
 
 Changes:
-- set posts/hello.md frontmatter.title
-- replace-section posts/hello.md "## Summary"
+- set posts/hello.md frontmatter.title "Hello, world"
+- replace-section posts/hello.md "## Summary" "A tighter summary."
+```
+
+Example long-value message:
+
+```text
+etch set posts/hello.md frontmatter.summary
+
+Value: "This summary is long enough that it needs a bounded preview..."
 ```
 
 `--message` overrides entirely. `--message-prefix` and `--message-suffix` compose with the auto-generated message. Configurable templates are deferred.
@@ -401,8 +452,8 @@ No custom config file in MVP. Repo-level policy file (§9) is deferred.
 
 Most CLI behavior should be covered by snapshot tests over generated output:
 
-- `--dry-run` snapshots use `git format-patch` output with etch metadata headers and are the primary golden surface for human-readable file mutation previews. For every representable dry-run fixture, tests should apply the output with `git am` in a temp repo at the planned base and assert the resulting tree OID matches the plan's tree.
-- `--plan` snapshots cover canonical JSON shape, redacted values, hashes, tree OIDs, and commit messages. Tests should also verify canonical plan bytes and plan hash stability.
+- `--dry-run` snapshots use `git format-patch` output with etch metadata headers and are the primary golden surface for human-readable file mutation previews. For every representable dry-run fixture, tests should apply the output with `git am` in a temp repo at the planned base and assert the resulting tree OID matches the plan's tree. The same fixture should assert that `git am` creates the planned commit subject/body and author metadata, and that `Etch-*` headers do not appear in the commit log. Tests should not assert commit OID equality because committer metadata is supplied by the applying environment.
+- `--plan` snapshots cover canonical JSON shape, redacted values, hashes, tree OIDs, and commit messages. Commit-message fixtures should cover exact value previews, ellipsis truncation, descriptor line budgets, and single-op subject/body fallback. Tests should also verify canonical plan bytes and plan hash stability.
 - Successful commit tests compare `git show --stat --patch --format=fuller HEAD` against snapshots, with author and dates normalized by environment.
 - `--no-commit` and `--no-checkout` tests assert working tree, live index, and `HEAD` state separately.
 - Script tests cover tokenization, quoting, comments, heredocs, stdin via `run -`, and failure atomicity across multi-op runs.
