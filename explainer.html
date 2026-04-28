@@ -477,8 +477,8 @@
   <ul class="kv-list">
     <li><span class="kv-key">Formats</span><span class="kv-val">Markdown (with frontmatter), JSON, YAML&mdash;inferred from file extension</span></li>
     <li><span class="kv-key">Operations</span><span class="kv-val">Set, delete, append, replace on structured paths and sections</span></li>
-    <li><span class="kv-key">Output</span><span class="kv-val">A git commit with touched paths materialized by default, or a working-tree change with <code>--no-commit</code></span></li>
-    <li><span class="kv-key">Language</span><span class="kv-val">Go, single static binary, no runtime dependencies</span></li>
+    <li><span class="kv-key">Output</span><span class="kv-val">A git commit with touched paths materialized by default</span></li>
+    <li><span class="kv-key">Language</span><span class="kv-val">Go, single binary, using git as the transaction backend</span></li>
   </ul>
 </section>
 
@@ -571,8 +571,8 @@
 <section class="reveal">
   <h2>Three design principles</h2>
 
-  <h3>1. Commits are the default</h3>
-  <p>A successful mutating etch call produces a git commit. That's the whole point. You opt <em>out</em> with <code>--no-commit</code>, not in. Read operations never commit.</p>
+  <h3>1. Commits are the contract</h3>
+  <p>A successful mutating etch call produces a git commit unless every operation is an idempotent no-op. That's the whole point. Read operations never commit.</p>
 
   <h3>2. CLI and script syntax are identical</h3>
   <p>A line in an etch script is the same tokens you'd type at the shell. Agents can prototype interactively and paste commands into scripts without translation.</p>
@@ -643,7 +643,7 @@ $ echo 'set config.json settings.theme "dark"' | etch run -</code></pre>
     </div>
   </div>
 
-  <p>Each invocation builds its commit in an isolated temporary index&mdash;it never uses your staging area as transaction state, and unrelated dirty files are ignored. After the commit lands, etch materializes only the touched paths into your working tree by default. On conflict, etch automatically re-reads the latest observed state and retries (up to <code>--retries</code>, default 3). The caller never sees the retry unless the budget is exhausted.</p>
+  <p>Each invocation builds its commit in an isolated temporary index&mdash;it never uses your staging area as transaction state, and unrelated dirty files are ignored. After the commit lands, etch materializes only the touched paths into your working tree by default. On conflict, etch automatically re-reads the latest observed state and retries (up to <code>--retries</code>, default 8). The caller never sees the retry unless the budget is exhausted.</p>
 
   <div class="callout blue">
     <strong>Two checks, not one.</strong> etch validates that the files it read haven't changed on disk (read-set validation) <em>and</em> that the branch ref hasn't moved (ref CAS). Both are necessary: dirty working-tree edits don't move refs, and concurrent commits don't touch the working tree.
@@ -669,7 +669,7 @@ $ echo 'set config.json settings.theme "dark"' | etch run -</code></pre>
     <div class="sec-card">
       <span class="sec-icon" aria-hidden="true">&#x1f4c1;</span>
       <div class="sec-title">No filesystem escape</div>
-      <div class="sec-body">In default mode, reads and writes stay within the git repo root. No symlink chasing past the boundary.</div>
+      <div class="sec-body">Reads and writes stay under CWD, not the repo root. Paths are relative, cannot contain <code>..</code> or <code>.git</code> segments, and cannot escape through symlinks.</div>
     </div>
     <div class="sec-card">
       <span class="sec-icon" aria-hidden="true">&#x1f6e1;&#xfe0f;</span>
