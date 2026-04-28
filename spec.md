@@ -107,10 +107,12 @@ The MVP verb surface is constrained by §3 (regular command shapes) and §10 (mu
 Structured data selectors are paths, not programs. For JSON, YAML, and YAML frontmatter, etch selectors are a subset of RFC 9535 JSONPath singular queries: they can identify at most one node and exclude wildcards, recursive descent, slices, filters, unions, and function extensions. This gives etch a standard selector grammar without importing JSONPath's full query language.
 
 - `$.agents.assistant.last_run` for ordinary object fields.
-- `$.items[0].title` for array indexes if indexes are admitted in MVP.
+- `$.items[0].title` for array indexes.
 - `$["key.with.dots"]` for keys that cannot be represented as plain dotted segments.
 
-Verbs treat a zero-match selector according to the verb: `set` may create a missing final object member, while `delete`, `get`, and `append` require the selected target to exist unless a verb says otherwise. Syntax that can produce multiple matches is rejected before evaluation.
+The MVP selector subset admits only the root `$`, dot shorthand for simple member names, bracket-quoted member names using RFC 9535 string escaping, and non-negative integer array indexes. It rejects negative indexes, wildcards, recursive descent, slices, filters, unions, and function extensions. Canonical plans store selectors in a deterministic form: dot shorthand where valid, bracket-quoted member names where needed, and `[N]` for array indexes.
+
+Verbs treat a zero-match selector according to the verb. `set` may create missing object containers and missing final object members; for array indexes, it may update an existing element or append only when the index equals the array length. `append` and `add` may create a missing final array under the same object-container rules, but they do not create arrays through indexed paths or fill array holes. `delete` and `remove` are idempotent for missing leaves. `get` requires the selected target to exist. Any verb fails if an intermediate component exists with the wrong shape. Syntax that can produce multiple matches is rejected before evaluation.
 
 JSON Pointer was considered because it is standardized and unambiguous, but `/agents/assistant/last_run` is less natural at the CLI and composes poorly with Markdown part selectors. Full JSONPath was considered because it is standardized and familiar, but wildcard/predicate/multi-match behavior is the wrong default for single-target mutation. Full `jq` was considered because its path syntax is good, but its execution model is far broader than etch's mutation contract.
 
@@ -130,13 +132,52 @@ The resulting rule: porcelain Markdown selectors may use explicit part prefixes 
 
 | Format | Verbs | Selector/value behavior |
 |---|---|---|
-| JSON | `set`, `delete`, `append` | Selectors use the JSONPath subset above. `set` creates a missing leaf and missing object containers; it fails if an intermediate component exists but is not an object. Values are parsed as JSON when they are valid JSON literals, otherwise treated as strings. `delete` removes an existing key. `append` requires the selector to name an array and appends the parsed value. |
-| YAML | `set`, `delete`, `append` | Same selector and value semantics as JSON, but using a round-tripping YAML representation so comments, key order, indentation style, and scalar spelling are preserved where the parser can preserve them. |
-| Markdown frontmatter | `set`, `delete`, `append` | Selectors under `frontmatter.*` operate on YAML frontmatter using the YAML rules above. If a Markdown file has no frontmatter, `set frontmatter.*` creates a frontmatter block; `delete` and `append` require an existing block. |
+| JSON | `set`, `delete`, `append`, `add`, `remove` | Selectors use the JSONPath subset above. Values are parsed as strict JSON when they are valid JSON literals, otherwise treated as strings; JavaScript object-literal shorthand is intentionally not accepted. `set` creates missing object containers, creates missing final object members, updates existing array elements, and appends to an array only when the selected index equals the array length. `delete` removes an existing member or array element and is a no-op when the final target is absent. `append` appends the parsed value to an array, creating a missing final array under object-container rules. `add` ensures an array contains the parsed value, appending only if no structurally equal value is present. `remove` ensures an array does not contain the parsed value, removing all structurally equal occurrences and doing nothing when the final target is absent. |
+| YAML | `set`, `delete`, `append`, `add`, `remove` | Same selector and value semantics as JSON, but using a round-tripping YAML representation so comments, key order, indentation style, and scalar spelling are preserved where the parser can preserve them. |
+| Markdown frontmatter | `set`, `delete`, `append`, `add`, `remove` | Selectors under `frontmatter.*` operate on YAML frontmatter using the YAML rules above. If a Markdown file has no frontmatter, `set frontmatter.*`, `append frontmatter.*`, and `add frontmatter.*` can create a frontmatter block; `delete` and `remove` are no-ops when the final target is absent. |
 | Markdown body | `replace-section` | The selector is a heading line such as `## Notes`. Replacement covers the content under that heading up to the next heading of equal or higher level. Missing or ambiguous headings are errors. |
-| Files | `create`, `rm`, `mv`, `cp` | File-level verbs borrow familiar Unix names where the operation is truly the same shape, but etch does not inherit shell globbing, recursive deletion, or arbitrary flags. Signatures are `create <path> <content>`, `rm <path>`, `mv <src> <dst>`, and `cp <src> <dst>`. `create` and `cp` fail if the destination exists. `rm` fails if the path is absent. `mv` fails if the source is absent or destination exists. |
+| Markdown tables | `table set`, `table row append`, `table row insert`, `table row delete`, `table column add`, `table column rename`, `table column delete` | Markdown pipe tables use the shared table model below. The table selector is scoped to either the whole document or a heading section, and ordinals are relative to that scope. |
+| Files | `create`, `delete`, `move`, `copy` | File-level verbs use explicit etch names rather than shell primitive names. Signatures are `create <path> <content>`, `delete <path>`, `move <src> <dst>`, and `copy <src> <dst>`. `create` and `copy` fail if the destination exists. `delete` is idempotent when the path is absent. `move` fails if the source is absent or destination exists. |
 
-Deferred mutating operations include list `prepend`, `insert`, and value-based `remove`; Markdown `append-section`, `prepend-section`, `delete-section`, `move-section`, and `split-section`; and cross-file transforms that read from one location and write/remove/insert elsewhere. These are still mutating verbs, not read verbs, because their contract is new file contents rather than stdout.
+Deferred mutating operations include ordered-list `prepend` and positional `insert`; Markdown `append-section`, `prepend-section`, `delete-section`, `move-section`, and `split-section`; and cross-file transforms that read from one location and write/remove/insert elsewhere. These are still mutating verbs, not read verbs, because their contract is new file contents rather than stdout.
+
+### Table model
+
+Tables are ordered rows and named columns of string cells. Markdown pipe tables are the MVP table surface; CSV uses the same logical model if admitted. Markdown table rewrites may re-render the addressed table, but they must preserve surrounding Markdown bytes.
+
+Markdown table commands are hierarchical plumbing commands:
+
+```sh
+etch table set <path> <scope> [<table>] <range> <value>
+etch table row append <path> <scope> [<table>] <row-json>
+etch table row insert <path> <scope> [<table>] (--before <row> | --after <row>) <row-json>
+etch table row delete <path> <scope> [<table>] <row>
+etch table column add <path> <scope> [<table>] <column> [--after <column>] [--default <value>]
+etch table column rename <path> <scope> [<table>] <old-column> <new-column>
+etch table column delete <path> <scope> [<table>] <column>
+```
+
+`<scope>` is either `doc` for the whole document or an exact ATX heading selector such as `## Inventory`. `<table>` is an ordinal like `@0` or `@1`, resolved within the selected scope. The table ordinal may be omitted only when the scope contains exactly one table. Canonical plans store the resolved scope and table ordinal.
+
+Table ranges have the shape `<rows>,<columns>`. Rows may be `all`, a zero-based ordinal (`@0`), an inclusive ordinal range (`@2..@5`), or an exact key match such as `sku=ABC-123` or `[SKU Code]="ABC 123"`. Key matches compare the normalized text in the named column and must identify exactly one row. Columns may be `all`, a zero-based ordinal (`@2`), an inclusive ordinal range (`@1..@3`), an exact header label (`status`), a bracketed header label (`[Due Date]`), or an inclusive header range (`[Sales Amount]..[Commission Amount]`). Bracketed labels are required when a row key or column label contains spaces or selector punctuation. `table set` assigns the string value to every selected cell in the rectangular range.
+
+Structural row commands take a single row selector, not a full range. `row delete` accepts `all`, an ordinal, an ordinal range, or a key match. `row insert --before/--after` requires a single ordinal or key match. Structural column commands take single column selectors except where a later command explicitly admits ranges.
+
+`row-json` is a strict JSON object keyed by column label. Missing columns become empty cells; unknown columns are errors. Table cells are strings in MVP, so structured JSON values in `row-json` are rejected unless a later table value model admits them.
+
+CSV commands use the same row, column, and JSON row semantics without a user-facing table selector because a CSV file has one table:
+
+```sh
+etch csv set <path> <range> <value>
+etch csv row append <path> <row-json>
+etch csv row insert <path> (--before <row> | --after <row>) <row-json>
+etch csv row delete <path> <row>
+etch csv column add <path> <column> [--after <column>] [--default <value>]
+etch csv column rename <path> <old-column> <new-column>
+etch csv column delete <path> <column>
+```
+
+Table operations do not include formulas, type inference, sorting, joins, arbitrary predicates, or dataframe-style transforms. They are basic datagrid mutations over an addressed table.
 
 ### Markdown conventions to design early
 
@@ -145,9 +186,8 @@ Markdown is not just prose in the target repositories. The early Markdown surfac
 - **Sections.** ATX headings are stable anchors. Section selectors should support exact heading text first, then consider disambiguators for repeated headings.
 - **Tasks.** GitHub-style task list items (`- [ ]` / `- [x]`) need verbs for completion and metadata updates. Candidate commands: `task complete <path> <task-selector>` and `task set <path> <task-selector> <field> <value>`.
 - **Inline fields.** Obsidian Dataview-style fields such as `[due:: 2026-03-01]` should be considered first-class Markdown data. Candidate commands: `field set <path> <field-selector> <value>`, `field delete <path> <field-selector>`, and `field get <path> <field-selector>`.
-- **Tables.** Markdown pipe tables and CSV files likely share a table mutation model: set cell, append row, delete row, and maybe upsert row by key column. Table selectors need a way to identify the table, row, and column without relying on brittle line numbers.
 
-These commands need a separate selector design pass before they graduate into the MVP table above.
+Tasks and inline fields need a separate selector design pass before they graduate into the MVP table above.
 
 Initial read verbs are `get`, `exists`, and `keys` for JSON/YAML/frontmatter paths, plus `get-section` and `list-sections` for Markdown bodies. They print to stdout, never commit, and exist mainly for scripting symmetry, tests, and shell composition.
 
@@ -435,8 +475,6 @@ No custom config file in MVP.
 
 ## 14. Open questions
 
-- **Selector grammar.** Finalize the exact RFC 9535 JSONPath subset, including quoted segments, escaping, and whether array indexes are in MVP.
-- **Markdown tables and CSV.** Whether Markdown pipe tables and CSV should share one table selector/mutation model in MVP.
 - **Permission-model research.** Test Codex, Claude Code, Cursor, and other target hosts before documenting any blanket shell allow-list rule. In particular, decide whether `--untracked` must move behind a separate permission surface.
 - **Exit-code splits.** Whether retry exhaustion or materialization failure needs a distinct code because callers can do something useful with it.
 - **Ref scope.** HEAD-only in MVP; `--ref refs/heads/<branch>` for non-checked-out branches is plausible but adds complexity.
@@ -500,7 +538,7 @@ Dependency posture: use `github.com/theory/jsonpath` as the recommended parser c
 
 ### Format adapters
 
-Format adapters convert bytes into editable representations and back to bytes. JSON, YAML, Markdown/frontmatter, Markdown sections, future Markdown tables, and possible CSV support each live behind this boundary. Adapters are responsible for preserving formatting where the format contract requires it, especially YAML comments, key order, indentation, scalar spelling, and Markdown body text outside the addressed part.
+Format adapters convert bytes into editable representations and back to bytes. JSON, YAML, Markdown/frontmatter, Markdown sections, Markdown tables, and possible CSV support each live behind this boundary. Adapters are responsible for preserving formatting where the format contract requires it, especially YAML comments, key order, indentation, scalar spelling, and Markdown body text outside the addressed part.
 
 Dependency posture: use `encoding/json/v2` for JSON if the selected Go toolchain supports it without unacceptable experiment flags, `goccy/go-yaml` for YAML, and `yuin/goldmark` with GFM extensions for Markdown. YAML uses parser/token/AST APIs for comments, key order, anchors, aliases, token positions, and generated snippets; etch owns selector evaluation and localized byte rewrites. Markdown uses goldmark for CommonMark/GFM structure, source segments, headings, task-list semantics, and table nodes; goldmark renderers are not used to rewrite Markdown source.
 
@@ -578,7 +616,7 @@ This section records dependency candidates, recommendations, explicit user selec
 | Selector parsing | `github.com/theory/jsonpath` | Recommended candidate | RFC 9535 implementation with no runtime dependencies and stable `spec` AST surface. Etch can reject non-singular syntax before evaluation, then adapter-walk admitted selectors. |
 | Selector parsing | `github.com/speakeasy-api/jsonpath` | Evaluated, not recommended | Public API is a YAML-node evaluator with private AST. Its tokenizer is not enough of a parser-only validation surface for etch's singular selector contract. |
 | JSON | `encoding/json/v2` | Brandon-selected with toolchain caveat | Prefer v2 semantics for stricter JSON behavior and deterministic output options. Confirm target Go version and `GOEXPERIMENT=jsonv2` status before implementation. |
-| CSV | `encoding/csv` | Candidate if CSV enters MVP | CSV is standard-library covered; table selector semantics are still deferred. |
+| CSV | `encoding/csv` | Candidate if CSV enters MVP | CSV is standard-library covered and should reuse the shared table row, column, range, and JSON-row semantics. |
 | YAML | `github.com/goccy/go-yaml` | Selected, fixture-gated | Use parser/token/AST APIs for comments, key order, anchors, aliases, token positions, and generated YAML snippets. Etch owns selector evaluation and localized byte rewrites; whole-document emission is allowed only where fixtures prove acceptable preservation. |
 | Markdown | `github.com/yuin/goldmark` plus `extension.GFM` | Selected, parser-only | Use goldmark for CommonMark/GFM structure, source segments, headings, task-list semantics, and table nodes. Markdown adapters preserve untouched bytes by splicing original source ranges. |
 | JCS canonicalization | `github.com/lattice-substrate/json-canon/jcs` | Selected candidate, fixture-gated | Best fit for plan hashing: byte-in/byte-out API, strict parser, duplicate-key rejection, UTF-16 key sorting, and broad conformance fixtures. Requires acceptance of Go version/platform constraints. |
@@ -605,7 +643,7 @@ Most CLI behavior should be covered by snapshot tests over generated output:
 - Successful commit tests compare `git show --stat --patch --format=fuller HEAD` against snapshots, with author and dates normalized by environment.
 - `--no-commit` and `--no-checkout` tests assert working tree, live index, and `HEAD` state separately.
 - Script tests cover tokenization, quoting, comments, heredocs, stdin via `run -`, and failure atomicity across multi-op runs.
-- Format tests cover JSON, YAML, frontmatter, Markdown sections, Markdown fields/tasks/tables as they land, and CSV if admitted.
+- Format tests cover JSON, YAML, frontmatter, Markdown sections, Markdown tables, Markdown fields/tasks as they land, and CSV if admitted.
 - Concurrency tests use multiple temp indexes and explicit ref CAS races to prove disjoint-path retry, same-path conflict behavior, and retry-budget exhaustion.
 - Security tests cover path traversal, symlink escapes, absolute paths, untracked-path handling, outside-git behavior, and refusal to spawn non-git processes.
 
@@ -627,18 +665,10 @@ For each workflow, run a fixed task suite across representative repositories and
 
 - JSON field set/delete/append operations on small and large files;
 - YAML frontmatter and standalone YAML updates with comments, anchors, aliases, and ordering;
-- Markdown section replacement, frontmatter edits, task/list edits, and GFM table edits if admitted;
+- Markdown section replacement, frontmatter edits, task/list edits, and GFM table edits;
 - mixed multi-file changes that touch disjoint files, same files, dirty files, and concurrent branches;
 - negative cases where etch should refuse the operation and the agent must recover.
 
 The benchmark harness should invoke several target agents in fresh sessions with the same task prompt, repository fixture, and success criteria. It should record wall-clock time, tool-call count, model input tokens, model output tokens, total tokens, retry count, generated patch size, final diff size, whether the task succeeded without human help, and whether the final repository state matches the expected tree. Token counts should come from host/provider usage metadata when available; otherwise the harness should use a documented tokenizer approximation and mark those runs as estimated.
 
 Validation reports should present distributions, not single runs: median, p90, and failure rate per task family and workflow. A result is product-positive when etch reduces total tokens and elapsed time without increasing failure rate, review burden, or repair complexity. Cases where etch saves tokens but produces confusing review surfaces should be treated as validation failures even if verification passes.
-
-## 19. Implementation notes
-
-- Language: Go.
-- Module: `github.com/brandonbloom/etch`.
-- git operations: use the dependency decisions in §16; native git behavior is the compatibility reference.
-- Parser: hand-written tokenizer for the script DSL. ~200 lines target.
-- Plan canonicalization: use `github.com/lattice-substrate/json-canon/jcs` if etch integration fixtures confirm byte-equivalence and platform/toolchain fit; otherwise fall back to a small in-repo JCS implementation.
