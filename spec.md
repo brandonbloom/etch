@@ -14,7 +14,7 @@ The headline product is a binary. There may eventually be a Go library underneat
 
 Three principles:
 
-1. **Commits are the default contract for mutating verbs.** A successful mutating etch invocation produces a commit unless the caller explicitly opts out with `--no-commit`, or targets untracked/non-git paths with `--untracked`. Read verbs are a separate class: they print results and never commit. The default remains that the commit is the whole point.
+1. **Commits are the contract for mutating verbs.** A successful mutating etch invocation produces a commit unless every operation is an idempotent no-op. Read verbs are a separate class: they print results and never commit. Recording the mutation in git history is the point.
 
 2. **The script line and the CLI argv are the same thing.** A line in an etch script is the same tokens you'd type at the shell, modulo the binary name. This symmetry is the primary ergonomic property. It means agents can prototype on the command line and concatenate script files without translation, and it means the help page documents both surfaces simultaneously.
 
@@ -43,18 +43,17 @@ Top-level flags:
 |---|---|---|
 | `--plan` | — | Emit JSON plan to stdout, do not write or commit. |
 | `--dry-run` | — | Emit git-am-compatible patch to stdout, do not write or commit. |
-| `--no-commit` | — | Apply changes to working tree, skip commit. |
-| `--no-checkout` | — | After committing, do not materialize touched paths into the working tree. Invalid with `--no-commit`. |
-| `--untracked` | `ETCH_UNTRACKED=1` | Permit target paths that are not tracked by git. Outside a git repo, run as a pure working-tree mutator. |
-| `--message <m>` | — | Override auto-generated commit message. Invalid with `--no-commit`. |
-| `--message-prefix <m>` | — | Prepend to auto-generated message. Invalid with `--no-commit`. |
-| `--message-suffix <m>` | — | Append to auto-generated message. Invalid with `--no-commit`. |
+| `--no-checkout` | — | After committing, do not materialize touched paths into the working tree. |
+| `--untracked` | — | Permit target paths under CWD that are not tracked by git. |
+| `--message <m>` | — | Override auto-generated commit message. |
+| `--message-prefix <m>` | — | Prepend to auto-generated message. |
+| `--message-suffix <m>` | — | Append to auto-generated message. |
 | `--retries <n>` | — | Retry budget on optimistic-concurrency conflict. `-1` = retry forever. Default `3`. |
-| `--allow-empty` | — | Permit a commit with no content change. Invalid with `--no-commit`. |
+| `--allow-empty` | — | Permit a commit with no content change. |
 
-`--plan`, `--dry-run`, and `--no-commit` are mutually exclusive. The first two skip execution entirely; the third writes but doesn't commit. `--no-checkout` applies only to successful committing invocations; it has no meaning with `--plan`, `--dry-run`, or `--no-commit`. Read verbs do not accept mutation or commit-control flags, because they have no write, plan, commit, or materialization phase.
+`--plan` and `--dry-run` are mutually exclusive and skip execution entirely. `--no-checkout` applies only to successful committing invocations; it has no meaning with `--plan` or `--dry-run`. Read verbs do not accept mutation or commit-control flags, because they have no write, plan, commit, or materialization phase.
 
-Inside a git repo, `--untracked` permits existing untracked target paths to participate in the transaction; those paths can become tracked if the invocation commits. Outside a git repo, `--untracked` implies pure mutation with no commit, so commit-message flags, `--allow-empty`, and `--no-checkout` are invalid.
+All file path operands are resolved against CWD, not the repository root. Paths must be relative lexical paths, must not contain any `..` segment before normalization, must not contain `.git` as a path segment, and must not escape CWD through symlinks. Mutating invocations require CWD to be inside a git worktree. By default, target paths must already be tracked by git, except `create` destinations. `--untracked` permits untracked target paths under CWD to participate in the transaction; those paths become tracked if the invocation commits. There is no non-git pure working-tree mutator mode in MVP.
 
 ## 4. Script syntax
 
@@ -357,7 +356,7 @@ That said, pinned execution is not required for the standalone CLI MVP. The MVP 
 
 ## 8. Commits
 
-Every successful mutating etch invocation produces exactly one commit by default (or zero, if all operations were idempotent no-ops and `--allow-empty` was not passed). `--no-commit` is the explicit escape hatch for "apply, but do not record a commit." Read verbs never create commits.
+Every successful mutating etch invocation produces exactly one commit by default (or zero, if all operations were idempotent no-ops and `--allow-empty` was not passed). Read verbs never create commits. A non-committing mutation mode is deferred until etch has a concrete multi-execution transaction model, such as `begin`/`apply`/`commit`/`rollback`.
 
 ### Auto-generated messages
 
@@ -406,7 +405,7 @@ Operations that produce no content change contribute nothing to the commit. If e
 
 ### Working-tree state of touched files
 
-If a file etch is targeting differs between `HEAD`, the index, and the working tree, etch reads the working-tree state, applies operations to it, and commits that result by default. The working tree wins over the index for touched paths; unrelated staged changes are not pulled into the etch commit. After the commit lands, default materialization updates the touched working-tree files and index entries to the committed content. Under `--no-commit`, no commit is created; etch rewrites the file in place and leaves the result dirty. Other dirty files are unaffected. Rationale: agents shouldn't have to negotiate with human staging.
+If a file etch is targeting differs between `HEAD`, the index, and the working tree, etch reads the working-tree state, applies operations to it, and commits that result. The working tree wins over the index for touched paths; unrelated staged changes are not pulled into the etch commit. After the commit lands, default materialization updates the touched working-tree files and index entries to the committed content. Other dirty files are unaffected. Rationale: agents shouldn't have to negotiate with human staging.
 
 ## 9. Security model
 
@@ -416,14 +415,14 @@ The threat model: an LLM-driven agent generates etch invocations. The user wants
 
 - **No network.** etch makes no network calls.
 - **No process spawning.** etch does not exec anything except git for the strict subset of operations it needs (read refs, write objects, update refs).
-- **No filesystem escape.** etch reads and writes only within the active root: the git repository by default, or CWD when `--untracked` is operating outside git. No symlink chasing past the active root.
+- **CWD-scoped paths.** etch reads and writes only relative lexical paths under CWD. It rejects absolute paths, any `..` segment before normalization, `.git` path segments, and symlink escapes. Git is the transaction backend, not an expansion of path scope.
 - **No DSL escape hatch.** §4 — the script syntax has no expansion, no subshells, no exec.
 
 These properties are intended to make etch a narrow capability. They are not, by themselves, enough to claim that every host can safely allow a broad shell rule such as `etch *` or `Bash(etch:*)`.
 
-The hard case is host permission matching. Some agents approve commands by executable name, some by shell command prefix, some by glob-like patterns, and some run commands in a sandbox rather than a command allow-list. A broad rule also admits etch's own wider-scope modes such as `--untracked`, unless the host can reliably deny or separately prompt for that argument. Therefore, the security claim for MVP is:
+The hard case is host permission matching. Some agents approve commands by executable name, some by shell command prefix, some by glob-like patterns, and some run commands in a sandbox rather than a command allow-list. A broad rule admits every etch flag, so etch must not hide a fundamentally different capability class behind an environment variable or a flag that changes the path root. Therefore, the security claim for MVP is:
 
-> etch's default repo-scoped mode is designed to be safe to grant directly. Blanket shell allow-list guidance is deferred until tested against the permission models of target hosts.
+> etch's CWD-scoped, git-backed mutation mode is designed to be safe to grant directly for a chosen working directory. `--untracked` widens tracked-path admission inside the same CWD boundary, but it does not change the path root and has no environment-variable equivalent. Blanket shell allow-list guidance is deferred until tested against the permission models of target hosts.
 
 ### Plan as authorization primitive (deferred)
 
@@ -459,7 +458,6 @@ Environment variables:
 
 | Var | Effect |
 |---|---|
-| `ETCH_UNTRACKED` | Same as `--untracked`. |
 | `GIT_AUTHOR_DATE`, `GIT_COMMITTER_DATE` | Standard git semantics; used in commits and plan hashes. |
 | `GIT_AUTHOR_NAME`, `GIT_AUTHOR_EMAIL` | Standard git semantics. |
 
@@ -475,7 +473,6 @@ No custom config file in MVP.
 
 ## 14. Open questions
 
-- **Permission-model research.** Test Codex, Claude Code, Cursor, and other target hosts before documenting any blanket shell allow-list rule. In particular, decide whether `--untracked` must move behind a separate permission surface.
 - **Exit-code splits.** Whether retry exhaustion or materialization failure needs a distinct code because callers can do something useful with it.
 - **Ref scope.** HEAD-only in MVP; `--ref refs/heads/<branch>` for non-checked-out branches is plausible but adds complexity.
 - **Backoff strategy.** Implementation detail, not in spec.
@@ -510,7 +507,7 @@ The architecture has one important shape constraint: semantic mutation happens b
 
 ### CLI front door
 
-The CLI front door owns top-level flag parsing, env-var defaults, command dispatch, and the split between one-shot invocation, `run`, help, verb catalog, plan, dry-run, no-commit, and committing execution. It also enforces global flag incompatibilities before any file reads.
+The CLI front door owns top-level flag parsing, env-var defaults, command dispatch, and the split between one-shot invocation, `run`, help, verb catalog, plan, dry-run, checkout control, and committing execution. It also enforces global flag incompatibilities before any file reads.
 
 Dependency posture: use `urfave/cli/v3` for top-level command, flag, help, and environment-variable behavior. The Go standard library flag parser follows older Plan 9-style conventions and is the wrong user-facing surface for a modern CLI. etch still keeps verb decoding in project code so the catalog remains the source of truth for argv, scripts, help, and `verbs --json`. The `urfave/cli` boundary must stop before verb operands, for example with root `StopOnNthArg=1`, so values beginning with `-` remain etch arguments rather than being consumed as top-level flags.
 
@@ -556,7 +553,7 @@ Dependency posture: plan hashes are computed over RFC 8785 JSON Canonicalization
 
 ### Workspace snapshot store
 
-The workspace snapshot store is the read boundary for planning and read verbs. It resolves paths against the active root, enforces tracked/untracked mode, rejects path traversal and symlink escapes, reads working-tree bytes for touched paths, records read-set hashes, and exposes base commit/tree information. It presents immutable snapshots to evaluators so retry planning starts from a fresh store view rather than mutating prior state.
+The workspace snapshot store is the read boundary for planning and read verbs. It resolves paths against CWD, enforces tracked/untracked admission, rejects absolute paths, `..` segments, `.git` path segments, and symlink escapes, reads working-tree bytes for touched paths, records read-set hashes, and exposes base commit/tree information. It presents immutable snapshots to evaluators so retry planning starts from a fresh store view rather than mutating prior state.
 
 Dependency posture: implement this boundary directly on top of filesystem and git backend primitives. The correctness work is in containment, tracked-path semantics, and read-set hashing, not in a generic file access abstraction.
 
@@ -641,11 +638,11 @@ Most CLI behavior should be covered by snapshot tests over generated output:
 - `--dry-run` snapshots use `git format-patch` output with etch metadata headers and are the primary golden surface for human-readable file mutation previews. For every representable dry-run fixture, tests should apply the output with `git am` in a temp repo at the planned base and assert the resulting tree OID matches the plan's tree. The same fixture should assert that `git am` creates the planned commit subject/body and author metadata, and that `Etch-*` headers do not appear in the commit log. Tests should not assert commit OID equality because committer metadata is supplied by the applying environment.
 - `--plan` snapshots cover canonical JSON shape, redacted values, hashes, tree OIDs, and commit messages. Commit-message fixtures should cover exact value previews, ellipsis truncation, descriptor line budgets, and single-op subject/body fallback. Tests should also verify canonical plan bytes and plan hash stability.
 - Successful commit tests compare `git show --stat --patch --format=fuller HEAD` against snapshots, with author and dates normalized by environment.
-- `--no-commit` and `--no-checkout` tests assert working tree, live index, and `HEAD` state separately.
+- `--no-checkout` tests assert working tree, live index, and `HEAD` state separately.
 - Script tests cover tokenization, quoting, comments, heredocs, stdin via `run -`, and failure atomicity across multi-op runs.
 - Format tests cover JSON, YAML, frontmatter, Markdown sections, Markdown tables, Markdown fields/tasks as they land, and CSV if admitted.
 - Concurrency tests use multiple temp indexes and explicit ref CAS races to prove disjoint-path retry, same-path conflict behavior, and retry-budget exhaustion.
-- Security tests cover path traversal, symlink escapes, absolute paths, untracked-path handling, outside-git behavior, and refusal to spawn non-git processes.
+- Security tests cover path traversal, lexical `..` rejection, `.git` path segments, symlink escapes, absolute paths, untracked-path handling, outside-git refusal, and refusal to spawn non-git processes.
 
 Unit tests should carry the parser, selector evaluator, format round-trippers, and commit-tree builder. End-to-end tests should prefer real temporary git repositories so the snapshots exercise the same object and ref behavior users get.
 
