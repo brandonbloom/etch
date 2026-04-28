@@ -6,7 +6,9 @@
 
 A small CLI for **mechanical mutations to text and data files**, where each successful mutating invocation becomes a git commit by default. Operations are atomic (per op) and transactional (per invocation): all the operations in one mutating invocation either land as a single commit or none of them do.
 
-The primary audience is agentic coding tools operating against git-backed wiki-style repositories — multiple agents and humans iterating forward, where git history is the transaction log and mechanical edits ("set this frontmatter field," "replace this markdown section," "delete this JSON key") are common enough that doing them through a general-purpose patch tool burns tokens and risks subtle errors. etch trades generality for precision: it knows about a small, fixed set of file formats and a small, fixed set of operations, and it does them quickly and predictably.
+The primary audience is agentic coding tools operating against git-backed wiki-style repositories — multiple agents and humans iterating forward, where git history is the transaction log and mechanical edits ("set this frontmatter field," "replace this markdown section," "delete this JSON key") are common enough that doing them through a general-purpose patch tool risks subtle errors. etch trades generality for precision: it knows about a small, fixed set of file formats and a small, fixed set of operations, and it turns them into correct, atomic, reviewable commits.
+
+The strongest value proposition is reliability, not shorter command spelling. etch should reduce hallucinated diffs, off-by-one line edits, quoting mistakes, partial writes, accidental same-file capture, and hard-to-review patches. Token and time savings come from fewer reads, tool calls, failed patches, and repair turns, not just shorter utterances.
 
 The headline product is a binary. There may eventually be a Go library underneath suitable for embedding; that question is deferred.
 
@@ -50,7 +52,7 @@ Top-level flags:
 | `--message <m>` | — | Override auto-generated commit message. |
 | `--message-prefix <m>` | — | Prepend to auto-generated message. |
 | `--message-suffix <m>` | — | Append to auto-generated message. |
-| `--retries <n>` | — | Retry budget on optimistic-concurrency conflict. `0` disables retries. Default `8`. |
+| `--retries <n>` | — | Retry budget on optimistic-concurrency conflict. `0` disables retries. Default `3`. |
 | `--allow-empty` | — | Permit a commit with no content change. |
 | `--version` | — | Alias for `etch version`. |
 
@@ -59,6 +61,8 @@ Top-level flags:
 Introspection commands that do not evaluate a verb or script do not require CWD to be inside a git worktree and do not read repository state unless their own help says otherwise. This includes `--help`, `help`, `version`, `--version`, and `verbs --json`.
 
 All file path operands are resolved against CWD, not the repository root. Paths must be relative lexical paths, must not contain any `..` segment before normalization, must not contain `.git` as a path segment, and must not escape CWD through symlinks. Mutating invocations require CWD to be inside a git worktree. By default, source and existing target paths must already be tracked by git; `create`, `copy`, and `move` destinations may be new paths that become tracked when the invocation commits. `--untracked` permits other untracked paths under CWD to participate in the transaction; those paths become tracked if the invocation commits. There is no non-git pure working-tree mutator mode in MVP.
+
+There is no `-C`, `--cwd`, repo-root mode, script-local root, root directive, or environment-variable root override in MVP. Callers choose etch's capability boundary by choosing the process CWD. A future `-C`-style option can be added as opt-in behavior without changing the meaning of existing commands: path operands would still resolve against the effective CWD, and top-level flag parsing would still stop before verb operands so values beginning with `-` remain legal etch arguments.
 
 Symlinks are resolved before tracked-path checks. A path that traverses a symlink to a target still under CWD is allowed. Structured content mutations follow a final symlink and use the resolved target path as the canonical operation path, so they operate on and commit the target file rather than the symlink object. File-level operations keep directory-entry semantics: `delete`, `move`, and `copy` of a symlink path affect or copy the symlink entry itself, while parent-directory symlinks must still resolve under CWD. Symlink loops, broken symlinks for existing-source operations, and symlink escapes are errors.
 
@@ -109,7 +113,7 @@ Two tiers:
 
 **Plumbing** commands are format-explicit subcommands (`json set`, `yaml set`, `frontmatter set`, `md replace-section`). They have no inference and no surprises, suitable for scripts where the file extension might lie or where the porcelain heuristics would pick the wrong format.
 
-The MVP verb surface is constrained by §3 (regular command shapes) and §10 (must fit in a dense help page). The committed MVP verb surface is mutating: verbs compute new file contents and flow through the plan/commit/materialization pipeline.
+The MVP verb surface is constrained by §3 (regular command shapes) and §10 (must fit in a dense help page). The committed MVP verb surface is mutating operations plus transaction guards: mutating verbs compute new file contents, and guards assert preconditions before those contents flow through the plan/commit/materialization pipeline.
 
 Query/read verbs are out of scope for MVP.
 
@@ -123,7 +127,7 @@ Structured data selectors are paths, not programs. For JSON, YAML, and YAML fron
 
 The MVP selector subset admits only the root `$`, dot shorthand for simple member names, bracket-quoted member names using RFC 9535 string escaping, and non-negative integer array indexes. It rejects negative indexes, wildcards, recursive descent, slices, filters, unions, and function extensions. CLI selector operands may be written either in canonical JSONPath form (`$.a.b`, `$["key.with.dots"]`) or in relative shorthand without the root (`a.b`, `["key.with.dots"]`); relative shorthand is normalized by prepending `$`, so `set file.json a.b.c value` targets `$.a.b.c`. Canonical plans always store the rooted form in a deterministic spelling: dot shorthand where valid, bracket-quoted member names where needed, and `[N]` for array indexes.
 
-Verbs treat a zero-match selector according to the verb. `set` may create missing object containers and missing final object members; for array indexes, it may update an existing element or append only when the index equals the array length. `append` and `add` may create a missing final array under the same object-container rules, but they do not create arrays through indexed paths or fill array holes. `delete` and `remove` are idempotent for missing leaves. `get` requires the selected target to exist. Any verb fails if an intermediate component exists with the wrong shape. Syntax that can produce multiple matches is rejected before evaluation.
+Verbs treat a zero-match selector according to the verb. `set` may create missing object containers and missing final object members; for array indexes, it may update an existing element or append only when the index equals the array length. `append` and `add` may create a missing final array under the same object-container rules, but they do not create arrays through indexed paths or fill array holes. `delete` and `remove` are idempotent for missing leaves. Any verb fails if an intermediate component exists with the wrong shape. Syntax that can produce multiple matches is rejected before evaluation.
 
 JSON Pointer was considered because it is standardized and unambiguous, but `/agents/assistant/last_run` is less natural at the CLI and composes poorly with Markdown part selectors. Full JSONPath was considered because it is standardized and familiar, but wildcard/predicate/multi-match behavior is the wrong default for single-target mutation. Full `jq` was considered because its path syntax is good, but its execution model is far broader than etch's mutation contract.
 
@@ -149,12 +153,29 @@ The resulting rule: porcelain Markdown selectors may use explicit part prefixes 
 | Markdown body | `replace-section` | The selector is a heading line such as `## Notes`. Replacement covers the content under that heading up to the next heading of equal or higher level. Missing or ambiguous headings are errors. |
 | Markdown tables | `md table set`, `md table row append`, `md table row insert`, `md table row delete`, `md table column add`, `md table column rename`, `md table column delete` | Markdown pipe tables use the shared table model below. The table selector is scoped to either the whole document or a heading section, and ordinals are relative to that scope. Porcelain aliases may omit `md`. |
 | Files | `create`, `delete`, `move`, `copy` | File-level verbs use explicit etch names rather than shell primitive names. Signatures are `create <path> <content>`, `delete <path>`, `move <src> <dst>`, and `copy <src> <dst>`. `create` and `copy` fail if the destination exists. `delete` is idempotent when the path is absent. `move` fails if the source is absent or destination exists. |
+| Transaction guards | `exists`, `missing`, `contains` | Guards have no stdout and make no content changes. They participate in the same plan and transaction as mutating operations, and the invocation aborts with exit 1 before side effects if any guard is false. |
 
 YAML and frontmatter operations edit the document representation, not the YAML graph after anchor and alias resolution. Anchors and aliases are concrete syntax. Mutating an anchored node edits that node's representation; aliases remain alias nodes and downstream YAML readers may observe the updated anchor value through normal YAML resolution. Selectors do not dereference aliases, so a selector segment below an alias is a type error. Setting an alias node replaces that alias occurrence only.
 
 For JSON, YAML, and frontmatter `add` and `remove`, structural equality is semantic rather than byte-spelling equality within the same document-representation model. Editing the representation means etch preserves and rewrites source structure; it does not make array membership depend on superficial source spelling. Object and mapping key order, whitespace, quoting style, and numeric spelling for numeric values do not affect equality; arrays remain ordered, strings compare after decoding, and numbers compare by parsed numeric value in the accepted format domain. YAML aliases compare as alias nodes by anchor name and are not equal to the values they would resolve to. For example, `{"a":1,"b":2}` and `{"b":2,"a":1}` are equal for `add` and `remove`.
 
 Deferred mutating operations include ordered-list `prepend` and positional `insert`; Markdown `append-section`, `prepend-section`, `delete-section`, `move-section`, and `split-section`; and cross-file transforms that read from one location and write/remove/insert elsewhere. These are still mutating verbs, not queries, because their contract is new file contents rather than stdout.
+
+### Transaction guards
+
+Guard commands assert preconditions for the transaction. They are intentionally not query or reporting commands: they print nothing on success, return no selected values, and exist only to let scripts fail before mutation side effects occur. They are useful for catching wrong-CWD mistakes and stale assumptions in generated scripts.
+
+```sh
+etch exists <path>
+etch missing <path>
+etch contains <path> <literal>
+```
+
+`exists` succeeds when the path exists in the admitted input view. For tracked paths, that means the path exists in the base tree at `HEAD`; with `--untracked`, an untracked working-tree path under CWD may also satisfy the guard. `missing` succeeds only when the path is absent from the base tree, live index, and working tree under CWD; an existing untracked path is a failed guard even without `--untracked`. `contains` succeeds when the admitted file bytes contain the literal bytes of `<literal>` exactly. It is not a regex, does not normalize line endings, and does not perform case folding. Multi-line literals use the same heredoc syntax as mutating values.
+
+Guarded paths obey the same CWD containment, `.git` refusal, symlink, tracked/untracked, encoding, and resource rules as other path operands. A satisfied guard contributes no content change and never creates a commit by itself unless `--allow-empty` is passed. A guard-only invocation whose guards all pass exits 0 with the same `nothing to do` notice as any other no-op invocation. A failed guard exits 1 with an `etch: ...` message that names the failed guard.
+
+Guards are included in canonical plans and plan hashes. Files read only by guards are part of the input set; if they are not otherwise changed, their before/after hashes are identical in the plan. Dry-run output includes satisfied guards as checks, not as patch hunks.
 
 ### Table model
 
@@ -421,7 +442,7 @@ Both checks are necessary. Input validation prevents stale computation for non-H
 
 Retry exists to make multiple agents editing the same git-backed directory converge during normal bursts of disjoint work. On a retryable conflict, etch re-plans from the latest observed state and tries again. A ref conflict means another writer committed first; this should usually converge after re-planning on the new `HEAD`. An input-validation conflict means an admitted non-HEAD input changed; etch re-plans from the new input state where that is safe. If re-planning turns the operation into a semantic failure, such as a missing selector, wrong type, or non-unique table row, etch stops with `etch: <message>` and exits 1.
 
-Retries are bounded by `--retries` (default 8). `--retries 0` disables retries. Infinite retry is not in MVP; sustained contention should return to the caller rather than hide a hot loop.
+Retries are bounded by `--retries` (default 3). `--retries 0` disables retries. Infinite retry is not in MVP; sustained contention should return to the caller rather than hide a hot loop.
 
 The first retry is immediate to handle the common single-conflict case without artificial latency. Later retries use randomized capped exponential backoff so many agents do not retry in lockstep:
 
@@ -434,7 +455,7 @@ The first retry is immediate to handle the common single-conflict case without a
 | 5 | 400-1200ms |
 | 6+ | 800-2000ms |
 
-Exact randomization and timer mechanics are implementation details, but default retry sleep should remain on the order of seconds, not minutes.
+Exact randomization and timer mechanics are implementation details, but the default retry budget should keep ordinary contention latency under a second while still handling the common single-collision case. Higher explicit retry counts use the same capped backoff table.
 
 ### Pinned execution is deferred
 
@@ -566,8 +587,9 @@ No custom config file in MVP.
 ## 13. Non-goals
 
 - **Generic text editing.** Use `sed`, `awk`, `sd`. etch is for *structural* mutations on known formats.
-- **Querying and reporting.** MVP etch does not provide `get`, `exists`, `keys`, listing, search, or report-style commands. Use native file-read tools, shell tools, or a future query design outside the MVP mutation surface.
+- **Querying and reporting.** MVP etch does not provide `get`, `keys`, listing, search, value-returning, or report-style commands. Transaction guards may fail a mutation transaction, but they do not print results or return selected values. Use native file-read tools, shell tools, or a future query design outside the MVP mutation surface.
 - **Multi-execution transactions.** MVP etch does not provide persistent transaction sessions such as `begin`/`apply`/`commit`/`rollback`. The only multi-operation transaction surface is `run`, including `run -` for dynamically generated batches.
+- **Root-changing invocation.** MVP etch has no `-C`, `--cwd`, repo-root mode, script-local root, root directive, or environment-variable root override. CWD is the path scope.
 - **Turing-complete scripting.** Use a real language and shell out to etch.
 - **Semantic conflict resolution.** etch does not understand user intent well enough to merge competing semantic edits. Working-tree synchronization may use ordinary text conflict markers as a recovery surface, but etch does not decide which semantic edit should win.
 - **Network operations.** No `git push`, no `git pull`. The "git side effect" is local commits only.
@@ -575,9 +597,7 @@ No custom config file in MVP.
 
 ## 14. Open questions
 
-- **Default retry budget.** The default retry budget is 8 with capped backoff, which handles bursts of concurrent writers but can add several seconds of tail latency under contention. Decide whether the default should stay generous for multi-agent convergence or drop closer to 3 so sustained contention returns to the caller sooner.
-- **CWD-scoped script portability.** CWD-scoped paths are an important security boundary, but scripts that use project-relative paths only work from the expected directory. Decide whether checked-in etch scripts should declare or infer a root, whether documentation should mandate `cd` conventions, or whether non-portability is an acceptable consequence of CWD scoping.
-- **Validation value proposition.** Token reduction is only one reason for etch. Correctness, quoting reliability, structural intent, atomic commits, conflict recovery, and avoidance of hallucinated diffs may be stronger validation targets. Decide how validation reports should weigh token savings against task success, repair cost, review burden, and partial-failure avoidance.
+None.
 
 ## 15. Architecture
 
@@ -741,6 +761,7 @@ Most CLI behavior should be covered by snapshot tests over generated output:
 - Successful commit tests compare `git show --stat --patch --format=fuller HEAD` against snapshots, with author and dates normalized by environment.
 - HEAD-sourced commit tests must make the touched path dirty before execution and assert that `git show HEAD:<path>` contains only the structural etch mutation from old `HEAD`, not the pre-existing staged or unstaged checkout edits.
 - `--no-checkout` tests assert working tree, live index, `HEAD` state, and the explicit skipped-checkout stderr notice separately.
+- Guard tests cover `exists`, `missing`, and `contains` in passing and failing forms, both alone and inside `run` with mutating operations. They should assert no stdout, exit 1 before side effects on failure, no commit contribution on success, plan/hash inclusion, input hashing for guard-only paths, dry-run check rendering without hunks, heredoc literals for `contains`, and tracked/untracked/CWD/symlink behavior.
 - Materialization tests must use temporary git repositories that distinguish old `HEAD`, live index, and working tree contents for touched paths. Fixtures should cover clean checkout, unstaged clean merge, unstaged conflict markers, staged clean merge, staged conflict surfaced in the working tree, staged-plus-unstaged clean merge, staged-plus-unstaged conflict, binary/unmergeable refusal, and untouched dirty paths. Each fixture should assert the final commit tree, live index entry, working-tree bytes, exit code, and recovery stderr.
 - Script tests cover tokenization, quoting, comments, configurable heredoc delimiters, literal heredoc bodies, missing terminators, stdin via `run -`, and failure atomicity across multi-op runs.
 - Format tests cover JSON, YAML, frontmatter, Markdown sections, Markdown tables, Markdown fields/tasks as they land, and CSV if admitted.
@@ -752,7 +773,7 @@ Unit tests should carry the parser, selector evaluator, format round-trippers, a
 
 ## 18. Validation strategy
 
-Validation asks whether etch reduces agent work enough to justify its own command surface. It is measured with repeatable benchmark tasks, but interpreted as a product question: the numbers inform Brandon and users rather than defining pass/fail correctness.
+Validation asks whether etch makes structural repository edits more reliable, reviewable, and efficient enough to justify its own command surface. It is measured with repeatable benchmark tasks, but interpreted as a product question: the numbers inform Brandon and users rather than defining pass/fail correctness.
 
 Validation should compare at least these workflows:
 
@@ -770,6 +791,6 @@ For each workflow, run a fixed task suite across representative repositories and
 - mixed multi-file changes that touch disjoint files, same files, dirty files, and concurrent branches;
 - negative cases where etch should refuse the operation and the agent must recover.
 
-The benchmark harness should invoke several target agents in fresh sessions with the same task prompt, repository fixture, and success criteria. It should record wall-clock time, tool-call count, model input tokens, model output tokens, total tokens, retry count, generated patch size, final diff size, whether the task succeeded without human help, and whether the final repository state matches the expected tree. Token counts should come from host/provider usage metadata when available; otherwise the harness should use a documented tokenizer approximation and mark those runs as estimated.
+The benchmark harness should invoke several target agents in fresh sessions with the same task prompt, repository fixture, and success criteria. It should record success without human help, expected-tree match, intended-commit match, repair count, retry count, partial-failure incidence, conflict-recovery outcome, review burden, generated patch size, final diff size, wall-clock time, agent turn count, successful and failed tool-call counts, and input/output/total tokens. Token counts should come from host/provider usage metadata when available; otherwise the harness should use a documented tokenizer approximation and mark those runs as estimated.
 
-Validation reports should present distributions, not single runs: median, p90, and failure rate per task family and workflow. A result is product-positive when etch reduces total tokens and elapsed time without increasing failure rate, review burden, or repair complexity. Cases where etch saves tokens but produces confusing review surfaces should be treated as validation failures even if verification passes.
+Validation reports should present distributions, not single runs: median, p90, and failure rate per task family and workflow. Product-positive signals are higher expected-tree match rate, fewer off-target edits and partial failures, lower repair count, clearer review surfaces, and successful recovery from contention or dirty-checkout scenarios. Turn count, tool-call count, token count, and elapsed time are efficiency signals; the expected token win is mostly fewer loops, not shorter commands. Cases where etch saves tokens but produces confusing plans, bad commits, harder recovery, or higher failure rates are validation failures even if verification passes.
