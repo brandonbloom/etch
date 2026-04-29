@@ -63,7 +63,7 @@ func TestHelpAllThroughCLI(t *testing.T) {
 }
 
 func TestShortHelpMentionsCoreFlags(t *testing.T) {
-	for _, want := range []string{"--plan", "--dry-run", "--no-checkout", "--untracked", "--allow-empty"} {
+	for _, want := range []string{"--plan", "-n, --dry-run", "--no-checkout", "--untracked", "--allow-empty"} {
 		if !strings.Contains(shortHelp, want) {
 			t.Fatalf("short help missing %s", want)
 		}

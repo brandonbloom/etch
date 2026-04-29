@@ -121,6 +121,10 @@ func parseGlobalFlags(args []string) (GlobalOptions, []string, error) {
 			rest = append(rest, "version")
 			continue
 		}
+		if arg == "-n" {
+			opts.DryRun = true
+			continue
+		}
 		if !strings.HasPrefix(arg, "--") || arg == "-" {
 			rest = append(rest, args[i:]...)
 			return opts, rest, nil

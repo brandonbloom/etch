@@ -1,6 +1,7 @@
 package etch
 
 import (
+	"bytes"
 	"os"
 	"path/filepath"
 	"strings"
@@ -80,5 +81,25 @@ func TestDryRunAppliesWithGitAm(t *testing.T) {
 	log := testGit(t, dir, "log", "-1", "--format=%B")
 	if strings.Contains(log, "Etch-Plan-Hash") {
 		t.Fatalf("Etch headers leaked into commit message:\n%s", log)
+	}
+}
+
+func TestDryRunShorthandDoesNotCommit(t *testing.T) {
+	dir := initRepo(t)
+	writeFile(t, dir, "state.json", `{"status":"open"}`+"\n")
+	head := commitAll(t, dir, "initial")
+	chdir(t, dir)
+
+	var out, errb bytes.Buffer
+	code, err := runCLI([]string{"-n", "set", "state.json", "status", "complete"}, &out, &errb)
+	if err != nil || code != exitOK {
+		t.Fatalf("runCLI code=%d err=%v stderr=%s", code, err, errb.String())
+	}
+	if got := stringsTrim(testGit(t, dir, "rev-parse", "HEAD")); got != head {
+		t.Fatalf("-n advanced HEAD to %s, want %s", got, head)
+	}
+	patch := out.String()
+	if !strings.Contains(patch, "Etch-Plan-Hash:") || !strings.Contains(patch, "diff --git") {
+		t.Fatalf("-n output is not a dry-run patch:\n%s", patch)
 	}
 }

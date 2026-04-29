@@ -531,12 +531,12 @@ func defaultCreateContent(path string) string {
 	}
 }
 
-const shortHelp = `usage: etch [--plan|--dry-run] [flags] <verb> [args...]
+const shortHelp = `usage: etch [--plan|-n|--dry-run] [flags] <verb> [args...]
        etch run <script>
 
 Core flags:
   --plan                 emit canonical JSON plan
-  --dry-run              emit git-am-compatible patch preview
+  -n, --dry-run          emit git-am-compatible patch preview
   --no-checkout          commit without materializing touched paths
   --untracked            admit untracked source paths under CWD
   --message <m>          override generated commit message
