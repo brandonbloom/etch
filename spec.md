@@ -14,13 +14,15 @@ The headline product is a binary. There may eventually be a Go library underneat
 
 ## 2. Mental model
 
-Three principles:
+Four principles:
 
 1. **Commits are the contract for mutating verbs.** A successful mutating etch invocation produces a commit unless every operation is an idempotent no-op. Recording the mutation in git history is the point.
 
 2. **The script line and the CLI argv are the same thing.** A line in an etch script is the same tokens you'd type at the shell, modulo the binary name. This symmetry is the primary ergonomic property. It means agents can prototype on the command line and concatenate script files without translation, and it means the help page documents both surfaces simultaneously.
 
 3. **No escape hatches inside the DSL.** The script syntax has no variables, no expansions, no subshells, no pipes, no conditionals. Composition happens at the shell level, *outside* etch. This keeps etch's own blast radius statically bounded and makes it a narrow permission target.
+
+4. **Worse is better.** etch should prefer simple implementation, clear behavior, and debuggable failure modes over completeness or clever edge-case handling. If an edge case would require disproportionate hidden machinery, prefer a clear refusal, good stderr, and recovery help. When the spec seems to demand complex machinery, revisit the product requirement before implementing it.
 
 ## 3. Invocation surface
 
@@ -53,14 +55,14 @@ Top-level flags:
 | `--message-prefix <m>` | — | Prepend to auto-generated message. |
 | `--message-suffix <m>` | — | Append to auto-generated message. |
 | `--retries <n>` | — | Retry budget on optimistic-concurrency conflict. `0` disables retries. Default `3`. |
-| `--allow-empty` | — | Permit a commit with no content change. |
+| `--allow-empty` | — | Permit a commit with no content change when at least one mutating command was supplied. |
 | `--version` | — | Alias for `etch version`. |
 
 `--plan` and `--dry-run` are mutually exclusive and skip execution entirely. `--no-checkout` applies only to successful committing invocations; it has no meaning with `--plan` or `--dry-run`. `--message` is mutually exclusive with `--message-prefix` and `--message-suffix`; prefix and suffix may be combined with each other.
 
 Introspection commands that do not evaluate a verb or script do not require CWD to be inside a git worktree and do not read repository state unless their own help says otherwise. This includes `--help`, `help`, `version`, `--version`, and `verbs --json`.
 
-All file path operands are resolved against CWD, not the repository root. Paths must be relative lexical paths, must not contain any `..` segment before normalization, must not contain `.git` as a path segment, and must not escape CWD through symlinks. Mutating invocations require CWD to be inside a git worktree. By default, source and existing target paths must already be tracked by git; `create`, `copy`, and `move` destinations may be new paths that become tracked when the invocation commits. `--untracked` permits other untracked paths under CWD to participate in the transaction; those paths become tracked if the invocation commits. There is no non-git pure working-tree mutator mode in MVP.
+All file path operands are resolved against CWD, not the repository root. Paths must be relative lexical paths, must not contain any `..` segment before normalization, must not contain `.git` as a path segment, and must not escape CWD through symlinks. Mutating invocations require CWD to be inside a git worktree. By default, source and existing target paths must already be tracked by git; `create`, `copy`, and `move` destinations may be new in the transaction base and become tracked when the invocation commits. Checkout-only files at those destination paths are handled during materialization, not planning. `--untracked` permits other untracked paths under CWD to participate in the transaction; those paths become tracked if the invocation commits. There is no non-git pure working-tree mutator mode in MVP.
 
 There is no `-C`, `--cwd`, repo-root mode, script-local root, root directive, or environment-variable root override in MVP. Callers choose etch's capability boundary by choosing the process CWD. A future `-C`-style option can be added as opt-in behavior without changing the meaning of existing commands: path operands would still resolve against the effective CWD, and top-level flag parsing would still stop before verb operands so values beginning with `-` remain legal etch arguments.
 
@@ -94,6 +96,8 @@ delete posts/hello.md frontmatter.draft
 
 Heredoc values begin with an opener token written as `<<DELIM`, where `DELIM` is a nonempty caller-chosen delimiter. The delimiter may use the normal statement tokenizer's quote and backslash rules inside the opener; after quote removal, `<<EOF` and `<<"EOF"` are equivalent. The value continues until a physical line whose contents exactly equal the delimiter; that terminator line is not part of the value. If the content needs to contain `EOF` or any other delimiter on a line by itself, the caller chooses a different delimiter. Heredoc bodies are literal text: no variable expansion, command substitution, backslash processing, or indentation trimming occurs. A missing terminator is a usage error.
 
+`run` errors include script source location so generated scripts are repairable. File-backed scripts report `etch: <script>:<line>: <message>`. `run -` reports `etch: <stdin>:<line>: <message>`. The line is the first physical line of the statement, including a heredoc opener for multi-line values. Direct argv errors omit source location and use `etch: <message>`.
+
 Statement shapes are regular, but not literally fixed at three arguments. The common mutating shape is `verb path selector value`; file verbs may have two paths; plumbing commands add a format namespace before the verb. Where a command needs additional knobs, they are flags (`--depth=2`), not positional surprises. If a command cannot be summarized compactly in the help table, the command is wrong.
 
 ### Why this and not the alternatives
@@ -109,7 +113,7 @@ JSON, S-expression, Tcl-like, and bespoke-DSL alternatives were ruled out (CLI/s
 
 Two tiers:
 
-**Porcelain** verbs infer file format from path extension (`.md` → markdown-with-optional-frontmatter, `.json` → json, `.yaml`/`.yml` → yaml). They cover the common cases and are what most scripts use.
+**Porcelain** verbs infer file format from path extension (`.md` → markdown-with-optional-frontmatter, `.json` → json, `.yaml`/`.yml` → yaml, `.csv` → csv). They cover the common cases and are what most scripts use. A porcelain command may have format-specific operands after the path; the decoder resolves the command prefix, reads the path, infers the format, and then validates the resolved operand schema.
 
 **Plumbing** commands are format-explicit subcommands (`json set`, `yaml set`, `frontmatter set`, `md replace-section`). They have no inference and no surprises, suitable for scripts where the file extension might lie or where the porcelain heuristics would pick the wrong format.
 
@@ -151,8 +155,8 @@ The resulting rule: porcelain Markdown selectors may use explicit part prefixes 
 | YAML | `set`, `delete`, `append`, `add`, `remove` | Same selector and value semantics as JSON, but using a round-tripping YAML representation so comments, key order, indentation style, anchors, aliases, and scalar spelling are preserved where the parser can preserve them. |
 | Markdown frontmatter | `set`, `delete`, `append`, `add`, `remove` | Selectors under `frontmatter.*` operate on YAML frontmatter using the YAML rules above. If a Markdown file has no frontmatter, `set frontmatter.*`, `append frontmatter.*`, and `add frontmatter.*` can create a frontmatter block; `delete` and `remove` are no-ops when the final target is absent. |
 | Markdown body | `replace-section` | The selector is a heading line such as `## Notes`. Replacement covers the content under that heading up to the next heading of equal or higher level. Missing or ambiguous headings are errors. |
-| Markdown tables | `md table set`, `md table row append`, `md table row insert`, `md table row delete`, `md table column add`, `md table column rename`, `md table column delete` | Markdown pipe tables use the shared table model below. The table selector is scoped to either the whole document or a heading section, and ordinals are relative to that scope. Porcelain aliases may omit `md`. |
-| Files | `create`, `delete`, `move`, `copy` | File-level verbs use explicit etch names rather than shell primitive names. Signatures are `create <path> <content>`, `delete <path>`, `move <src> <dst>`, and `copy <src> <dst>`. `create` and `copy` fail if the destination exists. `delete` is idempotent when the path is absent. `move` fails if the source is absent or destination exists. |
+| Tables | `table set`, `table row append`, `table row insert`, `table row delete`, `table column add`, `table column rename`, `table column delete` | Table commands infer Markdown pipe tables or CSV tables from the path. Markdown operands include a scope and optional table ordinal; CSV operands omit them because a CSV file is one table. Format-explicit plumbing commands are available as `md table ...` and `csv ...`. |
+| Files | `create`, `delete`, `move`, `copy` | File-level verbs use explicit etch names rather than shell primitive names. Signatures are `create <path> <content>`, `delete <path>`, `move <src> <dst>`, and `copy <src> <dst>`. `create` and `copy` fail if the destination exists in the transaction base. `delete` is idempotent when the path is absent from the transaction base. `move` fails if the source is absent or destination exists in the transaction base. |
 | Transaction guards | `exists`, `missing`, `contains` | Guards have no stdout and make no content changes. They participate in the same plan and transaction as mutating operations, and the invocation aborts with exit 1 before side effects if any guard is false. |
 
 YAML and frontmatter operations edit the document representation, not the YAML graph after anchor and alias resolution. Anchors and aliases are concrete syntax. Mutating an anchored node edits that node's representation; aliases remain alias nodes and downstream YAML readers may observe the updated anchor value through normal YAML resolution. Selectors do not dereference aliases, so a selector segment below an alias is a type error. Setting an alias node replaces that alias occurrence only.
@@ -171,17 +175,43 @@ etch missing <path>
 etch contains <path> <literal>
 ```
 
-`exists` succeeds when the path exists in the admitted input view. For tracked paths, that means the path exists in the base tree at `HEAD`; with `--untracked`, an untracked working-tree path under CWD may also satisfy the guard. `missing` succeeds only when the path is absent from the base tree, live index, and working tree under CWD; an existing untracked path is a failed guard even without `--untracked`. `contains` succeeds when the admitted file bytes contain the literal bytes of `<literal>` exactly. It is not a regex, does not normalize line endings, and does not perform case folding. Multi-line literals use the same heredoc syntax as mutating values.
+`exists` succeeds when the path exists in the admitted input view. For tracked paths, that means the path exists in the base tree at `HEAD`; it can still pass when the working-tree copy has been deleted. With `--untracked`, an untracked working-tree path under CWD may also satisfy the guard. `missing` is the complement of `exists` in the same admitted input view: for tracked paths, absence means absent from `HEAD`; without `--untracked`, checkout-only untracked files are ignored by the guard. If a later `create`, `copy`, or `move` writes the same path, that local file is handled during materialization as an add/add conflict or clean failure, not as a guard failure. `contains` succeeds when the admitted file bytes contain the literal bytes of `<literal>` exactly. For tracked paths, those admitted bytes are the base-tree blob at `HEAD`, not the working-tree file; with `--untracked`, an admitted untracked path uses working-tree bytes. `contains` is not a regex, does not normalize line endings, and does not perform case folding. Multi-line literals use the same heredoc syntax as mutating values.
 
-Guarded paths obey the same CWD containment, `.git` refusal, symlink, tracked/untracked, encoding, and resource rules as other path operands. A satisfied guard contributes no content change and never creates a commit by itself unless `--allow-empty` is passed. A guard-only invocation whose guards all pass exits 0 with the same `nothing to do` notice as any other no-op invocation. A failed guard exits 1 with an `etch: ...` message that names the failed guard.
+Guarded paths obey the same CWD containment, `.git` refusal, symlink, tracked/untracked, encoding, and resource rules as other path operands. A satisfied guard contributes no content change and never creates a commit by itself. A guard-only invocation whose guards all pass exits 0 with the same `nothing to do` notice as any other no-op invocation. `--allow-empty` is rejected for guard-only invocations. A failed guard exits 1 with an `etch: ...` message that names the failed guard.
 
 Guards are included in canonical plans and plan hashes. Files read only by guards are part of the input set; if they are not otherwise changed, their before/after hashes are identical in the plan. Dry-run output includes satisfied guards as checks, not as patch hunks.
 
 ### Table model
 
-Tables are ordered rows and named columns of string cells. Markdown pipe tables are the MVP table surface; CSV uses the same logical model if admitted. Markdown table rewrites may re-render the addressed table, but they must preserve surrounding Markdown bytes.
+Tables are ordered rows and named columns of string cells. Markdown pipe tables and CSV use the same logical model. Markdown table rewrites may re-render the addressed table, but they must preserve surrounding Markdown bytes.
 
-Markdown table plumbing commands are hierarchical and format-prefixed:
+Porcelain table commands infer Markdown or CSV from `<path>`.
+
+For Markdown paths, the command shape includes a document/table scope:
+
+```sh
+etch table set <path> <scope> [<table>] <range> <value>
+etch table row append <path> <scope> [<table>] <row-json>
+etch table row insert <path> <scope> [<table>] (--before <row> | --after <row>) <row-json>
+etch table row delete <path> <scope> [<table>] <row>
+etch table column add <path> <scope> [<table>] <column> [--after <column>] [--default <value>]
+etch table column rename <path> <scope> [<table>] <old-column> <new-column>
+etch table column delete <path> <scope> [<table>] <column>
+```
+
+For CSV paths, the command shape omits scope and table because a CSV file is inherently one table:
+
+```sh
+etch table set <path> <range> <value>
+etch table row append <path> <row-json>
+etch table row insert <path> (--before <row> | --after <row>) <row-json>
+etch table row delete <path> <row>
+etch table column add <path> <column> [--after <column>] [--default <value>]
+etch table column rename <path> <old-column> <new-column>
+etch table column delete <path> <column>
+```
+
+Format-explicit plumbing is still available when inference is undesirable:
 
 ```sh
 etch md table set <path> <scope> [<table>] <range> <value>
@@ -191,21 +221,6 @@ etch md table row delete <path> <scope> [<table>] <row>
 etch md table column add <path> <scope> [<table>] <column> [--after <column>] [--default <value>]
 etch md table column rename <path> <scope> [<table>] <old-column> <new-column>
 etch md table column delete <path> <scope> [<table>] <column>
-```
-
-The porcelain alias `etch table ...` is available for Markdown table commands. `verbs --json` marks aliases separately from canonical plumbing command paths.
-
-`<scope>` is either `doc` for the whole document or an exact ATX heading selector such as `## Inventory`. `<table>` is an ordinal like `@0` or `@1`, resolved within the selected scope. The table ordinal may be omitted only when the scope contains exactly one table. Canonical plans store the resolved scope and table ordinal.
-
-Table ranges have the shape `<rows>,<columns>`. Rows may be `all`, a zero-based ordinal (`@0`), an inclusive ordinal range (`@2..@5`), or an exact key match such as `sku=ABC-123` or `[SKU Code]="ABC 123"`. Key matches compare the normalized text in the named column and must identify exactly one row. Columns may be `all`, a zero-based ordinal (`@2`), an inclusive ordinal range (`@1..@3`), an exact header label (`status`), a bracketed header label (`[Due Date]`), or an inclusive header range (`[Sales Amount]..[Commission Amount]`). Bracketed labels are required when a row key or column label contains spaces or selector punctuation. `table set` assigns the string value to every selected cell in the rectangular range.
-
-Structural row commands take a single row selector, not a full range. `row delete` accepts `all`, an ordinal, an ordinal range, or a key match. `row insert --before/--after` requires a single ordinal or key match. Structural column commands take single column selectors except where a later command explicitly admits ranges.
-
-`row-json` is a strict JSON object keyed by column label. Missing columns become empty cells; unknown columns are errors. Table cells are strings in MVP, so structured JSON values in `row-json` are rejected unless a later table value model admits them.
-
-CSV commands use the same row, column, and JSON row semantics. Because a CSV file is inherently one table, the format prefix is enough and there is no `table` subcommand:
-
-```sh
 etch csv set <path> <range> <value>
 etch csv row append <path> <row-json>
 etch csv row insert <path> (--before <row> | --after <row>) <row-json>
@@ -214,6 +229,14 @@ etch csv column add <path> <column> [--after <column>] [--default <value>]
 etch csv column rename <path> <old-column> <new-column>
 etch csv column delete <path> <column>
 ```
+
+`<scope>` is either `doc` for the whole Markdown document or an exact ATX heading selector such as `## Inventory`. `<table>` is an ordinal like `@0` or `@1`, resolved within the selected scope. The table ordinal may be omitted only when the scope contains exactly one table. Canonical plans store the resolved format, resolved scope when applicable, and table ordinal when applicable.
+
+Table ranges have the shape `<rows>,<columns>`. Rows may be `all`, a zero-based ordinal (`@0`), an inclusive ordinal range (`@2..@5`), or an exact key match such as `sku=ABC-123` or `[SKU Code]="ABC 123"`. Key matches compare the normalized text in the named column and must identify exactly one row. Columns may be `all`, a zero-based ordinal (`@2`), an inclusive ordinal range (`@1..@3`), an exact header label (`status`), a bracketed header label (`[Due Date]`), or an inclusive header range (`[Sales Amount]..[Commission Amount]`). Bracketed labels are required when a row key or column label contains spaces or selector punctuation. `table set` assigns the string value to every selected cell in the rectangular range.
+
+Structural row commands take a single row selector, not a full range. `row delete` accepts `all`, an ordinal, an ordinal range, or a key match. `row insert --before/--after` requires a single ordinal or key match. Structural column commands take single column selectors except where a later command explicitly admits ranges.
+
+`row-json` is a strict JSON object keyed by column label. Missing columns become empty cells; unknown columns are errors. Table cells are strings in MVP, so structured JSON values in `row-json` are rejected unless a later table value model admits them.
 
 Table operations do not include formulas, type inference, sorting, joins, arbitrary predicates, or dataframe-style transforms. They are basic datagrid mutations over an addressed table.
 
@@ -227,7 +250,7 @@ Markdown is not just prose in the target repositories. The early Markdown surfac
 
 Tasks and inline fields need a separate selector design pass before they graduate into the MVP table above.
 
-Each mutating verb is annotated as idempotent or non-idempotent in the help table. Idempotent ops that produce no content change are no-ops and don't contribute to the commit; non-idempotent ops (`append`) always produce changes.
+Each command is annotated by class in the help table: `guard`, `idempotent`, or `non-idempotent`. `idempotent` and `non-idempotent` commands are mutating commands. Idempotent commands that produce no content change are no-ops and don't contribute to the commit; non-idempotent commands (`append`) always produce changes. Guards make no content change and only preserve or reject the admitted input state.
 
 ## 6. Plans
 
@@ -374,6 +397,8 @@ etch computes commits from the base tree at `HEAD`, not from the caller's live i
 
 This is a core safety property. etch must not accidentally sweep half-finished prose, staged experiments, or unrelated same-file edits into the commit just because they were present in the working tree. Dirty checkout state can still conflict with etch's change, but the conflict belongs in the working tree during materialization, not in the committed tree.
 
+This differs from ordinary file-reading tools. `cat`, `grep`, editors, and most agent read tools inspect the working tree; etch mutates tracked paths from `HEAD`. If an agent's decision depends on the same bytes etch will mutate, it should read the base tree through git or encode the assumption with guard verbs. A dirty checkout can otherwise mean etch applies a correct mutation to tracked bytes the agent did not just inspect.
+
 For `--untracked` source paths that do not exist in `HEAD`, the working-tree bytes are the only possible input and are recorded in the input set. Created destinations and copied/moved destinations that are absent from `HEAD` are still planned as additions to the base tree.
 
 ### Per-transaction temp index
@@ -397,16 +422,26 @@ Agents using `--no-checkout` repeatedly are responsible for refreshing, comparin
 
 For each touched path, materialization considers three layers captured immediately before checkout synchronization:
 
-- **base:** the old `HEAD` bytes used for planning;
-- **index:** the caller's live index entry before materialization;
-- **worktree:** the caller's working-tree bytes before materialization.
+- **base:** the old `HEAD` path state used for planning;
+- **index:** the caller's live index path state before materialization;
+- **worktree:** the caller's working-tree path state before materialization.
 
-If both index and worktree match base, materialization is an ordinary checkout of the new `HEAD` bytes into both the live index and working tree. If either layer differs, etch treats that difference as concurrent local work and performs text three-way merges:
+A mergeable path state is either absent or regular-file bytes. Absence is a first-class state, so the same materialization machinery covers creates, deletes, copies, and moves. Symlink entries, directory/file conflicts, and other non-regular states are handled only where the file-level verb explicitly targets the directory entry; otherwise they are unmergeable materialization states.
+
+Binary classification matters only when materialization needs a text merge or conflict markers. Clean checkout-style materialization may copy, create, delete, or move arbitrary regular-file bytes. A materialization merge is text-mergeable only when every non-absent regular-file state in that merge is valid UTF-8 and contains no NUL byte. Anything else is binary/unmergeable for MVP, regardless of file extension or Git's diff heuristics.
+
+MVP materialization assumes simple Git text checkouts: blob, index, and working-tree bytes for touched text paths are comparable without configured checkout conversion. Repositories intended for etch should keep touched structured files as normalized UTF-8 text with LF line endings and no per-path filters. etch does not emulate Git's full checkout conversion stack, including `.gitattributes` text/eol rules, `core.autocrlf`, `working-tree-encoding`, or clean/smudge/process filters. If a touched path appears to require such conversion for safe materialization, etch fails cleanly after the commit rather than hiding that complexity in the implementation or overwriting the local file.
+
+If both index and worktree match base, materialization is an ordinary checkout of the new `HEAD` path state into both the live index and working tree. If either layer differs, etch treats that difference as concurrent local work and performs text three-way merges:
 
 1. Rebase the live index layer with `base = old HEAD`, `ours = new HEAD`, and `theirs = pre-materialization index`.
 2. Rebase the working-tree layer with `base = pre-materialization index`, `ours = post-materialization index`, and `theirs = pre-materialization worktree`.
 
 Clean merges preserve staged and unstaged layers relative to the new `HEAD`: pre-existing staged changes remain staged after being rebased, and pre-existing unstaged changes remain unstaged after being rebased. If a text merge conflicts, etch writes familiar conflict markers to the working tree, leaves the path dirty, and exits 1 after the commit exists. The index is not put into an unmerged multi-stage state in MVP. If an index-layer conflict cannot be represented without an unmerged index, etch writes the conflict to the working tree and leaves the live index at the new `HEAD` entry for that path, making the recovery visible rather than silently preserving a stale staged blob. For binary paths, or if text merge machinery cannot produce a usable result, etch fails cleanly without overwriting the current working-tree file.
+
+Create, copy, and move-destination materialization use `base = absent` and `ours = new HEAD bytes`. If the local index or worktree state is absent or already equal to the new bytes, the path materializes cleanly. If local text was concurrently created with different bytes, etch writes add/add conflict markers. If either side is binary or unmergeable, etch fails cleanly without overwriting the local path.
+
+Delete and move-source materialization use `ours = absent`. If the local index or worktree state is absent or still equal to the old `HEAD` bytes, the path materializes cleanly as absent. If local text was edited while etch deleted the path, etch writes delete/modify conflict markers; the absent side is represented by an empty conflict side and the local side contains the local text. If the local state is binary or unmergeable, etch fails cleanly without overwriting the local path. A `move` materializes as a source delete plus a destination create, so one side of the move may materialize cleanly while the other reports a conflict or clean failure.
 
 The transaction's durability boundary is the ref update; checkout is the post-commit synchronization step. Materialization failure never rolls back the commit. Stderr must be a recovery prompt for agents:
 
@@ -433,10 +468,10 @@ etch: run `etch help conflicts` for recovery steps
 
 ### The two conflict checks
 
-1. **Input validation.** The plan records `before_sha256` for every base-tree file etch read and for any admitted untracked source path. For tracked files, the base commit plus ref CAS pins the bytes; etch does not reject dirty working-tree edits to those files. For untracked source paths and path metadata, etch revalidates that the input still matches the plan before committing.
+1. **Input validation.** The plan records `before_sha256` for every base-tree file etch read and for any admitted untracked source path. For tracked files, the base commit plus ref CAS pins the bytes; etch does not reject dirty working-tree edits to those files. For admitted untracked source paths and path facts that affect containment or source admission, etch revalidates that the input still matches the plan before committing. Checkout-only destination occupancy is not an input-validation conflict; it is handled during materialization.
 2. **Ref CAS.** etch updates the ref using the old-value form (`update-ref <ref> <new> <old-expected>`), where old-expected is the plan's `base_commit`. If another writer committed to the ref between plan and execution, this fails atomically.
 
-Both checks are necessary. Input validation prevents stale computation for non-HEAD inputs such as admitted untracked sources and path metadata. Ref CAS prevents losing concurrent commits and pins all tracked base-tree bytes used by the plan. Working-tree and live-index changes to tracked paths are not transaction conflicts; they are concurrent checkout state handled by materialization.
+Both checks are necessary. Input validation prevents stale computation for non-HEAD inputs such as admitted untracked sources and path facts that affect source admission. Ref CAS prevents losing concurrent commits and pins all tracked base-tree bytes used by the plan. Working-tree and live-index changes to tracked paths, plus checkout-only destination occupancy, are not transaction conflicts; they are concurrent checkout state handled by materialization.
 
 ### Retry policy
 
@@ -444,18 +479,23 @@ Retry exists to make multiple agents editing the same git-backed directory conve
 
 Retries are bounded by `--retries` (default 3). `--retries 0` disables retries. Infinite retry is not in MVP; sustained contention should return to the caller rather than hide a hot loop.
 
-The first retry is immediate to handle the common single-conflict case without artificial latency. Later retries use randomized capped exponential backoff so many agents do not retry in lockstep:
+The first retry is immediate to handle the common single-conflict case without artificial latency. The default budget uses only these retry windows:
 
 | Retry | Sleep window |
 |---|---|
 | 1 | immediate |
 | 2 | 50-150ms |
 | 3 | 100-300ms |
+
+Explicit higher budgets continue with capped exponential backoff so many agents do not retry in lockstep:
+
+| Retry | Sleep window |
+|---|---|
 | 4 | 200-600ms |
 | 5 | 400-1200ms |
 | 6+ | 800-2000ms |
 
-Exact randomization and timer mechanics are implementation details, but the default retry budget should keep ordinary contention latency under a second while still handling the common single-collision case. Higher explicit retry counts use the same capped backoff table.
+Exact randomization and timer mechanics are implementation details, but the default retry budget should keep ordinary contention latency under a second while still handling the common single-collision case.
 
 ### Pinned execution is deferred
 
@@ -471,9 +511,11 @@ A future multi-execution model should have two layers. The plumbing layer uses e
 
 The current-transaction binding mechanism is deferred. It may involve environment variables, a context file, shell/session integration, or another host-visible handle, but it must work for agent execution models where commands may not share a long-lived shell PID. Transaction IDs, crash cleanup, locking, approval pins, query integration, and storage location are all deferred design work.
 
+This future model requires the planner to read from an abstract base snapshot, not from `HEAD` as a hard-coded global. MVP supplies `HEAD` as that snapshot for tracked paths. A multi-execution transaction would supply its accumulated virtual tree or savepoint tree instead, then commit the final tree with the same ref-CAS and materialization rules.
+
 ### Auto-generated messages
 
-The default commit message is generated from normalized operation descriptors. These descriptors are script-shaped and may include bounded value previews for operations whose main effect is writing a value. They never include unbounded raw payloads; full values live in file contents and are represented in plans by `value_sha256`.
+The default commit message is generated from normalized mutating-operation descriptors. These descriptors are script-shaped and may include bounded value previews for operations whose main effect is writing a value. They never include unbounded raw payloads; full values live in file contents and are represented in plans by `value_sha256`. Guards appear in plans and dry-run checks, not in commit messages.
 
 Descriptor shape is `<verb> <path> <selector> [<value-preview>]`, adjusted for verbs without selectors or values.
 
@@ -514,7 +556,7 @@ Value: "This summary is long enough that it needs a bounded preview..."
 
 ### Idempotency and the empty-commit case
 
-Operations that produce no content change contribute nothing to the commit. If every op is a no-op, no commit is created and etch exits 0 with a `nothing to do` notice on stderr. `--allow-empty` forces an empty commit in the rare case where this is desired.
+Operations that produce no content change contribute nothing to the commit. If every op is a no-op, no commit is created and etch exits 0 with a `nothing to do` notice on stderr. `--allow-empty` forces an empty commit in the rare case where this is desired, but only for invocations that include at least one mutating command.
 
 ### Checkout state of touched files
 
@@ -529,7 +571,7 @@ The threat model: an LLM-driven agent generates etch invocations. The user wants
 ### Intrinsic capability bounds (MVP, non-negotiable)
 
 - **No network.** etch makes no network calls.
-- **No process spawning.** etch does not exec anything except git for the strict subset of operations it needs (read refs, write objects, update refs).
+- **No process spawning.** etch does not exec anything except git for the strict subset of operations it needs (read refs, write objects, update refs, and inspect status or attributes needed to refuse unsupported paths). MVP etch does not invoke configured clean/smudge/process filters that can run arbitrary commands.
 - **CWD-scoped paths.** etch reads and writes only relative lexical paths under CWD. It rejects absolute paths, any `..` segment before normalization, `.git` path segments, and symlink escapes. Git is the transaction backend, not an expansion of path scope.
 - **No DSL escape hatch.** §4 — the script syntax has no expansion, no subshells, no exec.
 
@@ -557,9 +599,9 @@ Three layers, designed so an agent can load the entire feature set in a small to
 | `etch help` / `man etch` | humans, agents needing examples | ~1500 tokens |
 | `etch verbs --json` | runtimes building allow-lists | machine-readable |
 
-The verb table is the bulk of the help. It's strictly tabular: name, signature, one-line description, idempotent Y/N. Deviations get one line of prose, not a section. The discipline is enforced by writing the help page first when designing each verb — if it doesn't fit, the verb is wrong (§5).
+The verb table is the bulk of the help. It's strictly tabular: name, signature, one-line description, command class. Deviations get one line of prose, not a section. The discipline is enforced by writing the help page first when designing each verb — if it doesn't fit, the verb is wrong (§5).
 
-Help topics mirror verbs and subcommands where that helps navigation (`etch help table`, `etch help table row`, `etch help csv`). General topics stay flat rather than becoming a hierarchy; MVP includes `etch help selectors`, `etch help values`, `etch help plans`, `etch help security`, and `etch help conflicts`.
+Help topics mirror verbs and subcommands where that helps navigation (`etch help table`, `etch help table row`, `etch help csv`). General topics stay flat rather than becoming a hierarchy; MVP includes `etch help model`, `etch help selectors`, `etch help values`, `etch help plans`, `etch help security`, and `etch help conflicts`.
 
 Default human help lists canonical command paths only and omits porcelain aliases so prompt-seeding stays compact and unambiguous. Alias documentation lives behind explicit surfaces such as `etch help aliases` or an aliases section in format-specific help. `verbs --json` includes both canonical commands and aliases, with enough metadata for callers to filter to canonical commands.
 
@@ -571,7 +613,7 @@ Default human help lists canonical command paths only and omits porcelain aliase
 
 MVP should not allocate a large taxonomy up front. Add distinct exit codes only when callers have a distinct automated response. For example, retry-budget exhaustion may eventually deserve a separate code if callers should retry later, while "selector not found" and "target file missing" can both be ordinary operation failures for a human-facing CLI.
 
-Errors printed to stderr use ordinary command-line style: `etch: <message>`. MVP does not define machine-readable error codes or a JSON error mode without a concrete integration use case.
+Errors printed to stderr use ordinary command-line style: `etch: <message>`. Script execution adds source locality as `etch: <script>:<line>: <message>` or `etch: <stdin>:<line>: <message>`. MVP does not define machine-readable error codes or a JSON error mode without a concrete integration use case.
 
 ## 12. Configuration
 
@@ -624,6 +666,8 @@ flowchart TD
 
 The architecture has one important shape constraint: semantic mutation happens before git side effects. Parsing, selector evaluation, format rewriting, plan hashing, patch rendering, and execution all share the same normalized operation model, so preview and execution cannot become separate interpretations of the same command.
 
+Implementation code should receive explicit filesystem, index, object-store, and workspace handles instead of reaching for process-global disk state. The CLI front door may discover CWD and open the concrete git-backed workspace, but lower layers operate on passed objects. This keeps tests injectable, lets fixtures model `HEAD`, private indexes, live indexes, and working trees precisely, and keeps most code indifferent to whether bytes came from disk, git objects, or an in-memory test model.
+
 ### CLI front door
 
 The CLI front door owns top-level flag parsing, env-var defaults, command dispatch, and the split between one-shot invocation, `run`, help, verb catalog, plan, dry-run, checkout control, and committing execution. It also enforces global flag incompatibilities before any file reads.
@@ -638,11 +682,11 @@ Dependency posture: implement this parser directly. General shell parsers are in
 
 ### Verb catalog
 
-The verb catalog is the single source of truth for command names, command paths, signatures, format namespaces, command class, idempotency, selector/value expectations, one-line help text, and machine-readable `verbs --json` output. Execution dispatch should use this catalog rather than duplicating verb metadata in the parser, help renderer, and evaluator registration.
+The verb catalog is the single source of truth for command names, command paths, signatures, format namespaces, command class, selector/value expectations, one-line help text, and machine-readable `verbs --json` output. Execution dispatch should use this catalog rather than duplicating verb metadata in the parser, help renderer, and evaluator registration.
 
-Catalog entries project into the CLI through a generic command decoder. Each entry declares its accepted token path (`set`, `json set`, `frontmatter set`), command class, allowed top-level flags, command-local flags, positional schema, selector namespace rules, evaluator ID, help row, and JSON catalog fields. The CLI resolves the longest matching token path, validates flags and arity from the entry, and emits a normalized operation. `run` uses the same resolver for each parsed statement, so a script line and process argv stay equivalent.
+Catalog entries project into the CLI through a generic command decoder. Each entry declares its accepted token path (`set`, `json set`, `frontmatter set`), command class, allowed top-level flags, command-local flags, positional schema, selector namespace rules, evaluator ID, help row, and JSON catalog fields. The CLI resolves the longest matching token path, validates flags and arity from the entry, and emits a normalized operation. Porcelain entries may declare format-specific operand schemas selected after the path operand is parsed, as with `table ...` on Markdown versus CSV paths. `run` uses the same resolver for each parsed statement, so a script line and process argv stay equivalent.
 
-Verification plan: unit tests cover longest-match command resolution, command-local flag parsing, global flag admission/rejection by command class, positional arity errors, normalized operation output, `run` statement equivalence with direct argv, help-row generation, and `verbs --json` projection from the same catalog entries.
+Verification plan: unit tests cover longest-match command resolution, command-local flag parsing, global flag admission/rejection by command class, positional arity errors, format-inferred operand schemas, normalized operation output, `run` statement equivalence with direct argv, help-row generation, and `verbs --json` projection from the same catalog entries.
 
 Dependency posture: no external dependency is expected. Keeping this as ordinary Go data makes the help and JSON catalog easy to snapshot.
 
@@ -654,7 +698,7 @@ Dependency posture: use `github.com/theory/jsonpath` as the recommended parser c
 
 ### Format adapters
 
-Format adapters convert bytes into editable representations and back to bytes. JSON, YAML, Markdown/frontmatter, Markdown sections, Markdown tables, and possible CSV support each live behind this boundary. Adapters are responsible for preserving formatting where the format contract requires it, especially YAML comments, key order, indentation, scalar spelling, and Markdown body text outside the addressed part.
+Format adapters convert bytes into editable representations and back to bytes. JSON, YAML, Markdown/frontmatter, Markdown sections, Markdown tables, and CSV each live behind this boundary. Adapters are responsible for preserving formatting where the format contract requires it, especially YAML comments, key order, indentation, scalar spelling, and Markdown body text outside the addressed part.
 
 Dependency posture: use `encoding/json/v2` for JSON if the selected Go toolchain supports it without unacceptable experiment flags, `goccy/go-yaml` for YAML, and `yuin/goldmark` with GFM extensions for Markdown. YAML uses parser/token/AST APIs for comments, key order, anchors, aliases, token positions, and generated snippets; etch owns selector evaluation and localized byte rewrites. Markdown uses goldmark for CommonMark/GFM structure, source segments, headings, task-list semantics, and table nodes; goldmark renderers are not used to rewrite Markdown source.
 
@@ -666,15 +710,15 @@ Dependency posture: evaluators should be project code. Their contracts are etch'
 
 ### Planner
 
-The planner is the pure core for mutating invocations. It owns input-set construction, but it does not perform raw filesystem or object-store reads itself: it asks the workspace snapshot store for base-tree file content, admitted untracked source content, path metadata, and base-ref state. It applies all operations atomically in memory, computes per-file before/after hashes, asks the git backend to build the planned tree, generates the commit message, and emits the canonical plan structure.
+The planner is the pure core for mutating invocations. It owns input-set construction, but it does not perform raw filesystem or object-store reads itself: it asks the workspace snapshot store for base-snapshot file content, admitted untracked source content, path facts needed for containment and source admission, and base-ref state. In MVP, the base snapshot is `HEAD`; future multi-execution transactions may supply a virtual tree. The planner applies all operations atomically in memory, computes per-file before/after hashes, asks the git backend to build the planned tree, generates the commit message, and emits the canonical plan structure.
 
 Dependency posture: plan hashes are computed over RFC 8785 JSON Canonicalization Scheme bytes. etch canonicalizes original UTF-8 JSON input bytes, not Go values produced by `encoding/json`. Inputs must satisfy the JCS/I-JSON domain: valid UTF-8, no duplicate object member names after escape decoding, no lone surrogates or noncharacters, and finite IEEE-754 binary64 numbers in the accepted range. Object members are sorted by RFC 8785 UTF-16 code-unit order, and canonical output is exact UTF-8 bytes with no trailing newline. The selected candidate is `github.com/lattice-substrate/json-canon/jcs`, pending etch integration fixtures and acceptance of its Go version/platform constraints. Hashing uses the Go standard library.
 
 ### Workspace snapshot store
 
-The workspace snapshot store is the file-content boundary for planning. It resolves paths against CWD, enforces tracked/untracked admission, rejects absolute paths, `..` segments, `.git` path segments, symlink loops, and symlink escapes, applies text encoding checks and resource guardrails, reads tracked touched-path bytes from the base tree, reads admitted untracked source bytes from the working tree, records input hashes, and exposes base commit/tree information. It presents immutable snapshots to evaluators so retry planning starts from a fresh store view rather than mutating prior state.
+The workspace snapshot store is the file-content boundary for planning. It is constructed from explicit workspace handles: base snapshot/object store, working-tree filesystem, live-index view, path root, and admission policy. It resolves paths against CWD, enforces tracked/untracked admission, rejects absolute paths, `..` segments, `.git` path segments, symlink loops, and symlink escapes, applies text encoding checks and resource guardrails, reads tracked touched-path bytes from the base tree, reads admitted untracked source bytes from the working tree, records input hashes, and exposes base commit/tree information. It presents immutable snapshots to evaluators so retry planning starts from a fresh store view rather than mutating prior state.
 
-Dependency posture: implement this boundary directly on top of filesystem and git backend primitives. The correctness work is in containment, tracked-path semantics, and input hashing, not in a generic file access abstraction.
+Dependency posture: implement this boundary directly on top of small project-owned filesystem and git backend interfaces. The goal is explicit dependency injection, not a generic file access framework. The correctness work is in containment, tracked-path semantics, and input hashing.
 
 ### Patch renderer
 
@@ -684,13 +728,14 @@ Dependency posture: use native git output for MVP patch rendering. Standalone Go
 
 ### Git backend
 
-The git backend abstracts repository discovery, tracked/untracked checks, blob and tree construction, commit-object creation, ref reads, ref CAS updates, author metadata, and any fallback calls to the git executable. It is the only component allowed to perform git side effects.
+The git backend abstracts repository discovery, tracked/untracked checks, blob and tree construction, commit-object creation, ref reads, ref CAS updates, index views, working-tree materialization, author metadata, and any fallback calls to the git executable. It is the only component allowed to perform git side effects. Its methods should take explicit object/index/worktree handles rather than assuming the process working directory or live `.git/index`.
 
 The git backend requirements are:
 
 - discover the active repository and current checked-out ref from an arbitrary CWD;
 - read `HEAD`, unborn-branch state, refs, trees, blobs, and tracked-path status;
-- read live-index entries and working-tree bytes for post-commit materialization;
+- read explicit live-index entries and working-tree bytes for post-commit materialization;
+- detect unsupported path attributes or checkout conversion that make materialization unsafe;
 - build blobs, trees, and commit objects without using the caller's live index as the transaction state;
 - support an isolated temp-index-equivalent transaction model;
 - update refs with old-value CAS semantics equivalent to `git update-ref <ref> <new> <old>`;
@@ -709,7 +754,7 @@ Dependency posture: this should mostly compose the planner and git backend. Retr
 
 ### Working-tree materializer
 
-The materializer updates only touched paths in the working tree and live index after a successful commit. It must preserve unrelated staged and unstaged changes, rebase touched staged and unstaged layers from old `HEAD` to new `HEAD`, write conflict markers when a touched text merge conflicts, fail cleanly for binary or unmergeable paths, and support `--no-checkout` by being skipped entirely.
+The materializer updates only touched paths in the explicitly supplied working tree and live index after a successful commit. It must preserve unrelated staged and unstaged changes, rebase touched staged and unstaged layers from old `HEAD` to new `HEAD`, write conflict markers when a touched text merge conflicts, fail cleanly for binary or unmergeable paths, and support `--no-checkout` by being skipped entirely.
 
 Dependency posture: use the git backend for index updates and checkout-like behavior where possible. Use a small text merge implementation or a narrowly scoped dependency only if fixtures prove it produces familiar conflict markers without dragging in a larger VCS abstraction. Avoid a generic filesystem synchronization dependency; the update set is intentionally small and path-bounded.
 
@@ -761,15 +806,17 @@ Most CLI behavior should be covered by snapshot tests over generated output:
 - Successful commit tests compare `git show --stat --patch --format=fuller HEAD` against snapshots, with author and dates normalized by environment.
 - HEAD-sourced commit tests must make the touched path dirty before execution and assert that `git show HEAD:<path>` contains only the structural etch mutation from old `HEAD`, not the pre-existing staged or unstaged checkout edits.
 - `--no-checkout` tests assert working tree, live index, `HEAD` state, and the explicit skipped-checkout stderr notice separately.
-- Guard tests cover `exists`, `missing`, and `contains` in passing and failing forms, both alone and inside `run` with mutating operations. They should assert no stdout, exit 1 before side effects on failure, no commit contribution on success, plan/hash inclusion, input hashing for guard-only paths, dry-run check rendering without hunks, heredoc literals for `contains`, and tracked/untracked/CWD/symlink behavior.
-- Materialization tests must use temporary git repositories that distinguish old `HEAD`, live index, and working tree contents for touched paths. Fixtures should cover clean checkout, unstaged clean merge, unstaged conflict markers, staged clean merge, staged conflict surfaced in the working tree, staged-plus-unstaged clean merge, staged-plus-unstaged conflict, binary/unmergeable refusal, and untouched dirty paths. Each fixture should assert the final commit tree, live index entry, working-tree bytes, exit code, and recovery stderr.
-- Script tests cover tokenization, quoting, comments, configurable heredoc delimiters, literal heredoc bodies, missing terminators, stdin via `run -`, and failure atomicity across multi-op runs.
-- Format tests cover JSON, YAML, frontmatter, Markdown sections, Markdown tables, Markdown fields/tasks as they land, and CSV if admitted.
+- Guard tests cover `exists`, `missing`, and `contains` in passing and failing forms, both alone and inside `run` with mutating operations. They should assert no stdout, exit 1 before side effects on failure, no commit contribution on success, `--allow-empty` rejection for guard-only invocations, plan/hash inclusion, input hashing for guard-only paths, dry-run check rendering without hunks, heredoc literals for `contains`, tracked/untracked/CWD/symlink behavior, `exists` and `contains` reading `HEAD` rather than dirty working-tree bytes for tracked paths, `exists` passing for a tracked path deleted only in the working tree, `exists` and `missing` behaving as complements within the admitted input view, and checkout-only untracked files without `--untracked` being ignored by `missing`.
+- Materialization tests must use temporary git repositories that distinguish old `HEAD`, live index, and working tree contents for touched paths. Fixtures should cover clean checkout, unstaged clean merge, unstaged conflict markers, staged clean merge, staged conflict surfaced in the working tree, staged-plus-unstaged clean merge, staged-plus-unstaged conflict, concurrent create/add-add conflict, delete-vs-local-edit conflict, move source/destination split outcomes, unsupported checkout-conversion/filter refusal, binary/unmergeable refusal for NUL and invalid UTF-8 merge inputs, clean byte materialization for non-text copy/move/delete cases, and untouched dirty paths. Each fixture should assert the final commit tree, live index entry, working-tree bytes, exit code, and recovery stderr.
+- Script tests cover tokenization, quoting, comments, configurable heredoc delimiters, literal heredoc bodies, missing terminators, stdin via `run -`, source-location errors for file-backed scripts and stdin, direct argv errors without source-location prefixes, and failure atomicity across multi-op runs.
+- Format tests cover JSON, YAML, frontmatter, Markdown sections, Markdown tables, Markdown fields/tasks as they land, and CSV. Table fixtures should cover `table ...` dispatch for Markdown and CSV paths, format-explicit `md table ...` and `csv ...` plumbing, and arity errors when Markdown scope operands or CSV range operands are omitted.
 - Concurrency tests use multiple temp indexes and explicit ref CAS races to prove disjoint-path retry, same-path conflict behavior, and retry-budget exhaustion.
 - Encoding and resource tests cover UTF-8 BOM preservation, invalid UTF-8 refusal for structured targets, no transcoding of non-UTF-8 encodings, and resource-exhaustion failure before side effects where it can be detected.
 - Security tests cover path traversal, lexical `..` rejection, `.git` path segments, contained symlink resolution, symlink loops, symlink escapes, absolute paths, untracked-path handling, outside-git refusal, and refusal to spawn non-git processes.
 
 Unit tests should carry the parser, selector evaluator, format round-trippers, and commit-tree builder. End-to-end tests should prefer real temporary git repositories so the snapshots exercise the same object and ref behavior users get.
+
+Architecture tests should exercise planner, snapshot-store, and materializer behavior through injected filesystem, object-store, and index models, without depending on process CWD or the real live index. Real-git integration tests still cover native git compatibility at the backend boundary.
 
 ## 18. Validation strategy
 
