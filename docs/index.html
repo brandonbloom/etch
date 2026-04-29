@@ -67,6 +67,7 @@
     padding: 80px 0 48px;
     border-bottom: 1px solid var(--border);
     margin-bottom: 48px;
+    position: relative;
   }
   header .logo {
     font-family: var(--font-mono);
@@ -81,6 +82,14 @@
     margin-top: 8px;
     line-height: 1.5;
   }
+  header .github-link {
+    position: absolute;
+    top: 80px;
+    right: 0;
+    color: var(--fg-dim);
+    transition: color 0.15s;
+  }
+  header .github-link:hover { color: var(--fg); }
 
   /* --- Sections --- */
   section { margin-bottom: 64px; }
@@ -417,6 +426,9 @@
 
 <!-- HEADER -->
 <header>
+  <a href="https://github.com/brandonbloom/etch" class="github-link" aria-label="View on GitHub">
+    <svg width="28" height="28" viewBox="0 0 16 16" fill="currentColor"><path d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27s1.36.09 2 .27c1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.01 8.01 0 0 0 16 8c0-4.42-3.58-8-8-8z"/></svg>
+  </a>
   <div class="logo">etch</div>
   <div class="tagline">Precise file mutations, automatic commits.<br>Built for agents working against git repos.</div>
 </header>
@@ -458,6 +470,10 @@
     <li><span class="kv-key">Output</span><span class="kv-val">A git commit with touched paths materialized by default</span></li>
     <li><span class="kv-key">Language</span><span class="kv-val">Go, single binary, using git as the transaction backend</span></li>
   </ul>
+
+  <h3>Install</h3>
+  <pre><code>go install github.com/brandonbloom/etch/cmd/etch@latest</code></pre>
+  <p>Requires Go 1.25.3+ and Git.</p>
 </section>
 
 <!-- DEMO -->
@@ -760,7 +776,7 @@ plan=$(etch --plan set tasks/review.md frontmatter.status "complete")
 
 <!-- FOOTER -->
 <footer>
-  <p>etch is open-source software. <code>github.com/brandonbloom/etch</code></p>
+  <p>etch is open-source software. <a href="https://github.com/brandonbloom/etch">github.com/brandonbloom/etch</a></p>
 </footer>
 
 </div>

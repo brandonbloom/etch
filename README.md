@@ -27,6 +27,14 @@ that are atomic, reviewable, and replayable.
 
 See [spec.md](spec.md) for the full design record.
 
+## Install
+
+```sh
+go install github.com/brandonbloom/etch/cmd/etch@latest
+```
+
+Requires Go 1.25.3+ and Git.
+
 ## Build
 
 Requirements:
@@ -279,7 +287,7 @@ Project layout:
 | `cmd/etch-validate` | Validation harness over fixture repositories. |
 | `internal/etch` | Parser, catalog, planner, Git backend, materializer, and format evaluators. |
 | `spec.md` | Design and behavior specification. |
-| `explainer.html` | Long-form explanatory artifact. |
+| `docs/` | Explainer site, deployed to GitHub Pages. |
 | `mise.toml` | Project environment and build task. |
 
 Useful local commands:
