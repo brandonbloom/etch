@@ -6,6 +6,8 @@ import (
 	"fmt"
 	"strings"
 	"time"
+
+	"github.com/lattice-substrate/json-canon/jcs"
 )
 
 type Executor struct {
@@ -420,6 +422,14 @@ func planTable(w *Workspace, files map[string]fileChange, op Operation) (Operati
 }
 
 func planHash(plan *Plan) (string, error) {
+	b, err := canonicalPlanBytes(plan)
+	if err != nil {
+		return "", err
+	}
+	return "sha256:" + shaHex(b), nil
+}
+
+func canonicalPlanBytes(plan *Plan) ([]byte, error) {
 	type planAlias Plan
 	cp := planAlias(*plan)
 	cp.Hash = ""
@@ -428,9 +438,9 @@ func planHash(plan *Plan) (string, error) {
 	cp.Changed = false
 	b, err := json.Marshal(cp)
 	if err != nil {
-		return "", err
+		return nil, err
 	}
-	return "sha256:" + shaHex(b), nil
+	return jcs.Canonicalize(b)
 }
 
 func buildCommitMessage(opts GlobalOptions, ops []Operation) string {
