@@ -532,7 +532,7 @@ func defaultCreateContent(path string) string {
 }
 
 const shortHelp = `usage: etch [--plan|-n|--dry-run] [flags] <verb> [args...]
-       etch run <script>
+       etch run [script]
 
 Core flags:
   --plan                 emit canonical JSON plan

@@ -111,3 +111,26 @@ func TestIntrospectionDoesNotRequireGit(t *testing.T) {
 		t.Fatalf("got %d verbs, want catalog", len(verbs))
 	}
 }
+
+func TestRunWithoutScriptPathParsesStdin(t *testing.T) {
+	oldReadStdin := readStdin
+	readStdin = func() ([]byte, error) {
+		return []byte("set a.json x 1\n"), nil
+	}
+	t.Cleanup(func() { readStdin = oldReadStdin })
+
+	dir := initRepo(t)
+	writeFile(t, dir, "README.md", "# hi\n")
+	commitAll(t, dir, "initial")
+	chdir(t, dir)
+
+	var out, stderr bytes.Buffer
+	code, err := runCLI([]string{"run"}, &out, &stderr)
+	if err != nil || code != exitOK {
+		t.Fatalf("run code=%d err=%v stderr=%s", code, err, stderr.String())
+	}
+	headBytes := testGit(t, dir, "show", "HEAD:a.json")
+	if !strings.Contains(headBytes, `"x": 1`) {
+		t.Fatalf("HEAD a.json = %s", headBytes)
+	}
+}

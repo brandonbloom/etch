@@ -191,3 +191,26 @@ func TestE2ERunGuardAndAtomicFailure(t *testing.T) {
 		t.Fatalf("failed multi-op leaked earlier mutation: %s", headBytes)
 	}
 }
+
+func TestE2ERunDefaultsToStdin(t *testing.T) {
+	dir := initRepo(t)
+	writeFile(t, dir, "README.md", "# hi\n")
+	commitAll(t, dir, "initial")
+	chdir(t, dir)
+
+	oldReadStdin := readStdin
+	readStdin = func() ([]byte, error) {
+		return []byte("set stdin.json x 1\nset stdin.json y 2\n"), nil
+	}
+	t.Cleanup(func() { readStdin = oldReadStdin })
+
+	var out, errb bytes.Buffer
+	code, err := runCLI([]string{"run"}, &out, &errb)
+	if err != nil || code != exitOK {
+		t.Fatalf("runCLI code=%d err=%v stderr=%s", code, err, errb.String())
+	}
+	headBytes := testGit(t, dir, "show", "HEAD:stdin.json")
+	if !strings.Contains(headBytes, `"x": 1`) || !strings.Contains(headBytes, `"y": 2`) {
+		t.Fatalf("HEAD stdin.json = %s", headBytes)
+	}
+}

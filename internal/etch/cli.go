@@ -89,10 +89,14 @@ func runCLI(args []string, stdout, stderr io.Writer) (exitCode, error) {
 	}
 
 	if rest[0] == "run" {
-		if len(rest) != 2 {
-			return exitUsage, usagef("usage: etch run <script>")
+		if len(rest) > 2 {
+			return exitUsage, usagef("usage: etch run [script]")
 		}
-		stmts, err := ParseScript(rest[1])
+		script := "-"
+		if len(rest) == 2 {
+			script = rest[1]
+		}
+		stmts, err := ParseScript(script)
 		if err != nil {
 			return exitUsage, err
 		}
@@ -215,7 +219,7 @@ func ParseScript(path string) ([]Statement, error) {
 	name := path
 	if path == "-" {
 		name = "<stdin>"
-		data, err = io.ReadAll(os.Stdin)
+		data, err = readStdin()
 	} else {
 		data, err = os.ReadFile(path)
 	}
@@ -223,4 +227,8 @@ func ParseScript(path string) ([]Statement, error) {
 		return nil, failf("%s", err)
 	}
 	return ParseScriptBytes(name, data)
+}
+
+var readStdin = func() ([]byte, error) {
+	return io.ReadAll(os.Stdin)
 }
