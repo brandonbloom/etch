@@ -4,12 +4,9 @@ import (
 	"bytes"
 	"encoding/csv"
 	"encoding/json"
-	"fmt"
 	"strconv"
 	"strings"
 	"unicode/utf8"
-
-	"github.com/goccy/go-yaml"
 )
 
 func evalStructuredBytes(path, part, selector, verb, rawValue string, before []byte) ([]byte, bool, error) {
@@ -40,53 +37,20 @@ func evalYAML(selector, verb string, value any, before []byte) ([]byte, bool, er
 	if !utf8.Valid(raw) {
 		return nil, false, failf("invalid UTF-8 in YAML input")
 	}
-	var root any
-	if len(strings.TrimSpace(string(raw))) == 0 {
-		root = map[string]any{}
-	} else if err := yaml.Unmarshal(raw, &root); err != nil {
-		return nil, false, err
-	}
-	root = yamlToJSON(root)
-	next, changed, err := mutateStructuredValue(root, selector, verb, value)
+	file, err := parseYAMLFile(raw)
 	if err != nil {
 		return nil, false, err
 	}
-	out, err := marshalYAML(next)
+	changed, err := mutateYAMLFile(file, selector, verb, value)
 	if err != nil {
 		return nil, false, err
 	}
-	out = ensureTrailingNewline(out)
+	if !changed {
+		return before, false, nil
+	}
+	out := []byte(file.String())
 	out = withUTF8BOM(out, bom)
-	return out, changed || !bytes.Equal(out, before), nil
-}
-
-func yamlToJSON(v any) any {
-	switch x := v.(type) {
-	case map[string]any:
-		m := make(map[string]any, len(x))
-		for k, v := range x {
-			m[k] = yamlToJSON(v)
-		}
-		return m
-	case map[any]any:
-		m := make(map[string]any, len(x))
-		for k, v := range x {
-			m[fmt.Sprint(k)] = yamlToJSON(v)
-		}
-		return m
-	case []any:
-		out := make([]any, len(x))
-		for i, v := range x {
-			out[i] = yamlToJSON(v)
-		}
-		return out
-	default:
-		return x
-	}
-}
-
-func marshalYAML(v any) ([]byte, error) {
-	return yaml.MarshalWithOptions(v, yaml.UseLiteralStyleIfMultiline(true))
+	return out, !bytes.Equal(out, before), nil
 }
 
 func evalFrontmatter(path, selector, verb string, value any, before []byte) ([]byte, bool, error) {
@@ -101,22 +65,18 @@ func evalFrontmatter(path, selector, verb string, value any, before []byte) ([]b
 	if !had && (verb == "delete" || verb == "remove") {
 		return before, false, nil
 	}
-	var root any = map[string]any{}
-	if strings.TrimSpace(string(fm)) != "" {
-		if err := yaml.Unmarshal(fm, &root); err != nil {
-			return nil, false, err
-		}
-		root = yamlToJSON(root)
-	}
-	next, changed, err := mutateStructuredValue(root, selector, verb, value)
+	file, err := parseYAMLFile(fm)
 	if err != nil {
 		return nil, false, err
 	}
-	yamlBytes, err := marshalYAML(next)
+	changed, err := mutateYAMLFile(file, selector, verb, value)
 	if err != nil {
 		return nil, false, err
 	}
-	yamlBytes = bytes.TrimRight(yamlBytes, "\n")
+	if !changed {
+		return before, false, nil
+	}
+	yamlBytes := bytes.TrimRight([]byte(firstYAMLDocumentString(file)), "\n")
 	var out []byte
 	out = append(out, []byte("---\n")...)
 	out = append(out, yamlBytes...)

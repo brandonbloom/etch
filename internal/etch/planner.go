@@ -360,8 +360,11 @@ func planStructured(w *Workspace, files map[string]fileChange, op Operation) (Op
 			fillDescriptor(&op)
 			return op, false, nil
 		case "set", "append", "add":
-			if isJSONPath(res.Clean) || isYAMLPath(res.Clean) {
+			if isJSONPath(res.Clean) {
 				ch.After = []byte("{}\n")
+				ch.AbsentAfter = false
+			} else if isYAMLPath(res.Clean) {
+				ch.After = []byte{}
 				ch.AbsentAfter = false
 			} else if op.Target.Part == "frontmatter" && isMarkdownPath(res.Clean) {
 				ch.After = []byte{}
