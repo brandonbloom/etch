@@ -20,8 +20,6 @@
     --red-light: #fef2f2;
     --blue: #2b4c7e;
     --blue-light: #eff6ff;
-    --orange: #92400e;
-    --orange-light: #fffbeb;
     --font-sans: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
     --font-mono: 'JetBrains Mono', 'SF Mono', 'Fira Code', 'Cascadia Code', monospace;
     --max-w: 680px;
@@ -43,8 +41,6 @@
       --red-light: #2a1515;
       --blue: #93c5fd;
       --blue-light: #152030;
-      --orange: #fbbf24;
-      --orange-light: #2a2010;
     }
   }
 
@@ -85,19 +81,6 @@
     margin-top: 8px;
     line-height: 1.5;
   }
-
-  /* --- Status banner --- */
-  .status-banner {
-    background: var(--orange-light);
-    border: 1px solid var(--orange);
-    border-radius: 6px;
-    padding: 12px 16px;
-    font-size: 0.85rem;
-    color: var(--orange);
-    margin-bottom: 48px;
-    line-height: 1.5;
-  }
-  .status-banner strong { font-weight: 600; }
 
   /* --- Sections --- */
   section { margin-bottom: 64px; }
@@ -438,11 +421,6 @@
   <div class="tagline">Precise file mutations, automatic commits.<br>Built for agents working against git repos.</div>
 </header>
 
-<!-- STATUS -->
-<div class="status-banner">
-  <strong>Status:</strong> etch is under active development and not yet released. This page describes the design intent. Specific verb names, flags, and behaviors may change before the first release.
-</div>
-
 <!-- THE LANDSCAPE -->
 <section class="reveal">
   <h2>The home directory pattern</h2>
@@ -471,12 +449,12 @@
 <!-- WHAT IT IS -->
 <section class="reveal">
   <h2>What etch is</h2>
-  <p>etch is a small CLI for <strong>mechanical mutations to text and data files</strong>. It knows about a fixed set of file formats&mdash;Markdown, JSON, YAML&mdash;and a fixed set of operations on them. Every successful mutating call becomes a git commit by default.</p>
+  <p>etch is a small CLI for <strong>mechanical mutations to text and data files</strong>. It knows about a fixed set of file formats&mdash;Markdown, JSON, YAML, CSV&mdash;and a fixed set of operations on them. Every successful mutating call becomes a git commit by default.</p>
   <p>The scope is intentionally narrow. No network. No subprocesses. No Turing-complete scripting. Just precise structural edits that land as atomic commits.</p>
 
   <ul class="kv-list">
-    <li><span class="kv-key">Formats</span><span class="kv-val">Markdown (with frontmatter), JSON, YAML&mdash;inferred from file extension</span></li>
-    <li><span class="kv-key">Operations</span><span class="kv-val">Set, delete, append, replace on structured paths and sections</span></li>
+    <li><span class="kv-key">Formats</span><span class="kv-val">Markdown (with frontmatter), JSON, YAML, CSV&mdash;inferred from file extension</span></li>
+    <li><span class="kv-key">Operations</span><span class="kv-val">set, delete, append, add, remove on structured paths; replace-section on markdown headings; create, move, copy, delete on files; table operations on CSV and markdown tables; guards (exists, missing, contains)</span></li>
     <li><span class="kv-key">Output</span><span class="kv-val">A git commit with touched paths materialized by default</span></li>
     <li><span class="kv-key">Language</span><span class="kv-val">Go, single binary, using git as the transaction backend</span></li>
   </ul>
@@ -546,24 +524,30 @@
         <div class="line"><span class="prompt">$</span> etch --plan set tasks/review.md frontmatter.status "complete"</div>
         <div class="line">&nbsp;</div>
         <div class="line"><span class="output">{</span></div>
+        <div class="line"><span class="output">  "$schema": "https://brandonbloom.github.io/etch/schemas/2026-04/plan.schema.json",</span></div>
+        <div class="line"><span class="output">  "ref": "refs/heads/main",</span></div>
+        <div class="line"><span class="output">  "base_commit": "a1f9c3e...",</span></div>
         <div class="line"><span class="output">  "operations": [{</span></div>
         <div class="line"><span class="output">    "verb": "set",</span></div>
         <div class="line"><span class="output">    "target": {</span></div>
         <div class="line"><span class="output">      "path": "tasks/review.md",</span></div>
-        <div class="line"><span class="output">      "part": "frontmatter",</span></div>
-        <div class="line"><span class="output">      "selector": "$.status"</span></div>
-        <div class="line"><span class="output">    }</span></div>
+        <div class="line"><span class="output">      "selector": "$.status",</span></div>
+        <div class="line"><span class="output">      "part": "frontmatter"</span></div>
+        <div class="line"><span class="output">    },</span></div>
+        <div class="line"><span class="output">    "value_sha256": "84983e..."</span></div>
         <div class="line"><span class="output">  }],</span></div>
         <div class="line"><span class="output">  "files": {</span></div>
         <div class="line"><span class="output">    "tasks/review.md": {</span></div>
         <div class="line"><span class="output">      "before_sha256": "e3b0c4...",</span></div>
-        <div class="line"><span class="output">      "after_sha256": "84983e..."</span></div>
+        <div class="line"><span class="output">      "after_sha256": "7d1a54..."</span></div>
         <div class="line"><span class="output">    }</span></div>
-        <div class="line"><span class="output">  }</span></div>
+        <div class="line"><span class="output">  },</span></div>
+        <div class="line"><span class="output">  "tree": "f4a8b12...",</span></div>
+        <div class="line"><span class="output">  "commit": { "message": "etch set tasks/review.md frontmatter.status" }</span></div>
         <div class="line"><span class="output">}</span></div>
       </div>
     </div>
-    <p>The plan is a structured JSON description of <em>exactly</em> what would change. It's produced by the same code path as real execution, stopped one step before side effects. A host runtime can present this to a human for approval and cache that approval by plan hash. For human review and mechanical replay, <code>--dry-run</code> lowers the same plan to a base-locked <code>git am</code>-compatible patch when representable.</p>
+    <p>The plan is a structured JSON description of <em>exactly</em> what would change. It's produced by the same code path as real execution, stopped one step before side effects. A host runtime can present this to a human for approval and cache that approval by plan hash. For human review and mechanical replay, <code>--dry-run</code> lowers the plan to a <code>git am</code>-compatible mailbox patch.</p>
   </div>
 </section>
 
@@ -600,18 +584,14 @@ $ echo 'set config.json settings.theme "dark"' | etch run -</code></pre>
       <span class="stage-desc">Compute changes</span>
     </div>
     <div class="pipeline-stage" data-stage="2" onclick="setStage(2)">
-      <span class="stage-label">Validate</span>
-      <span class="stage-desc">Check inputs</span>
-    </div>
-    <div class="pipeline-stage" data-stage="3" onclick="setStage(3)">
       <span class="stage-label">Build</span>
       <span class="stage-desc">Create tree</span>
     </div>
-    <div class="pipeline-stage" data-stage="4" onclick="setStage(4)">
+    <div class="pipeline-stage" data-stage="3" onclick="setStage(3)">
       <span class="stage-label">Commit</span>
-      <span class="stage-desc">Update ref</span>
+      <span class="stage-desc">CAS update ref</span>
     </div>
-    <div class="pipeline-stage" data-stage="5" onclick="setStage(5)">
+    <div class="pipeline-stage" data-stage="4" onclick="setStage(4)">
       <span class="stage-label">Materialize</span>
       <span class="stage-desc">Checkout paths</span>
     </div>
@@ -643,10 +623,10 @@ $ echo 'set config.json settings.theme "dark"' | etch run -</code></pre>
     </div>
   </div>
 
-  <p>Each invocation builds its commit in an isolated temporary index&mdash;it never uses your staging area as transaction state, and unrelated dirty files are ignored. After the commit lands, etch materializes only the touched paths into your working tree by default. On conflict, etch automatically re-reads the latest observed state and retries (up to <code>--retries</code>, default 8). The caller never sees the retry unless the budget is exhausted.</p>
+  <p>Each invocation reads its input files from the committed state at HEAD and builds its commit in an isolated temporary index&mdash;it never uses your staging area as transaction state, and unrelated dirty files are ignored. After the commit lands, etch materializes only the touched paths into your working tree by default. On conflict, etch automatically re-reads the latest HEAD and retries (up to <code>--retries</code>, default 3). The caller never sees the retry unless the budget is exhausted.</p>
 
   <div class="callout blue">
-    <strong>Two checks, not one.</strong> etch validates that the files it read haven't changed on disk (read-set validation) <em>and</em> that the branch ref hasn't moved (ref CAS). Both are necessary: dirty working-tree edits don't move refs, and concurrent commits don't touch the working tree.
+    <strong>HEAD, not the working tree.</strong> etch always reads from the committed state at HEAD, not from dirty checkout files. This means local edits to a file don't affect etch's input&mdash;only committed content matters. Consistency is enforced by a compare-and-swap on the branch ref at commit time: if another writer moved HEAD since planning began, the transaction restarts.
   </div>
 </section>
 
@@ -685,7 +665,7 @@ plan=$(etch --plan set tasks/review.md frontmatter.status "complete")
 # Step 2: present to user, get approval, cache the plan hash
 
 # Step 3: future host integrations can execute only if the plan still matches</code></pre>
-  <p>If <em>anything</em> changed after approval&mdash;file contents, branch state, even etch's own behavior across a version upgrade&mdash;the recomputed hash changes. The execution pin is an integration feature, not required for the standalone CLI MVP.</p>
+  <p>If <em>anything</em> changed after approval&mdash;file contents, branch state, even etch's own behavior across a version upgrade&mdash;the recomputed hash changes. The execution pin is an integration feature, not required for the standalone CLI.</p>
 </section>
 
 <!-- COMPARISON -->
@@ -699,7 +679,7 @@ plan=$(etch --plan set tasks/review.md frontmatter.status "complete")
         <th>Property</th>
         <th>etch</th>
         <th>sed/awk</th>
-        <th>jq</th>
+        <th>jq/yq</th>
         <th>patch/diff</th>
       </tr>
     </thead>
@@ -708,7 +688,7 @@ plan=$(etch --plan set tasks/review.md frontmatter.status "complete")
         <td>Format-aware</td>
         <td class="yes">Yes</td>
         <td class="no">No</td>
-        <td class="yes">JSON only</td>
+        <td class="yes">JSON/YAML</td>
         <td class="no">No</td>
       </tr>
       <tr>
@@ -748,7 +728,7 @@ plan=$(etch --plan set tasks/review.md frontmatter.status "complete")
       </tr>
     </tbody>
   </table>
-  <p style="font-size: 0.82rem; color: var(--fg-dim);">* jq is read-only by design; writing requires shell redirection, which reintroduces the blast-radius problem.</p>
+  <p style="font-size: 0.82rem; color: var(--fg-dim);">* jq/yq are read-only by design; writing requires shell redirection, which reintroduces the blast-radius problem.</p>
 </section>
 
 <!-- INTERACTIVE BUILDER -->
@@ -762,12 +742,16 @@ plan=$(etch --plan set tasks/review.md frontmatter.status "complete")
         <option value="set">set</option>
         <option value="delete">delete</option>
         <option value="append">append</option>
+        <option value="add">add</option>
+        <option value="remove">remove</option>
         <option value="replace-section">replace-section</option>
+        <option value="create">create</option>
       </select>
       <select id="builder-format" onchange="updateBuilder()">
         <option value="md">Markdown (.md)</option>
         <option value="json">JSON (.json)</option>
         <option value="yaml">YAML (.yaml)</option>
+        <option value="csv">CSV (.csv)</option>
       </select>
     </div>
     <div class="builder-output" id="builder-output"></div>
@@ -776,7 +760,7 @@ plan=$(etch --plan set tasks/review.md frontmatter.status "complete")
 
 <!-- FOOTER -->
 <footer>
-  <p>etch is open-source software. More details at <code>github.com/brandonbloom/etch</code> when available.</p>
+  <p>etch is open-source software. <code>github.com/brandonbloom/etch</code></p>
 </footer>
 
 </div>
@@ -797,11 +781,10 @@ document.querySelectorAll('.tab-btn').forEach(btn => {
 // --- Pipeline ---
 const stageDetails = [
   '<strong>Parse.</strong> The input (CLI args or script lines) is tokenized using shell quoting rules. No expansion of any kind—what you wrote is what the operations receive. Heredocs are resolved at this stage.',
-  '<strong>Plan.</strong> Each operation is evaluated against the input file state to compute the exact bytes that would result. The plan captures before/after hashes for every touched file, the resulting tree OID, and the commit message. This is the same structure emitted by <code>--plan</code>.',
-  '<strong>Validate.</strong> etch re-hashes every file it read during planning and confirms they haven\'t changed on disk (read-set validation). It also records the branch ref for the CAS check at commit time. If inputs are stale, etch re-plans automatically.',
-  '<strong>Build.</strong> Candidate file contents are written to an isolated temporary git index—never the user\'s live index. etch builds the tree object that the commit will point at.',
-  '<strong>Commit.</strong> etch creates the commit object and updates the branch ref using a compare-and-swap: it only succeeds if the ref still points to the expected base commit. If another writer snuck in, the transaction restarts from Plan.',
-  '<strong>Materialize.</strong> By default, etch checks out the touched paths from the committed tree into the working tree and live index so the checkout reflects the new HEAD. <code>--no-checkout</code> skips this phase.'
+  '<strong>Plan.</strong> etch reads each target file from the committed state at HEAD (never the working tree) and applies each operation to compute the exact bytes that would result. The plan captures before/after SHA-256 hashes for every touched file and the commit message. This is the same structure emitted by <code>--plan</code>.',
+  '<strong>Build.</strong> Candidate file contents are written to an isolated temporary git index—never the user\'s live index. etch builds the tree object that the commit will point at, then creates the commit object.',
+  '<strong>Commit.</strong> etch updates the branch ref using a compare-and-swap: it only succeeds if the ref still points to the same HEAD recorded when planning began. If another writer snuck in, the entire transaction restarts from Plan (up to <code>--retries</code>, default 3).',
+  '<strong>Materialize.</strong> By default, etch writes the touched paths from the committed tree into the working tree and live index so the checkout reflects the new HEAD. <code>--no-checkout</code> skips this phase. If local edits conflict, etch writes conflict markers and reports the paths.'
 ];
 
 function setStage(n) {
@@ -817,16 +800,32 @@ function setStage(n) {
 const examples = {
   'set-md':    { cmd: 'etch set tasks/review.md frontmatter.snooze "2026-05-10"',   commit: 'etch set tasks/review.md frontmatter.snooze', note: 'Adds a snooze date to the task\'s YAML frontmatter.' },
   'set-json':  { cmd: 'etch set state.json agents.assistant.last_run "2026-04-27"',  commit: 'etch set state.json agents.assistant.last_run', note: 'Navigates the JSON structure and sets the nested key.' },
-  'set-yaml':  { cmd: 'etch set config.yaml feeds.daily_digest.enabled true',        commit: 'etch set config.yaml feeds.daily_digest.enabled', note: 'Sets a value in the YAML file, preserving comments and formatting.' },
+  'set-yaml':  { cmd: 'etch set config.yaml feeds.daily_digest.enabled true',        commit: 'etch set config.yaml feeds.daily_digest.enabled', note: 'Sets a value in the YAML file, preserving structure.' },
+  'set-csv':   { cmd: 'etch table set data.csv status=open,status done',               commit: 'etch table set data.csv status=open,status', note: 'Sets the status column to "done" for the row where status is "open".' },
   'delete-md': { cmd: 'etch delete tasks/review.md frontmatter.draft',               commit: 'etch delete tasks/review.md frontmatter.draft', note: 'Removes the "draft" key from the markdown file\'s frontmatter.' },
   'delete-json': { cmd: 'etch delete state.json cache.stale_entry',                  commit: 'etch delete state.json cache.stale_entry', note: 'Removes the key from the JSON object.' },
   'delete-yaml': { cmd: 'etch delete config.yaml old.unused_key',                    commit: 'etch delete config.yaml old.unused_key', note: 'Removes the key from the YAML file.' },
+  'delete-csv':  { cmd: 'etch table row delete data.csv status=closed',                commit: 'etch table row delete data.csv status=closed', note: 'Deletes the row where status equals "closed".' },
   'append-md': { cmd: 'etch append people/alice.md frontmatter.tags \'"vip"\'',      commit: 'etch append people/alice.md frontmatter.tags', note: 'Appends a tag to the list in the dossier\'s frontmatter.' },
   'append-json': { cmd: 'etch append log.json entries \'{"date":"2026-04-27","event":"sync"}\'', commit: 'etch append log.json entries', note: 'Appends an object to a JSON array.' },
   'append-yaml': { cmd: 'etch append config.yaml plugins \'"analytics"\'',           commit: 'etch append config.yaml plugins', note: 'Appends to a YAML sequence.' },
+  'append-csv':  { cmd: 'etch table row append data.csv \'{"id":"3","status":"open"}\'', commit: 'etch table row append data.csv', note: 'Appends a row to the CSV table.' },
+  'add-md':    { cmd: 'etch add people/alice.md frontmatter.tags \'"vip"\'',          commit: 'etch add people/alice.md frontmatter.tags', note: 'Ensures the tag is in the array, no-op if already present.' },
+  'add-json':  { cmd: 'etch add config.json features \'"dark-mode"\'',              commit: 'etch add config.json features', note: 'Ensures "dark-mode" is in the array; idempotent.' },
+  'add-yaml':  { cmd: 'etch add config.yaml plugins \'"analytics"\'',               commit: 'etch add config.yaml plugins', note: 'Ensures "analytics" is in the sequence; idempotent.' },
+  'add-csv':   { cmd: 'etch table column add data.csv priority --default medium',      commit: 'etch table column add data.csv priority', note: 'Adds a "priority" column with a default value; no-op if already present.' },
+  'remove-md': { cmd: 'etch remove people/alice.md frontmatter.tags \'"vip"\'',       commit: 'etch remove people/alice.md frontmatter.tags', note: 'Removes "vip" from the tags array if present.' },
+  'remove-json': { cmd: 'etch remove config.json features \'"dark-mode"\'',         commit: 'etch remove config.json features', note: 'Removes "dark-mode" from the array if present.' },
+  'remove-yaml': { cmd: 'etch remove config.yaml plugins \'"analytics"\'',          commit: 'etch remove config.yaml plugins', note: 'Removes "analytics" from the sequence if present.' },
+  'remove-csv':  { cmd: 'etch table column delete data.csv legacy_field',              commit: 'etch table column delete data.csv legacy_field', note: 'Deletes the "legacy_field" column from the CSV.' },
   'replace-section-md': { cmd: 'etch replace-section people/alice.md "## Notes" <<EOF\nDiscussed project timeline. Agreed on May deadline.\nEOF', commit: 'etch replace-section people/alice.md "## Notes"', note: 'Replaces everything under ## Notes until the next heading of equal or higher level.' },
   'replace-section-json': { cmd: '# replace-section is a markdown operation.\n# For JSON, use set with the target path instead:\netch set state.json status.block \'{"key": "value"}\'', commit: 'etch set state.json status.block', note: 'Section replacement is a markdown concept. For structured formats, use set.' },
   'replace-section-yaml': { cmd: '# replace-section is a markdown operation.\n# For YAML, use set with the target path instead:\netch set config.yaml settings.block \'{"key": "value"}\'', commit: 'etch set config.yaml settings.block', note: 'Section replacement is a markdown concept. For structured formats, use set.' },
+  'replace-section-csv': { cmd: '# replace-section is a markdown operation.\n# For CSV, use table operations instead:\netch table set data.csv all,status done', commit: 'etch table set data.csv all,status', note: 'Section replacement is a markdown concept. For CSV, use table operations.' },
+  'create-md':   { cmd: 'etch create people/bob.md',                                  commit: 'etch create people/bob.md', note: 'Creates a new empty markdown file. Fails if the file already exists.' },
+  'create-json': { cmd: 'etch create state.json',                                     commit: 'etch create state.json', note: 'Creates a new JSON file with default content {}. Fails if it already exists.' },
+  'create-yaml': { cmd: 'etch create config.yaml',                                    commit: 'etch create config.yaml', note: 'Creates a new YAML file with default content {}. Fails if it already exists.' },
+  'create-csv':  { cmd: 'etch create data.csv',                                       commit: 'etch create data.csv', note: 'Creates a new empty CSV file. Fails if it already exists.' },
 };
 
 function updateBuilder() {
