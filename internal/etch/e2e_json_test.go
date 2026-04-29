@@ -36,6 +36,95 @@ func TestE2EJSONSetCommitsAndMaterializes(t *testing.T) {
 	}
 }
 
+func TestE2EJSONSetCreatesMissingFile(t *testing.T) {
+	dir := initRepo(t)
+	writeFile(t, dir, "README.md", "# hi\n")
+	commitAll(t, dir, "initial")
+	chdir(t, dir)
+
+	var out, errb bytes.Buffer
+	code, err := runCLI([]string{"set", "a.json", "x", "1"}, &out, &errb)
+	if err != nil || code != exitOK {
+		t.Fatalf("runCLI code=%d err=%v stderr=%s", code, err, errb.String())
+	}
+	headBytes := testGit(t, dir, "show", "HEAD:a.json")
+	if !strings.Contains(headBytes, `"x": 1`) {
+		t.Fatalf("HEAD a.json = %s", headBytes)
+	}
+	wt, readErr := os.ReadFile(filepath.Join(dir, "a.json"))
+	if readErr != nil {
+		t.Fatal(readErr)
+	}
+	if string(wt) != headBytes {
+		t.Fatalf("worktree not materialized:\nwt=%s\nhead=%s", wt, headBytes)
+	}
+}
+
+func TestE2EJSONAppendAndAddCreateMissingFile(t *testing.T) {
+	dir := initRepo(t)
+	writeFile(t, dir, "README.md", "# hi\n")
+	commitAll(t, dir, "initial")
+	chdir(t, dir)
+
+	var out, errb bytes.Buffer
+	code, err := runCLI([]string{"append", "a.json", "items", "1"}, &out, &errb)
+	if err != nil || code != exitOK {
+		t.Fatalf("append code=%d err=%v stderr=%s", code, err, errb.String())
+	}
+	code, err = runCLI([]string{"add", "b.json", "items", "1"}, &out, &errb)
+	if err != nil || code != exitOK {
+		t.Fatalf("add code=%d err=%v stderr=%s", code, err, errb.String())
+	}
+	for _, path := range []string{"a.json", "b.json"} {
+		headBytes := testGit(t, dir, "show", "HEAD:"+path)
+		if !strings.Contains(headBytes, `"items": [`) || !strings.Contains(headBytes, "1") {
+			t.Fatalf("HEAD %s = %s", path, headBytes)
+		}
+	}
+}
+
+func TestE2ECreateDefaultContent(t *testing.T) {
+	dir := initRepo(t)
+	writeFile(t, dir, "README.md", "# hi\n")
+	commitAll(t, dir, "initial")
+	chdir(t, dir)
+
+	var out, errb bytes.Buffer
+	code, err := runCLI([]string{"create", "a.json"}, &out, &errb)
+	if err != nil || code != exitOK {
+		t.Fatalf("runCLI code=%d err=%v stderr=%s", code, err, errb.String())
+	}
+	headBytes := testGit(t, dir, "show", "HEAD:a.json")
+	if headBytes != "{}" {
+		t.Fatalf("HEAD a.json = %q", headBytes)
+	}
+}
+
+func TestE2ECreateExtensionDefaults(t *testing.T) {
+	dir := initRepo(t)
+	writeFile(t, dir, "README.md", "# hi\n")
+	commitAll(t, dir, "initial")
+	chdir(t, dir)
+
+	cases := map[string]string{
+		"config.yaml": "{}\n",
+		"note.md":     "",
+		"data.csv":    "",
+		"plain.txt":   "{}",
+	}
+	for path, want := range cases {
+		var out, errb bytes.Buffer
+		code, err := runCLI([]string{"create", path}, &out, &errb)
+		if err != nil || code != exitOK {
+			t.Fatalf("create %s code=%d err=%v stderr=%s", path, code, err, errb.String())
+		}
+		headBytes := testGit(t, dir, "show", "HEAD:"+path)
+		if headBytes != want {
+			t.Fatalf("HEAD %s = %q, want %q", path, headBytes, want)
+		}
+	}
+}
+
 func TestE2EJSONSetUsesHEADNotDirtyWorktreeForCommit(t *testing.T) {
 	dir := initRepo(t)
 	writeFile(t, dir, "state.json", `{"status":"open","local":false}`+"\n")

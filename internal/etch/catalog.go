@@ -24,7 +24,7 @@ func verbCatalog() []VerbInfo {
 		{"add", "add <path> <selector> <value>", "Ensure an array contains a value.", ClassIdempotent, true},
 		{"remove", "remove <path> <selector> <value>", "Ensure an array does not contain a value.", ClassIdempotent, true},
 		{"replace-section", "replace-section <path> <heading> <content>", "Replace the body under one Markdown ATX heading.", ClassIdempotent, true},
-		{"create", "create <path> <content>", "Create a new file.", ClassIdempotent, true},
+		{"create", "create <path> [<content>]", "Create a new file; omitted content uses an extension-aware default.", ClassIdempotent, true},
 		{"move", "move <src> <dst>", "Move a file path.", ClassIdempotent, true},
 		{"copy", "copy <src> <dst>", "Copy a file path.", ClassIdempotent, true},
 		{"exists", "exists <path>", "Guard that a path exists in the admitted input view.", ClassGuard, true},
@@ -88,10 +88,14 @@ func DecodeOperation(stmt Statement) (Operation, error) {
 		}
 		op.Verb, op.Kind, op.Class, op.Path, op.Value = "contains", "guard", ClassGuard, t[1], t[2]
 	case "create":
-		if len(t) != 3 {
-			return op, usagef("usage: etch create <path> <content>")
+		if len(t) != 2 && len(t) != 3 {
+			return op, usagef("usage: etch create <path> [<content>]")
 		}
-		op.Verb, op.Kind, op.Class, op.Path, op.Value = "create", "file", ClassIdempotent, t[1], t[2]
+		value := defaultCreateContent(t[1])
+		if len(t) == 3 {
+			value = t[2]
+		}
+		op.Verb, op.Kind, op.Class, op.Path, op.Value = "create", "file", ClassIdempotent, t[1], value
 		op.Target = PlanTarget{Path: t[1]}
 	case "copy", "move":
 		if len(t) != 3 {
@@ -512,6 +516,19 @@ func isMarkdownPath(path string) bool {
 
 func isCSVPath(path string) bool {
 	return strings.EqualFold(filepath.Ext(path), ".csv")
+}
+
+func defaultCreateContent(path string) string {
+	switch {
+	case isJSONPath(path):
+		return "{}"
+	case isYAMLPath(path):
+		return "{}\n"
+	case isMarkdownPath(path), isCSVPath(path):
+		return ""
+	default:
+		return "{}"
+	}
 }
 
 const shortHelp = `usage: etch [--plan|--dry-run] [flags] <verb> [args...]

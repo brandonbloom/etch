@@ -53,6 +53,30 @@ func TestYAMLAndFrontmatterVerbs(t *testing.T) {
 	}
 }
 
+func TestYAMLAndFrontmatterVerbsCreateMissingFiles(t *testing.T) {
+	dir := initRepo(t)
+	writeFile(t, dir, "README.md", "# hi\n")
+	commitAll(t, dir, "initial")
+	chdir(t, dir)
+
+	runOK(t, "append", "config.yaml", "tags", `"b"`)
+	runOK(t, "set", "note.md", "frontmatter.status", "draft")
+	runOK(t, "add", "other.md", "frontmatter.tags", `"x"`)
+
+	yamlOut := testGit(t, dir, "show", "HEAD:config.yaml")
+	if !strings.Contains(yamlOut, "tags:") || !strings.Contains(yamlOut, "- b") {
+		t.Fatalf("YAML output:\n%s", yamlOut)
+	}
+	mdOut := testGit(t, dir, "show", "HEAD:note.md")
+	if !strings.HasPrefix(mdOut, "---\n") || !strings.Contains(mdOut, "status: draft") {
+		t.Fatalf("frontmatter output:\n%s", mdOut)
+	}
+	otherOut := testGit(t, dir, "show", "HEAD:other.md")
+	if !strings.HasPrefix(otherOut, "---\n") || !strings.Contains(otherOut, "- x") {
+		t.Fatalf("frontmatter add output:\n%s", otherOut)
+	}
+}
+
 func TestMarkdownReplaceSection(t *testing.T) {
 	dir := initRepo(t)
 	writeFile(t, dir, "note.md", "# Title\n\n## Notes\nold\n\n## Next\nkeep\n")

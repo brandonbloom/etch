@@ -340,13 +340,34 @@ func planFileOp(w *Workspace, files map[string]fileChange, op Operation) (Operat
 }
 
 func planStructured(w *Workspace, files map[string]fileChange, op Operation) (Operation, bool, error) {
-	ch, res, err := ensureFileState(w, files, op.Path, true, true)
+	ch, res, err := ensureFileState(w, files, op.Path, false, true)
 	if err != nil {
 		if op.Target.Part == "frontmatter" && (op.Verb == "delete" || op.Verb == "remove") {
 			op.Noop = true
 			return op, false, nil
 		}
 		return op, false, err
+	}
+	if ch.AbsentAfter {
+		switch op.Verb {
+		case "delete", "remove":
+			op.Path = res.Clean
+			op.Target.Path = res.Clean
+			op.RepoPath = res.Repo
+			op.Noop = true
+			fillDescriptor(&op)
+			return op, false, nil
+		case "set", "append", "add":
+			if isJSONPath(res.Clean) || isYAMLPath(res.Clean) {
+				ch.After = []byte("{}\n")
+				ch.AbsentAfter = false
+			} else if op.Target.Part == "frontmatter" && isMarkdownPath(res.Clean) {
+				ch.After = []byte{}
+				ch.AbsentAfter = false
+			} else {
+				return op, false, failf("%s is missing", res.Clean)
+			}
+		}
 	}
 	out, changed, err := evalStructuredBytes(res.Clean, op.Target.Part, op.Target.Selector, op.Verb, op.Value, ch.After)
 	if err != nil {
