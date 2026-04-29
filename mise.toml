@@ -1,0 +1,9 @@
+[env]
+ETCH_HOME = "{{ config_root }}"
+GOCACHE = "{{ config_root }}/.cache/go-build"
+GOMODCACHE = "{{ config_root }}/.cache/go-mod"
+_.path = ["{{ config_root }}/bin"]
+
+[tasks.build]
+description = "Build etch binaries into ./bin"
+run = "mkdir -p ./bin && go build -o ./bin/ ./cmd/..."
