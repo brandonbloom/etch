@@ -528,23 +528,31 @@ Core flags:
   --retries <n>          retry CAS conflicts, default 3
   --allow-empty          permit empty commit for mutating invocations
 
-Use "etch help" for the verb table.
+Use "etch help" for the porcelain verb table, or "etch help --all" for plumbing commands too.
 `
 
-func printHelp(w io.Writer, topic string) error {
+func printHelp(w io.Writer, topic string, all bool) error {
 	switch topic {
 	case "":
 		fmt.Fprintln(w, "etch mutates structured files and commits each successful mutating invocation.")
 		fmt.Fprintln(w)
-		fmt.Fprintln(w, "Commands:")
+		if all {
+			fmt.Fprintln(w, "Commands:")
+		} else {
+			fmt.Fprintln(w, "Porcelain commands:")
+		}
 		for _, v := range verbCatalog() {
-			if !v.Canonical {
+			if !v.Canonical || (!all && isPlumbingVerb(v)) {
 				continue
 			}
 			fmt.Fprintf(w, "  %-31s %-16s %s\n", v.Signature, v.Class, v.Description)
 		}
 		fmt.Fprintln(w)
-		fmt.Fprint(w, "Topics: model, selectors, values, plans, security, conflicts, table, csv\n")
+		if all {
+			fmt.Fprint(w, "Topics: model, selectors, values, plans, security, conflicts, table, csv\n")
+		} else {
+			fmt.Fprint(w, "Topics: model, selectors, values, plans, security, conflicts, table, csv. Use --all for plumbing commands.\n")
+		}
 	case "selectors":
 		fmt.Fprint(w, selectorsHelp)
 	case "values":
@@ -563,6 +571,15 @@ func printHelp(w io.Writer, topic string) error {
 		return usagef("unknown help topic %s", topic)
 	}
 	return nil
+}
+
+func isPlumbingVerb(v VerbInfo) bool {
+	for _, prefix := range []string{"json ", "yaml ", "frontmatter ", "md ", "csv "} {
+		if strings.HasPrefix(v.Name, prefix) {
+			return true
+		}
+	}
+	return false
 }
 
 const selectorsHelp = `Selectors are singular JSONPath-style paths.

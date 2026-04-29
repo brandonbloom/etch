@@ -63,13 +63,18 @@ func runCLI(args []string, stdout, stderr io.Writer) (exitCode, error) {
 	switch rest[0] {
 	case "help":
 		topic := ""
-		if len(rest) > 2 {
-			return exitUsage, usagef("usage: etch help [topic]")
+		all := false
+		for _, arg := range rest[1:] {
+			if arg == "--all" {
+				all = true
+				continue
+			}
+			if topic != "" {
+				return exitUsage, usagef("usage: etch help [--all] [topic]")
+			}
+			topic = arg
 		}
-		if len(rest) == 2 {
-			topic = rest[1]
-		}
-		return exitOK, printHelp(stdout, topic)
+		return exitOK, printHelp(stdout, topic, all)
 	case "version":
 		if len(rest) != 1 {
 			return exitUsage, usagef("usage: etch version")
@@ -109,7 +114,8 @@ func parseGlobalFlags(args []string) (GlobalOptions, []string, error) {
 		}
 		if arg == "--help" {
 			rest = append(rest, "help")
-			continue
+			rest = append(rest, args[i+1:]...)
+			return opts, rest, nil
 		}
 		if arg == "--version" {
 			rest = append(rest, "version")
