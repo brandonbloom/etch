@@ -77,6 +77,28 @@ func TestYAMLAndFrontmatterVerbsCreateMissingFiles(t *testing.T) {
 	}
 }
 
+func TestYAMLSetHexdumpLikeStringDoesNotParseJSONPrefix(t *testing.T) {
+	dir := initRepo(t)
+	writeFile(t, dir, "doc.yml", "body: value\n")
+	commitAll(t, dir, "initial")
+	chdir(t, dir)
+
+	hexdump := "00000000  aa bb cc dd  |....|\n00000010  00 11 22 33  |..\"3|\n"
+	runOK(t, "set", "doc.yml", "body", hexdump)
+
+	yamlOut := testGit(t, dir, "show", "HEAD:doc.yml")
+	if !strings.Contains(yamlOut, "00000000") || !strings.Contains(yamlOut, "00000010") {
+		t.Fatalf("YAML output lost hexdump string:\n%s", yamlOut)
+	}
+	if strings.Contains(yamlOut, "body: 0.0") {
+		t.Fatalf("YAML output parsed hexdump as number:\n%s", yamlOut)
+	}
+	subject := stringsTrim(testGit(t, dir, "log", "-1", "--format=%s"))
+	if strings.HasSuffix(subject, " 0") {
+		t.Fatalf("commit subject used JSON-prefix preview: %q", subject)
+	}
+}
+
 func TestMarkdownReplaceSection(t *testing.T) {
 	dir := initRepo(t)
 	writeFile(t, dir, "note.md", "# Title\n\n## Notes\nold\n\n## Next\nkeep\n")

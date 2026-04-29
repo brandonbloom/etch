@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"encoding/json"
 	"fmt"
+	"io"
 	"math"
 	"reflect"
 	"strconv"
@@ -15,7 +16,7 @@ func parseValue(raw string) any {
 	var v any
 	dec := json.NewDecoder(strings.NewReader(raw))
 	dec.UseNumber()
-	if err := dec.Decode(&v); err == nil && dec.Decode(&struct{}{}) != nil {
+	if err := dec.Decode(&v); err == nil && dec.Decode(&struct{}{}) == io.EOF {
 		return normalizeJSONValue(v)
 	}
 	return raw
@@ -128,7 +129,7 @@ func decodeJSON(b []byte) (any, bool, error) {
 	if err := dec.Decode(&v); err != nil {
 		return nil, bom, err
 	}
-	if dec.Decode(&struct{}{}) == nil {
+	if err := dec.Decode(&struct{}{}); err != io.EOF {
 		return nil, bom, failf("JSON input contains trailing data")
 	}
 	return normalizeJSONValue(v), bom, nil
