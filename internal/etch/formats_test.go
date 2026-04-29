@@ -87,8 +87,14 @@ func TestYAMLSetHexdumpLikeStringDoesNotParseJSONPrefix(t *testing.T) {
 	runOK(t, "set", "doc.yml", "body", hexdump)
 
 	yamlOut := testGit(t, dir, "show", "HEAD:doc.yml")
+	if !strings.Contains(yamlOut, "body: |") {
+		t.Fatalf("YAML output did not use a literal block scalar:\n%s", yamlOut)
+	}
 	if !strings.Contains(yamlOut, "00000000") || !strings.Contains(yamlOut, "00000010") {
 		t.Fatalf("YAML output lost hexdump string:\n%s", yamlOut)
+	}
+	if strings.Contains(yamlOut, `\n00000010`) {
+		t.Fatalf("YAML output escaped newlines instead of using block content:\n%s", yamlOut)
 	}
 	if strings.Contains(yamlOut, "body: 0.0") {
 		t.Fatalf("YAML output parsed hexdump as number:\n%s", yamlOut)
@@ -96,6 +102,23 @@ func TestYAMLSetHexdumpLikeStringDoesNotParseJSONPrefix(t *testing.T) {
 	subject := stringsTrim(testGit(t, dir, "log", "-1", "--format=%s"))
 	if strings.HasSuffix(subject, " 0") {
 		t.Fatalf("commit subject used JSON-prefix preview: %q", subject)
+	}
+}
+
+func TestFrontmatterMultilineStringUsesLiteralBlock(t *testing.T) {
+	dir := initRepo(t)
+	writeFile(t, dir, "note.md", "# Note\n")
+	commitAll(t, dir, "initial")
+	chdir(t, dir)
+
+	runOK(t, "set", "note.md", "frontmatter.body", "line one\nline two\n")
+
+	mdOut := testGit(t, dir, "show", "HEAD:note.md")
+	if !strings.Contains(mdOut, "body: |") || !strings.Contains(mdOut, "  line one\n  line two\n") {
+		t.Fatalf("frontmatter did not use literal block scalar:\n%s", mdOut)
+	}
+	if strings.Contains(mdOut, `line one\nline two`) {
+		t.Fatalf("frontmatter escaped newlines instead of using block content:\n%s", mdOut)
 	}
 }
 

@@ -51,7 +51,7 @@ func evalYAML(selector, verb string, value any, before []byte) ([]byte, bool, er
 	if err != nil {
 		return nil, false, err
 	}
-	out, err := yaml.Marshal(next)
+	out, err := marshalYAML(next)
 	if err != nil {
 		return nil, false, err
 	}
@@ -85,6 +85,10 @@ func yamlToJSON(v any) any {
 	}
 }
 
+func marshalYAML(v any) ([]byte, error) {
+	return yaml.MarshalWithOptions(v, yaml.UseLiteralStyleIfMultiline(true))
+}
+
 func evalFrontmatter(path, selector, verb string, value any, before []byte) ([]byte, bool, error) {
 	raw, bom := trimUTF8BOM(before)
 	if !utf8.Valid(raw) {
@@ -108,7 +112,7 @@ func evalFrontmatter(path, selector, verb string, value any, before []byte) ([]b
 	if err != nil {
 		return nil, false, err
 	}
-	yamlBytes, err := yaml.Marshal(next)
+	yamlBytes, err := marshalYAML(next)
 	if err != nil {
 		return nil, false, err
 	}
