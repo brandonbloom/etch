@@ -2,12 +2,12 @@ package etch
 
 import (
 	"fmt"
-	"strconv"
 	"strings"
 	"unicode"
-	"unicode/utf8"
 
 	"github.com/brandonbloom/etch/internal/jsonx"
+	"github.com/theory/jsonpath"
+	"github.com/theory/jsonpath/spec"
 )
 
 type selectorPart struct {
@@ -28,129 +28,42 @@ func ParseSelector(selector string) ([]selectorPart, error) {
 	if selector == "" {
 		return nil, usagef("empty selector")
 	}
-	s := selector
-	if s == "$" {
-		return nil, nil
-	}
-	if strings.HasPrefix(s, "$") {
-		s = s[1:]
-	} else if strings.HasPrefix(s, ".") {
+	query := selector
+	if strings.HasPrefix(selector, ".") {
 		return nil, usagef("relative selector must not start with dot")
+	} else if !strings.HasPrefix(selector, "$") {
+		if strings.HasPrefix(selector, "[") {
+			query = "$" + selector
+		} else {
+			query = "$." + selector
+		}
 	}
 	var parts []selectorPart
-	for len(s) > 0 {
-		switch s[0] {
-		case '.':
-			s = s[1:]
-			if s == "" {
-				return nil, usagef("selector ends after dot")
+	path, err := jsonpath.Parse(query)
+	if err != nil {
+		return nil, usagef("invalid selector syntax: %v", err)
+	}
+	for _, segment := range path.Query().Segments() {
+		if segment.IsDescendant() {
+			return nil, usagef("selector syntax can only address one node")
+		}
+		selectors := segment.Selectors()
+		if len(selectors) != 1 {
+			return nil, usagef("selector syntax can only address one node")
+		}
+		switch sel := selectors[0].(type) {
+		case spec.Name:
+			parts = append(parts, selectorPart{Key: string(sel), IsKey: true})
+		case spec.Index:
+			if sel < 0 {
+				return nil, usagef("negative indexes are not supported")
 			}
-			n := 0
-			for n < len(s) {
-				r, size := utf8.DecodeRuneInString(s[n:])
-				if n == 0 {
-					if !(r == '_' || unicode.IsLetter(r)) {
-						break
-					}
-				} else if !(r == '_' || unicode.IsLetter(r) || unicode.IsDigit(r)) {
-					break
-				}
-				n += size
-			}
-			if n == 0 {
-				return nil, usagef("invalid dotted selector segment")
-			}
-			parts = append(parts, selectorPart{Key: s[:n], IsKey: true})
-			s = s[n:]
-		case '[':
-			end, content, err := bracketContent(s)
-			if err != nil {
-				return nil, err
-			}
-			if content == "" {
-				return nil, usagef("empty bracket selector")
-			}
-			if content[0] == '"' || content[0] == '\'' {
-				if content[0] == '\'' {
-					return nil, usagef("selector bracket strings must use JSON double quotes")
-				}
-				var key string
-				if err := jsonx.Unmarshal([]byte(content), &key); err != nil {
-					return nil, usagef("invalid bracket string selector")
-				}
-				parts = append(parts, selectorPart{Key: key, IsKey: true})
-			} else {
-				if strings.HasPrefix(content, "-") {
-					return nil, usagef("negative indexes are not supported")
-				}
-				if strings.ContainsAny(content, ":,*?() ") {
-					return nil, usagef("selector syntax can only address one node")
-				}
-				n, err := strconv.Atoi(content)
-				if err != nil {
-					return nil, usagef("invalid array index %q", content)
-				}
-				parts = append(parts, selectorPart{Index: n})
-			}
-			s = s[end:]
+			parts = append(parts, selectorPart{Index: int(sel)})
 		default:
-			if len(parts) == 0 && !strings.HasPrefix(selector, "$") {
-				n := 0
-				for n < len(s) {
-					c := s[n]
-					if c == '.' || c == '[' {
-						break
-					}
-					n++
-				}
-				if n == 0 {
-					return nil, usagef("invalid selector")
-				}
-				key := s[:n]
-				if !isSimpleMember(key) {
-					return nil, usagef("invalid selector segment %q", key)
-				}
-				parts = append(parts, selectorPart{Key: key, IsKey: true})
-				s = s[n:]
-				continue
-			}
-			return nil, usagef("invalid selector syntax near %q", s)
+			return nil, usagef("selector syntax can only address one node")
 		}
 	}
 	return parts, nil
-}
-
-func bracketContent(s string) (int, string, error) {
-	if s == "" || s[0] != '[' {
-		return 0, "", usagef("internal selector parser error")
-	}
-	inString := false
-	escaped := false
-	quote := byte(0)
-	for i := 1; i < len(s); i++ {
-		c := s[i]
-		if escaped {
-			escaped = false
-			continue
-		}
-		if inString {
-			if c == '\\' {
-				escaped = true
-			} else if c == quote {
-				inString = false
-			}
-			continue
-		}
-		if c == '"' || c == '\'' {
-			inString = true
-			quote = c
-			continue
-		}
-		if c == ']' {
-			return i + 1, s[1:i], nil
-		}
-	}
-	return 0, "", usagef("unterminated bracket selector")
 }
 
 func renderSelector(parts []selectorPart) string {

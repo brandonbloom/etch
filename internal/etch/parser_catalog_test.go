@@ -67,9 +67,12 @@ func TestDecodeDirectAndScriptEquivalence(t *testing.T) {
 
 func TestNormalizeSelector(t *testing.T) {
 	tests := map[string]string{
-		"a.b[0]":             "$.a.b[0]",
-		`$["key.with.dots"]`: `$["key.with.dots"]`,
-		`["sp ace"]`:         `$["sp ace"]`,
+		"a.b[0]":                 "$.a.b[0]",
+		`$["key.with.dots"]`:     `$["key.with.dots"]`,
+		`$['key.with.dots']`:     `$["key.with.dots"]`,
+		`["sp ace"]`:             `$["sp ace"]`,
+		`$["fo\u00f8"]`:          "$.foø",
+		`$["tune \uD834\uDD1E"]`: `$["tune 𝄞"]`,
 	}
 	for input, want := range tests {
 		got, err := NormalizeSelector(input)
@@ -80,7 +83,7 @@ func TestNormalizeSelector(t *testing.T) {
 			t.Fatalf("NormalizeSelector(%q) = %q, want %q", input, got, want)
 		}
 	}
-	for _, bad := range []string{"$..a", "$.a[*]", "$.a[-1]", "$.a[0:2]"} {
+	for _, bad := range []string{"$..a", "$.a[*]", "$.a[-1]", "$.a[0:2]", `$["a","b"]`, "$[?(@.a)]"} {
 		if _, err := NormalizeSelector(bad); err == nil {
 			t.Fatalf("NormalizeSelector(%q) succeeded", bad)
 		}
