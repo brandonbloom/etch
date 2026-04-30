@@ -3,29 +3,22 @@ package etch
 import (
 	"bytes"
 	"encoding/csv"
-	"encoding/json"
 	"strconv"
 	"strings"
 	"unicode/utf8"
+
+	"github.com/brandonbloom/etch/internal/jsonx"
 )
 
 func evalStructuredBytes(path, part, selector, verb, rawValue string, before []byte) ([]byte, bool, error) {
-	value := parseValue(rawValue)
 	switch {
 	case part == "frontmatter":
+		value := parseValue(rawValue)
 		return evalFrontmatter(path, selector, verb, value, before)
 	case isJSONPath(path):
-		root, bom, err := decodeJSON(before)
-		if err != nil {
-			return nil, false, err
-		}
-		next, changed, err := mutateStructuredValue(root, selector, verb, value)
-		if err != nil {
-			return nil, false, err
-		}
-		out, err := encodeJSON(next, bom)
-		return out, changed || !bytes.Equal(out, before), err
+		return evalJSON(selector, verb, rawValue, before)
 	case isYAMLPath(path):
+		value := parseValue(rawValue)
 		return evalYAML(selector, verb, value, before)
 	default:
 		return nil, false, failf("cannot infer structured format for %s", path)
@@ -271,7 +264,7 @@ func mutateTable(td *tableData, op Operation) error {
 		td.Rows = out
 	case "table column add":
 		var knobs map[string]string
-		_ = json.Unmarshal([]byte(op.Value), &knobs)
+		_ = jsonx.Unmarshal([]byte(op.Value), &knobs)
 		if _, err := columnIndex(td.Header, op.Target.Column); err == nil {
 			return nil
 		}
@@ -310,7 +303,7 @@ func mutateTable(td *tableData, op Operation) error {
 
 func parseTableRow(raw string, header []string) ([]string, error) {
 	var m map[string]string
-	if err := json.Unmarshal([]byte(raw), &m); err != nil {
+	if err := jsonx.Unmarshal([]byte(raw), &m); err != nil {
 		return nil, failf("row-json must be a JSON object with string values")
 	}
 	known := map[string]bool{}

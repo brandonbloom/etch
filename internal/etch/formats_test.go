@@ -33,6 +33,54 @@ func TestJSONVerbs(t *testing.T) {
 	}
 }
 
+func TestJSONSetPreservesSurroundingSource(t *testing.T) {
+	before := []byte("{\n  \"z\": 0,\n  \"status\" : \"open\",\n  \"nested\": {\"keep\":true}\n}\n")
+
+	got, changed, err := evalJSON("status", "set", "complete", before)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !changed {
+		t.Fatal("evalJSON reported no change")
+	}
+	want := "{\n  \"z\": 0,\n  \"status\" : \"complete\",\n  \"nested\": {\"keep\":true}\n}\n"
+	if string(got) != want {
+		t.Fatalf("JSON output:\n%s\nwant:\n%s", got, want)
+	}
+}
+
+func TestJSONSetTargetsFirstDuplicateMember(t *testing.T) {
+	before := []byte(`{"status":"first","status":"second"}` + "\n")
+
+	got, changed, err := evalJSON("status", "set", "complete", before)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !changed {
+		t.Fatal("evalJSON reported no change")
+	}
+	want := `{"status":"complete","status":"second"}` + "\n"
+	if string(got) != want {
+		t.Fatalf("JSON output = %s, want %s", got, want)
+	}
+}
+
+func TestJSONSetMissingMemberUsesExistingSeparatorStyle(t *testing.T) {
+	before := []byte("{\n  \"z\" : 0\n}\n")
+
+	got, changed, err := evalJSON("status", "set", "complete", before)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !changed {
+		t.Fatal("evalJSON reported no change")
+	}
+	want := "{\n  \"z\" : 0,\n  \"status\" : \"complete\"\n}\n"
+	if string(got) != want {
+		t.Fatalf("JSON output:\n%s\nwant:\n%s", got, want)
+	}
+}
+
 func TestYAMLAndFrontmatterVerbs(t *testing.T) {
 	dir := initRepo(t)
 	writeFile(t, dir, "config.yaml", "tags:\n  - a\n")

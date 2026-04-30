@@ -3,7 +3,6 @@ package etch
 import (
 	"crypto/sha256"
 	"encoding/hex"
-	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
@@ -11,6 +10,8 @@ import (
 	"path/filepath"
 	"sort"
 	"strings"
+
+	"github.com/brandonbloom/etch/internal/jsonx"
 )
 
 const (
@@ -145,13 +146,11 @@ func shaHex(b []byte) string {
 }
 
 func jsonOut(w io.Writer, v any) error {
-	enc := json.NewEncoder(w)
-	enc.SetIndent("", "  ")
-	return enc.Encode(v)
+	return jsonx.WriteIndented(w, v)
 }
 
 func compactJSON(v any) string {
-	b, err := json.Marshal(v)
+	b, err := jsonx.Marshal(v)
 	if err != nil {
 		return fmt.Sprint(v)
 	}

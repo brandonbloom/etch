@@ -2,8 +2,13 @@
 ETCH_HOME = "{{ config_root }}"
 GOCACHE = "{{ config_root }}/.cache/go-build"
 GOMODCACHE = "{{ config_root }}/.cache/go-mod"
+GOEXPERIMENT = "jsonv2"
 _.path = ["{{ config_root }}/bin"]
 
 [tasks.build]
 description = "Build etch binaries into ./bin"
 run = "mkdir -p ./bin && go build -o ./bin/ ./cmd/..."
+
+[tasks.test]
+description = "Run all Go tests"
+run = "go test ./..."

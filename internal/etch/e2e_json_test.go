@@ -20,7 +20,7 @@ func TestE2EJSONSetCommitsAndMaterializes(t *testing.T) {
 		t.Fatalf("runCLI code=%d err=%v stderr=%s", code, err, errb.String())
 	}
 	headBytes := testGit(t, dir, "show", "HEAD:state.json")
-	if !strings.Contains(headBytes, `"status": "complete"`) {
+	if !strings.Contains(headBytes, `"status":"complete"`) {
 		t.Fatalf("HEAD state.json = %s", headBytes)
 	}
 	wt, readErr := os.ReadFile(filepath.Join(dir, "state.json"))
@@ -51,7 +51,7 @@ func TestE2EExplicitFalseBoolFlagsDoNotEnablePlanModes(t *testing.T) {
 		t.Fatalf("unexpected stdout for committing invocation:\n%s", out.String())
 	}
 	headBytes := testGit(t, dir, "show", "HEAD:state.json")
-	if !strings.Contains(headBytes, `"status": "complete"`) {
+	if !strings.Contains(headBytes, `"status":"complete"`) {
 		t.Fatalf("HEAD state.json = %s", headBytes)
 	}
 }
@@ -158,10 +158,10 @@ func TestE2EJSONSetUsesHEADNotDirtyWorktreeForCommit(t *testing.T) {
 		t.Fatalf("runCLI code=%d err=%v stderr=%s", code, err, errb.String())
 	}
 	headBytes := testGit(t, dir, "show", "HEAD:state.json")
-	if strings.Contains(headBytes, "dirty") || strings.Contains(headBytes, `"local": true`) {
+	if strings.Contains(headBytes, "dirty") || strings.Contains(headBytes, `"local":true`) {
 		t.Fatalf("dirty worktree swept into commit: %s", headBytes)
 	}
-	if !strings.Contains(headBytes, `"status": "complete"`) {
+	if !strings.Contains(headBytes, `"status":"complete"`) {
 		t.Fatalf("missing structural mutation: %s", headBytes)
 	}
 	wt, _ := os.ReadFile(filepath.Join(dir, "state.json"))

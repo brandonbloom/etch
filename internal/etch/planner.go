@@ -2,12 +2,12 @@ package etch
 
 import (
 	"bytes"
-	"encoding/json"
 	"errors"
 	"fmt"
 	"strings"
 	"time"
 
+	"github.com/brandonbloom/etch/internal/jsonx"
 	"github.com/lattice-substrate/json-canon/jcs"
 )
 
@@ -423,7 +423,7 @@ func canonicalPlanBytes(plan *Plan) []byte {
 	cp.Touched = nil
 	cp.Mutating = false
 	cp.Changed = false
-	b, err := json.Marshal(cp)
+	b, err := jsonx.Marshal(cp)
 	if err != nil {
 		panic(fmt.Sprintf("marshal internal plan: %v", err))
 	}

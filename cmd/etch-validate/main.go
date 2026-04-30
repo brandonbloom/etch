@@ -2,7 +2,6 @@ package main
 
 import (
 	"bytes"
-	"encoding/json"
 	"flag"
 	"fmt"
 	"os"
@@ -10,6 +9,8 @@ import (
 	"path/filepath"
 	"strings"
 	"time"
+
+	"github.com/brandonbloom/etch/internal/jsonx"
 )
 
 type result struct {
@@ -49,9 +50,7 @@ func main() {
 		runPlanDryRunEtch(bin),
 		runDirtyRecoveryEtch(bin),
 	}
-	enc := json.NewEncoder(os.Stdout)
-	enc.SetIndent("", "  ")
-	if err := enc.Encode(results); err != nil {
+	if err := jsonx.WriteIndented(os.Stdout, results); err != nil {
 		fmt.Fprintf(os.Stderr, "etch-validate: %v\n", err)
 		os.Exit(1)
 	}

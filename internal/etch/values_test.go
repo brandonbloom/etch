@@ -15,8 +15,8 @@ func TestParseValueRequiresWholeJSONLiteral(t *testing.T) {
 	}
 }
 
-func TestDecodeJSONRejectsTrailingJunk(t *testing.T) {
-	if _, _, err := decodeJSON([]byte(`{"ok": true} trailing`)); err == nil {
-		t.Fatal("decodeJSON accepted trailing junk")
+func TestDecodeJSONSpansRejectsTrailingJunk(t *testing.T) {
+	if _, err := decodeJSONSpans([]byte(`{"ok": true} trailing`)); err == nil {
+		t.Fatal("decodeJSONSpans accepted trailing junk")
 	}
 }

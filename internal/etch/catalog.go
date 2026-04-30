@@ -1,11 +1,12 @@
 package etch
 
 import (
-	"encoding/json"
 	"fmt"
 	"io"
 	"path/filepath"
 	"strings"
+
+	"github.com/brandonbloom/etch/internal/jsonx"
 )
 
 type VerbInfo struct {
@@ -455,7 +456,7 @@ func decodeTableColumnAdd(op Operation, csv bool, t []string) (Operation, error)
 
 func columnAddValue(after, def string) string {
 	m := map[string]string{"after": after, "default": def}
-	b, _ := json.Marshal(m)
+	b, _ := jsonx.Marshal(m)
 	return string(b)
 }
 

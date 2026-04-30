@@ -25,7 +25,7 @@ func TestMaterializationDirtyWorktreeConflictDoesNotRollbackCommit(t *testing.T)
 		t.Fatal("materialization conflict rolled back commit")
 	}
 	headBytes := testGit(t, dir, "show", "HEAD:state.json")
-	if !strings.Contains(headBytes, `"status": "complete"`) {
+	if !strings.Contains(headBytes, `"status":"complete"`) {
 		t.Fatalf("commit missing mutation: %s", headBytes)
 	}
 	wt, _ := os.ReadFile(filepath.Join(dir, "state.json"))

@@ -1,12 +1,13 @@
 package etch
 
 import (
-	"encoding/json"
 	"fmt"
 	"strconv"
 	"strings"
 	"unicode"
 	"unicode/utf8"
+
+	"github.com/brandonbloom/etch/internal/jsonx"
 )
 
 type selectorPart struct {
@@ -74,7 +75,7 @@ func ParseSelector(selector string) ([]selectorPart, error) {
 					return nil, usagef("selector bracket strings must use JSON double quotes")
 				}
 				var key string
-				if err := json.Unmarshal([]byte(content), &key); err != nil {
+				if err := jsonx.Unmarshal([]byte(content), &key); err != nil {
 					return nil, usagef("invalid bracket string selector")
 				}
 				parts = append(parts, selectorPart{Key: key, IsKey: true})
@@ -161,7 +162,7 @@ func renderSelector(parts []selectorPart) string {
 				b.WriteByte('.')
 				b.WriteString(p.Key)
 			} else {
-				enc, _ := json.Marshal(p.Key)
+				enc, _ := jsonx.Marshal(p.Key)
 				b.WriteByte('[')
 				b.Write(enc)
 				b.WriteByte(']')
