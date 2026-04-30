@@ -50,15 +50,34 @@ func TestHelpAllIncludesPlumbing(t *testing.T) {
 }
 
 func TestHelpAllThroughCLI(t *testing.T) {
-	for _, args := range [][]string{{"help", "--all"}, {"--help", "--all"}} {
-		var out, errb bytes.Buffer
-		code, err := runCLI(args, &out, &errb)
-		if err != nil || code != exitOK {
-			t.Fatalf("runCLI(%v) code=%d err=%v stderr=%s", args, code, err, errb.String())
-		}
-		if !strings.Contains(out.String(), "json set") {
-			t.Fatalf("runCLI(%v) did not include plumbing commands:\n%s", args, out.String())
-		}
+	var out, errb bytes.Buffer
+	code, err := runCLI([]string{"help", "--all"}, &out, &errb)
+	if err != nil || code != exitOK {
+		t.Fatalf("runCLI(help --all) code=%d err=%v stderr=%s", code, err, errb.String())
+	}
+	if !strings.Contains(out.String(), "json set") {
+		t.Fatalf("runCLI(help --all) did not include plumbing commands:\n%s", out.String())
+	}
+}
+
+func TestHelpFlagIsShortReference(t *testing.T) {
+	var out, errb bytes.Buffer
+	code, err := runCLI([]string{"--help"}, &out, &errb)
+	if err != nil || code != exitOK {
+		t.Fatalf("runCLI(--help) code=%d err=%v stderr=%s", code, err, errb.String())
+	}
+	if out.String() != shortHelp {
+		t.Fatalf("--help output mismatch:\n%s", out.String())
+	}
+
+	out.Reset()
+	errb.Reset()
+	code, err = runCLI([]string{"help"}, &out, &errb)
+	if err != nil || code != exitOK {
+		t.Fatalf("runCLI(help) code=%d err=%v stderr=%s", code, err, errb.String())
+	}
+	if out.String() == shortHelp || !strings.Contains(out.String(), "Porcelain commands:") {
+		t.Fatalf("help did not produce long help:\n%s", out.String())
 	}
 }
 
@@ -66,6 +85,31 @@ func TestShortHelpMentionsCoreFlags(t *testing.T) {
 	for _, want := range []string{"--plan", "-n, --dry-run", "--no-checkout", "--untracked", "--allow-empty"} {
 		if !strings.Contains(shortHelp, want) {
 			t.Fatalf("short help missing %s", want)
+		}
+	}
+}
+
+func TestShellCompletionThroughCLI(t *testing.T) {
+	var out, errb bytes.Buffer
+	code, err := runCLI([]string{"--generate-shell-completion"}, &out, &errb)
+	if err != nil || code != exitOK {
+		t.Fatalf("command completion code=%d err=%v stderr=%s", code, err, errb.String())
+	}
+	for _, want := range []string{"set\n", "help\n"} {
+		if !strings.Contains(out.String(), want) {
+			t.Fatalf("command completion missing %q:\n%s", want, out.String())
+		}
+	}
+
+	out.Reset()
+	errb.Reset()
+	code, err = runCLI([]string{"-", "--generate-shell-completion"}, &out, &errb)
+	if err != nil || code != exitOK {
+		t.Fatalf("flag completion code=%d err=%v stderr=%s", code, err, errb.String())
+	}
+	for _, want := range []string{"--plan\n", "-n\n"} {
+		if !strings.Contains(out.String(), want) {
+			t.Fatalf("flag completion missing %q:\n%s", want, out.String())
 		}
 	}
 }

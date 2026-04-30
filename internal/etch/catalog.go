@@ -544,6 +544,7 @@ Core flags:
   --message-suffix <m>   append generated commit message
   --retries <n>          retry CAS conflicts, default 3
   --allow-empty          permit empty commit for mutating invocations
+  --version              print version and exit
 
 Use "etch help" for the porcelain verb table, or "etch help --all" for plumbing commands too.
 `

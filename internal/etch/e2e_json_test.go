@@ -36,6 +36,26 @@ func TestE2EJSONSetCommitsAndMaterializes(t *testing.T) {
 	}
 }
 
+func TestE2EExplicitFalseBoolFlagsDoNotEnablePlanModes(t *testing.T) {
+	dir := initRepo(t)
+	writeFile(t, dir, "state.json", `{"status":"open"}`+"\n")
+	commitAll(t, dir, "initial")
+	chdir(t, dir)
+
+	var out, errb bytes.Buffer
+	code, err := runCLI([]string{"--plan=false", "--dry-run=false", "set", "state.json", "status", "complete"}, &out, &errb)
+	if err != nil || code != exitOK {
+		t.Fatalf("runCLI code=%d err=%v stderr=%s", code, err, errb.String())
+	}
+	if out.Len() != 0 {
+		t.Fatalf("unexpected stdout for committing invocation:\n%s", out.String())
+	}
+	headBytes := testGit(t, dir, "show", "HEAD:state.json")
+	if !strings.Contains(headBytes, `"status": "complete"`) {
+		t.Fatalf("HEAD state.json = %s", headBytes)
+	}
+}
+
 func TestE2EJSONSetCreatesMissingFile(t *testing.T) {
 	dir := initRepo(t)
 	writeFile(t, dir, "README.md", "# hi\n")

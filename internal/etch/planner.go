@@ -3,6 +3,7 @@ package etch
 import (
 	"bytes"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"strings"
 	"time"
@@ -99,7 +100,7 @@ func (e Executor) Run(ops []Operation, stdout, stderr interface {
 
 func classifyErr(err error) exitCode {
 	var coded errWithCode
-	if asErr(err, &coded) {
+	if errors.As(err, &coded) {
 		return coded.code
 	}
 	return exitFailure

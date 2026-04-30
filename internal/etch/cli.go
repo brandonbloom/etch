@@ -1,18 +1,21 @@
 package etch
 
 import (
+	"context"
+	"errors"
 	"fmt"
 	"io"
 	"os"
-	"strconv"
 	"strings"
+
+	cli "github.com/urfave/cli/v3"
 )
 
 func Main(args []string, stdout, stderr io.Writer) int {
 	code, err := runCLI(args, stdout, stderr)
 	if err != nil {
 		var coded errWithCode
-		if asErr(err, &coded) {
+		if errors.As(err, &coded) {
 			fmt.Fprintf(stderr, "etch: %s\n", coded.err)
 			return int(coded.code)
 		}
@@ -22,26 +25,67 @@ func Main(args []string, stdout, stderr io.Writer) int {
 	return int(code)
 }
 
-func asErr(err error, target any) bool {
-	type causer interface{ As(any) bool }
-	if e, ok := err.(causer); ok {
-		return e.As(target)
-	}
-	switch t := target.(type) {
-	case *errWithCode:
-		if e, ok := err.(errWithCode); ok {
-			*t = e
-			return true
-		}
-	}
-	return false
-}
-
 func runCLI(args []string, stdout, stderr io.Writer) (exitCode, error) {
-	opts, rest, err := parseGlobalFlags(args)
-	if err != nil {
+	opts := GlobalOptions{Retries: 3}
+	var code exitCode
+	stopAfterVerb := 1
+
+	cmd := &cli.Command{
+		Name:                          "etch",
+		Usage:                         "mechanical mutations to text and data files",
+		UsageText:                     "etch [--plan|-n|--dry-run] [flags] <verb> [args...]",
+		Writer:                        stdout,
+		ErrWriter:                     stderr,
+		HideHelpCommand:               true,
+		HideVersion:                   true,
+		EnableShellCompletion:         true,
+		StopOnNthArg:                  &stopAfterVerb,
+		CustomRootCommandHelpTemplate: shortHelp,
+		Flags: []cli.Flag{
+			&cli.BoolFlag{Name: "plan", Usage: "emit canonical JSON plan", Destination: &opts.Plan},
+			&cli.BoolFlag{Name: "dry-run", Aliases: []string{"n"}, Usage: "emit git-am-compatible patch preview", Destination: &opts.DryRun},
+			&cli.BoolFlag{Name: "no-checkout", Usage: "commit without materializing touched paths", Destination: &opts.NoCheckout},
+			&cli.BoolFlag{Name: "untracked", Usage: "admit untracked source paths under CWD", Destination: &opts.Untracked},
+			&cli.StringFlag{Name: "message", Usage: "override generated commit message", Destination: &opts.Message},
+			&cli.StringFlag{Name: "message-prefix", Usage: "prepend generated commit message", Destination: &opts.MessagePrefix},
+			&cli.StringFlag{Name: "message-suffix", Usage: "append generated commit message", Destination: &opts.MessageSuffix},
+			&cli.IntFlag{Name: "retries", Usage: "retry CAS conflicts", Value: 3, Destination: &opts.Retries},
+			&cli.BoolFlag{Name: "allow-empty", Usage: "permit empty commit for mutating invocations", Destination: &opts.AllowEmpty},
+			&cli.BoolFlag{Name: "version", Usage: "print version and exit"},
+		},
+		OnUsageError: func(_ context.Context, _ *cli.Command, err error, _ bool) error {
+			return usagef("%s", err)
+		},
+		ShellComplete: completeShell,
+		Action: func(_ context.Context, cmd *cli.Command) error {
+			code = exitOK
+			rest := cmd.Args().Slice()
+			if cmd.Bool("version") {
+				if len(rest) != 0 {
+					code = exitUsage
+					return usagef("usage: etch version")
+				}
+				fmt.Fprintln(stdout, versionString)
+				return nil
+			}
+			var err error
+			code, err = runParsedCLI(opts, rest, stdout, stderr)
+			return err
+		},
+	}
+
+	osArgs := append([]string{"etch"}, args...)
+	if err := cmd.Run(context.Background(), osArgs); err != nil {
+		var coded errWithCode
+		if errors.As(err, &coded) {
+			return coded.code, err
+		}
 		return exitUsage, err
 	}
+	return code, nil
+}
+
+func runParsedCLI(opts GlobalOptions, rest []string, stdout, stderr io.Writer) (exitCode, error) {
 	if opts.Plan && opts.DryRun {
 		return exitUsage, usagef("--plan and --dry-run are mutually exclusive")
 	}
@@ -107,89 +151,6 @@ func runCLI(args []string, stdout, stderr io.Writer) (exitCode, error) {
 	return executeStatements(opts, []Statement{stmt}, stdout, stderr)
 }
 
-func parseGlobalFlags(args []string) (GlobalOptions, []string, error) {
-	opts := GlobalOptions{Retries: 3}
-	rest := make([]string, 0, len(args))
-	for i := 0; i < len(args); i++ {
-		arg := args[i]
-		if arg == "--" {
-			rest = append(rest, args[i+1:]...)
-			return opts, rest, nil
-		}
-		if arg == "--help" {
-			rest = append(rest, "help")
-			rest = append(rest, args[i+1:]...)
-			return opts, rest, nil
-		}
-		if arg == "--version" {
-			rest = append(rest, "version")
-			continue
-		}
-		if arg == "-n" {
-			opts.DryRun = true
-			continue
-		}
-		if !strings.HasPrefix(arg, "--") || arg == "-" {
-			rest = append(rest, args[i:]...)
-			return opts, rest, nil
-		}
-		name, val, hasVal := strings.Cut(arg, "=")
-		takeValue := func() (string, error) {
-			if hasVal {
-				return val, nil
-			}
-			i++
-			if i >= len(args) {
-				return "", usagef("%s requires a value", name)
-			}
-			return args[i], nil
-		}
-		switch name {
-		case "--plan":
-			opts.Plan = true
-		case "--dry-run":
-			opts.DryRun = true
-		case "--no-checkout":
-			opts.NoCheckout = true
-		case "--untracked":
-			opts.Untracked = true
-		case "--allow-empty":
-			opts.AllowEmpty = true
-		case "--message":
-			v, err := takeValue()
-			if err != nil {
-				return opts, nil, err
-			}
-			opts.Message = v
-		case "--message-prefix":
-			v, err := takeValue()
-			if err != nil {
-				return opts, nil, err
-			}
-			opts.MessagePrefix = v
-		case "--message-suffix":
-			v, err := takeValue()
-			if err != nil {
-				return opts, nil, err
-			}
-			opts.MessageSuffix = v
-		case "--retries":
-			v, err := takeValue()
-			if err != nil {
-				return opts, nil, err
-			}
-			n, err := strconv.Atoi(v)
-			if err != nil {
-				return opts, nil, usagef("--retries must be an integer")
-			}
-			opts.Retries = n
-		default:
-			return opts, nil, usagef("unknown flag %s", name)
-		}
-	}
-	return opts, rest, nil
-}
-
 func executeStatements(opts GlobalOptions, stmts []Statement, stdout, stderr io.Writer) (exitCode, error) {
 	ops := make([]Operation, 0, len(stmts))
 	for _, stmt := range stmts {
@@ -231,4 +192,63 @@ func ParseScript(path string) ([]Statement, error) {
 
 var readStdin = func() ([]byte, error) {
 	return io.ReadAll(os.Stdin)
+}
+
+func completeShell(_ context.Context, cmd *cli.Command) {
+	args := cmd.Args().Slice()
+	if len(args) > 0 && strings.HasPrefix(args[len(args)-1], "-") {
+		printCompletions(cmd.Root().Writer, args[len(args)-1], globalFlagCompletions())
+		return
+	}
+	if len(args) <= 1 {
+		prefix := ""
+		if len(args) == 1 {
+			prefix = args[0]
+		}
+		printCompletions(cmd.Root().Writer, prefix, commandCompletions())
+	}
+}
+
+func printCompletions(w io.Writer, prefix string, values []string) {
+	for _, v := range values {
+		if strings.HasPrefix(v, prefix) {
+			fmt.Fprintln(w, v)
+		}
+	}
+}
+
+func globalFlagCompletions() []string {
+	return []string{
+		"--plan",
+		"-n",
+		"--dry-run",
+		"--no-checkout",
+		"--untracked",
+		"--message",
+		"--message-prefix",
+		"--message-suffix",
+		"--retries",
+		"--allow-empty",
+		"--version",
+		"--help",
+	}
+}
+
+func commandCompletions() []string {
+	seen := map[string]bool{
+		"help":    true,
+		"run":     true,
+		"verbs":   true,
+		"version": true,
+	}
+	values := []string{"help", "run", "verbs", "version"}
+	for _, v := range verbCatalog() {
+		first, _, _ := strings.Cut(v.Name, " ")
+		if seen[first] {
+			continue
+		}
+		seen[first] = true
+		values = append(values, first)
+	}
+	return values
 }
