@@ -130,17 +130,11 @@ func TestPlanHashUsesJCSCanonicalBytes(t *testing.T) {
 	}
 
 	want := `{"$schema":"schema","base_commit":"abc","commit":{"message":"msg"},"files":{"a.json":{"after_sha256":"after-a","before_sha256":"before-a"},"z.json":{"after_sha256":"after-z","before_sha256":"before-z"}},"operations":[{"target":{"path":"z.json","selector":"$.a"},"value_sha256":"sha256:value","verb":"set"}],"ref":"refs/heads/main","tree":"tree"}`
-	got, err := canonicalPlanBytes(plan)
-	if err != nil {
-		t.Fatal(err)
-	}
+	got := canonicalPlanBytes(plan)
 	if string(got) != want {
 		t.Fatalf("canonical bytes = %s, want %s", got, want)
 	}
-	hash, err := planHash(plan)
-	if err != nil {
-		t.Fatal(err)
-	}
+	hash := planHash(plan)
 	if hash != "sha256:"+shaHex([]byte(want)) {
 		t.Fatalf("hash = %s, want sha256:%s", hash, shaHex([]byte(want)))
 	}

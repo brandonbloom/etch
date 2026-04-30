@@ -36,10 +36,6 @@ func (e Executor) Run(ops []Operation, stdout, stderr interface {
 		}
 	}
 
-	if onlyIntrospection(ops) {
-		return exitOK, nil
-	}
-
 	var lastErr error
 	attempts := e.opts.Retries + 1
 	for attempt := 0; attempt < attempts; attempt++ {
@@ -100,8 +96,6 @@ func (e Executor) Run(ops []Operation, stdout, stderr interface {
 	}
 	return exitFailure, failf("retry budget exhausted")
 }
-
-func onlyIntrospection(_ []Operation) bool { return false }
 
 func classifyErr(err error) exitCode {
 	var coded errWithCode
@@ -189,11 +183,7 @@ func PlanOperations(w *Workspace, opts GlobalOptions, ops []Operation) (*Plan, e
 	if w.Unborn {
 		plan.BaseCommit = ""
 	}
-	hash, err := planHash(plan)
-	if err != nil {
-		return nil, err
-	}
-	plan.Hash = hash
+	plan.Hash = planHash(plan)
 	return plan, nil
 }
 
@@ -225,10 +215,7 @@ func ensureFileState(w *Workspace, files map[string]fileChange, path string, req
 		}
 		return ch, res, nil
 	}
-	before, mode, absent, err := w.ReadBase(res)
-	if err != nil {
-		return fileChange{}, res, err
-	}
+	before, mode, absent := w.ReadBase(res)
 	if requireExists && absent {
 		return fileChange{}, res, failf("%s is missing", path)
 	}
@@ -424,15 +411,11 @@ func planTable(w *Workspace, files map[string]fileChange, op Operation) (Operati
 	return op, changed || c, nil
 }
 
-func planHash(plan *Plan) (string, error) {
-	b, err := canonicalPlanBytes(plan)
-	if err != nil {
-		return "", err
-	}
-	return "sha256:" + shaHex(b), nil
+func planHash(plan *Plan) string {
+	return "sha256:" + shaHex(canonicalPlanBytes(plan))
 }
 
-func canonicalPlanBytes(plan *Plan) ([]byte, error) {
+func canonicalPlanBytes(plan *Plan) []byte {
 	type planAlias Plan
 	cp := planAlias(*plan)
 	cp.Hash = ""
@@ -441,9 +424,13 @@ func canonicalPlanBytes(plan *Plan) ([]byte, error) {
 	cp.Changed = false
 	b, err := json.Marshal(cp)
 	if err != nil {
-		return nil, err
+		panic(fmt.Sprintf("marshal internal plan: %v", err))
 	}
-	return jcs.Canonicalize(b)
+	canonical, err := jcs.Canonicalize(b)
+	if err != nil {
+		panic(fmt.Sprintf("canonicalize internal plan: %v", err))
+	}
+	return canonical
 }
 
 func buildCommitMessage(opts GlobalOptions, ops []Operation) string {

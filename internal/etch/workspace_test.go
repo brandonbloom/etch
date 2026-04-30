@@ -39,10 +39,7 @@ func TestWorkspaceReadsTrackedBytesFromHEAD(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	got, _, absent, err := w.ReadBase(res)
-	if err != nil {
-		t.Fatal(err)
-	}
+	got, _, absent := w.ReadBase(res)
 	if absent {
 		t.Fatal("state.json reported absent")
 	}

@@ -3,6 +3,9 @@ package etch
 import (
 	"reflect"
 	"testing"
+
+	"github.com/goccy/go-yaml/ast"
+	"github.com/goccy/go-yaml/token"
 )
 
 func TestYAMLSemanticEquality(t *testing.T) {
@@ -10,10 +13,7 @@ func TestYAMLSemanticEquality(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	doc, err := firstYAMLDocument(file)
-	if err != nil {
-		t.Fatal(err)
-	}
+	doc := firstYAMLDocument(file)
 	root, err := yamlMappingNode(doc.Body)
 	if err != nil {
 		t.Fatal(err)
@@ -44,6 +44,15 @@ func TestYAMLSemanticEquality(t *testing.T) {
 	}
 	if !yamlSemanticEqualNodeValue(tag.Value, yamlTagSemantic{Tag: "!custom", Value: "value"}) {
 		t.Fatalf("tag semantic equality failed for %s", tag.Value.String())
+	}
+}
+
+func TestYAMLLiteralSemanticFallback(t *testing.T) {
+	if got := yamlNodeSemantic(&ast.LiteralNode{Start: &token.Token{Origin: "| malformed\n"}}); got != "| malformed\n" {
+		t.Fatalf("literal fallback = %#v", got)
+	}
+	if got := yamlNodeSemantic(&ast.LiteralNode{}); got != nil {
+		t.Fatalf("literal without start fallback = %#v, want nil", got)
 	}
 }
 

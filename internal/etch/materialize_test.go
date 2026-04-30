@@ -107,3 +107,23 @@ func TestMaterializationBinaryRefusalDoesNotOverwrite(t *testing.T) {
 		t.Fatalf("stderr = %s", errb.String())
 	}
 }
+
+func TestMergeStateAllPresentTextConflict(t *testing.T) {
+	got, absent, conflict, err := mergeState(
+		[]byte("base\n"), false,
+		[]byte("ours\n"), false,
+		[]byte("theirs\n"), false,
+		"ours", "theirs",
+	)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if absent || !conflict {
+		t.Fatalf("mergeState absent=%v conflict=%v, want present conflict", absent, conflict)
+	}
+	for _, want := range []string{"<<<<<<< ours", "||||||| base", "=======", ">>>>>>> theirs"} {
+		if !strings.Contains(string(got), want) {
+			t.Fatalf("conflict output missing %q:\n%s", want, got)
+		}
+	}
+}

@@ -173,25 +173,28 @@ func mergeState(base []byte, baseAbsent bool, ours []byte, oursAbsent bool, thei
 	if bytesStateEqual(ours, oursAbsent, base, baseAbsent) {
 		return theirs, theirsAbsent, false, nil
 	}
-	if baseAbsent && !oursAbsent && !theirsAbsent {
-		if !textMergeable(ours, false) || !textMergeable(theirs, false) {
-			return nil, false, false, failf("binary local change could not be merged")
+	if baseAbsent || oursAbsent || theirsAbsent {
+		switch {
+		case baseAbsent && !oursAbsent && !theirsAbsent:
+			if !textMergeable(ours, false) || !textMergeable(theirs, false) {
+				break
+			}
+			return conflictBytes(nil, ours, theirs, oursLabel, theirsLabel), false, true, nil
+		case oursAbsent && !baseAbsent && !theirsAbsent:
+			if !textMergeable(base, false) || !textMergeable(theirs, false) {
+				break
+			}
+			return conflictBytes(base, nil, theirs, oursLabel, theirsLabel), false, true, nil
+		case theirsAbsent && !baseAbsent && !oursAbsent:
+			if !textMergeable(base, false) || !textMergeable(ours, false) {
+				break
+			}
+			return conflictBytes(base, ours, nil, oursLabel, theirsLabel), false, true, nil
 		}
-		return conflictBytes(nil, ours, theirs, oursLabel, theirsLabel), false, true, nil
+		return nil, false, false, failf("binary local change could not be merged")
 	}
-	if oursAbsent && !theirsAbsent {
-		if !textMergeable(base, baseAbsent) || !textMergeable(theirs, false) {
-			return nil, false, false, failf("binary local change could not be merged")
-		}
-		return conflictBytes(base, nil, theirs, oursLabel, theirsLabel), false, true, nil
-	}
-	if theirsAbsent && !oursAbsent {
-		if !textMergeable(base, baseAbsent) || !textMergeable(ours, false) {
-			return nil, false, false, failf("binary local change could not be merged")
-		}
-		return conflictBytes(base, ours, nil, oursLabel, theirsLabel), false, true, nil
-	}
-	if !textMergeable(base, baseAbsent) || !textMergeable(ours, oursAbsent) || !textMergeable(theirs, theirsAbsent) {
+
+	if !textMergeable(base, false) || !textMergeable(ours, false) || !textMergeable(theirs, false) {
 		return nil, false, false, failf("binary local change could not be merged")
 	}
 	merged, clean := simpleThreeWay(base, ours, theirs)

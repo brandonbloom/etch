@@ -112,19 +112,18 @@ func (w *Workspace) Resolve(input string, mayBeMissing bool, finalSymlink bool) 
 	}, nil
 }
 
-func (w *Workspace) ReadBase(path ResolvedPath) ([]byte, string, bool, error) {
+func (w *Workspace) ReadBase(path ResolvedPath) ([]byte, string, bool) {
 	if w.Unborn {
-		return nil, "100644", true, nil
+		return nil, "100644", true
 	}
 	out, err := gitOutput(w.CWD, nil, "show", "HEAD:"+path.Repo)
 	if err != nil {
 		if w.Untracked {
-			b, readErr := os.ReadFile(path.Abs)
-			if readErr == nil {
-				return b, "100644", false, nil
+			if b, ok, _ := readUntrackedFile(path.Abs); ok {
+				return b, "100644", false
 			}
 		}
-		return nil, "100644", true, nil
+		return nil, "100644", true
 	}
 	mode := "100644"
 	if m, err := gitOutput(w.CWD, nil, "ls-tree", "--format=%(objectmode)", "HEAD", "--", path.Repo); err == nil {
@@ -133,27 +132,31 @@ func (w *Workspace) ReadBase(path ResolvedPath) ([]byte, string, bool, error) {
 			mode = "100644"
 		}
 	}
-	return out, mode, false, nil
+	return out, mode, false
 }
 
 func (w *Workspace) ExistsInAdmittedView(path ResolvedPath) (bool, []byte, string, error) {
-	b, mode, absent, err := w.ReadBase(path)
-	if err != nil {
-		return false, nil, mode, err
-	}
+	b, mode, absent := w.ReadBase(path)
 	if !absent {
 		return true, b, mode, nil
 	}
 	if w.Untracked {
-		b, err := os.ReadFile(path.Abs)
-		if err == nil {
-			return true, b, "100644", nil
-		}
-		if !isNoSuch(err) {
+		if _, _, err := readUntrackedFile(path.Abs); err != nil {
 			return false, nil, "100644", err
 		}
 	}
 	return false, nil, mode, nil
+}
+
+func readUntrackedFile(path string) ([]byte, bool, error) {
+	b, err := os.ReadFile(path)
+	if err == nil {
+		return b, true, nil
+	}
+	if isNoSuch(err) {
+		return nil, false, nil
+	}
+	return nil, false, err
 }
 
 func gitOutput(dir string, env []string, args ...string) ([]byte, error) {

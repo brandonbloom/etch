@@ -173,24 +173,21 @@ func mutateAt(root any, parts []selectorPart, verb string, value any) (any, erro
 			return root, usagef("unknown structured verb %s", verb)
 		}
 	}
-	newRoot, err := cloneContainer(root, parts[0])
-	if err != nil {
-		return root, err
-	}
+	newRoot := cloneContainer(root, parts[0])
 	if err := mutateDesc(newRoot, parts, verb, value); err != nil {
 		return root, err
 	}
 	return newRoot, nil
 }
 
-func cloneContainer(v any, next selectorPart) (any, error) {
+func cloneContainer(v any, next selectorPart) any {
 	if v == nil {
 		if next.IsKey {
-			return map[string]any{}, nil
+			return map[string]any{}
 		}
-		return []any{}, nil
+		return []any{}
 	}
-	return deepCopy(v), nil
+	return deepCopy(v)
 }
 
 func deepCopy(v any) any {

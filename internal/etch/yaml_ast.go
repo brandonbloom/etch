@@ -21,10 +21,7 @@ type yamlTagSemantic struct {
 
 func parseYAMLFile(raw []byte) (*ast.File, error) {
 	if strings.TrimSpace(string(raw)) == "" {
-		node, err := newYAMLValueNode(map[string]any{})
-		if err != nil {
-			return nil, err
-		}
+		node := mustYAMLValueNode(map[string]any{})
 		return &ast.File{Docs: []*ast.DocumentNode{ast.Document(nil, node)}}, nil
 	}
 	return parser.ParseBytes(raw, parser.ParseComments)
@@ -35,20 +32,11 @@ func mutateYAMLFile(file *ast.File, selector, verb string, value any) (bool, err
 	if err != nil {
 		return false, err
 	}
-	doc, err := firstYAMLDocument(file)
-	if err != nil {
-		return false, err
-	}
+	doc := firstYAMLDocument(file)
 	if doc.Body == nil {
-		doc.Body, err = newYAMLValueNode(map[string]any{})
-		if err != nil {
-			return false, err
-		}
+		doc.Body = mustYAMLValueNode(map[string]any{})
 	} else if comments, ok := doc.Body.(*ast.CommentGroupNode); ok {
-		doc.Body, err = newYAMLValueNode(map[string]any{})
-		if err != nil {
-			return false, err
-		}
+		doc.Body = mustYAMLValueNode(map[string]any{})
 		_ = doc.Body.SetComment(comments)
 	}
 	if len(parts) == 0 {
@@ -68,20 +56,17 @@ func mutateYAMLFile(file *ast.File, selector, verb string, value any) (bool, err
 	return mutateYAMLDesc(&doc.Body, parts, verb, value)
 }
 
-func firstYAMLDocument(file *ast.File) (*ast.DocumentNode, error) {
+func firstYAMLDocument(file *ast.File) *ast.DocumentNode {
 	if len(file.Docs) == 0 {
-		node, err := newYAMLValueNode(map[string]any{})
-		if err != nil {
-			return nil, err
-		}
+		node := mustYAMLValueNode(map[string]any{})
 		file.Docs = append(file.Docs, ast.Document(nil, node))
 	}
-	return file.Docs[0], nil
+	return file.Docs[0]
 }
 
 func firstYAMLDocumentString(file *ast.File) string {
-	doc, err := firstYAMLDocument(file)
-	if err != nil || doc.Body == nil {
+	doc := firstYAMLDocument(file)
+	if doc.Body == nil {
 		return ""
 	}
 	return doc.Body.String()
@@ -141,14 +126,8 @@ func mutateYAMLDesc(nodep *ast.Node, parts []selectorPart, verb string, value an
 			return false, err
 		}
 		if mv == nil {
-			child, err := newYAMLContainerNode(parts[1])
-			if err != nil {
-				return false, err
-			}
-			mv, err = appendYAMLMapValue(m, p.Key, child)
-			if err != nil {
-				return false, err
-			}
+			child := newYAMLContainerNode(parts[1])
+			mv = appendYAMLMapValue(m, p.Key, child)
 		}
 		return mutateYAMLDesc(&mv.Value, parts[1:], verb, value)
 	}
@@ -190,8 +169,8 @@ func mutateYAMLMapLeaf(m *ast.MappingNode, key string, verb string, value any) (
 		if err != nil {
 			return false, err
 		}
-		_, err = appendYAMLMapValue(m, key, next)
-		return err == nil, err
+		appendYAMLMapValue(m, key, next)
+		return true, nil
 	case "delete":
 		if mv == nil {
 			return false, nil
@@ -201,14 +180,8 @@ func mutateYAMLMapLeaf(m *ast.MappingNode, key string, verb string, value any) (
 	case "append", "add":
 		var seq *ast.SequenceNode
 		if mv == nil {
-			seqNode, err := newYAMLValueNode([]any{})
-			if err != nil {
-				return false, err
-			}
-			appended, err := appendYAMLMapValue(m, key, seqNode)
-			if err != nil {
-				return false, err
-			}
+			seqNode := mustYAMLValueNode([]any{})
+			appended := appendYAMLMapValue(m, key, seqNode)
 			mv = appended
 			seq = seqNode.(*ast.SequenceNode)
 		} else {
@@ -444,11 +417,11 @@ func yamlSequenceNode(node ast.Node) (*ast.SequenceNode, error) {
 	}
 }
 
-func newYAMLContainerNode(next selectorPart) (ast.Node, error) {
+func newYAMLContainerNode(next selectorPart) ast.Node {
 	if next.IsKey {
-		return newYAMLValueNode(map[string]any{})
+		return mustYAMLValueNode(map[string]any{})
 	}
-	return newYAMLValueNode([]any{})
+	return mustYAMLValueNode([]any{})
 }
 
 func newYAMLValueNode(value any) (ast.Node, error) {
@@ -460,11 +433,16 @@ func newYAMLValueNode(value any) (ast.Node, error) {
 	return node, nil
 }
 
-func appendYAMLMapValue(m *ast.MappingNode, key string, value ast.Node) (*ast.MappingValueNode, error) {
-	keyNode, err := newYAMLMapKeyNode(key)
+func mustYAMLValueNode(value any) ast.Node {
+	node, err := newYAMLValueNode(value)
 	if err != nil {
-		return nil, err
+		panic(fmt.Sprintf("construct internal YAML node: %v", err))
 	}
+	return node
+}
+
+func appendYAMLMapValue(m *ast.MappingNode, key string, value ast.Node) *ast.MappingValueNode {
+	keyNode := newYAMLMapKeyNode(key)
 	keyCol := yamlMapKeyColumn(m)
 	placeYAMLNode(keyNode, keyCol)
 	placeYAMLNode(value, yamlMapValueColumn(keyCol, value))
@@ -474,19 +452,16 @@ func appendYAMLMapValue(m *ast.MappingNode, key string, value ast.Node) (*ast.Ma
 	mv := ast.MappingValue(nil, keyNode, value)
 	mv.IsFlowStyle = m.IsFlowStyle
 	m.Values = append(m.Values, mv)
-	return mv, nil
+	return mv
 }
 
-func newYAMLMapKeyNode(key string) (ast.MapKeyNode, error) {
-	node, err := newYAMLValueNode(key)
-	if err != nil {
-		return nil, err
-	}
+func newYAMLMapKeyNode(key string) ast.MapKeyNode {
+	node := mustYAMLValueNode(key)
 	keyNode, ok := node.(ast.MapKeyNode)
 	if !ok {
-		return nil, failf("unsupported YAML mapping key %q", key)
+		panic(fmt.Sprintf("construct internal YAML mapping key %q", key))
 	}
-	return keyNode, nil
+	return keyNode
 }
 
 func appendYAMLSequenceValue(seq *ast.SequenceNode, value ast.Node) {
@@ -622,7 +597,13 @@ func yamlNodeSemantic(node ast.Node) any {
 		if n.Value != nil {
 			return n.Value.GetValue()
 		}
-		return n.GetValue()
+		if n.Start != nil {
+			if n.Start.Value != "" {
+				return n.Start.Value
+			}
+			return n.Start.Origin
+		}
+		return nil
 	case ast.ScalarNode:
 		return n.GetValue()
 	default:

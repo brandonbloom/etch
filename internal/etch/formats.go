@@ -206,18 +206,11 @@ func evalCSVTable(op Operation, before []byte) ([]byte, bool, error) {
 	}
 	var b bytes.Buffer
 	w := csv.NewWriter(&b)
-	if err := w.Write(td.Header); err != nil {
-		return nil, false, err
-	}
+	_ = w.Write(td.Header)
 	for _, row := range td.Rows {
-		if err := w.Write(normalizeRow(row, len(td.Header))); err != nil {
-			return nil, false, err
-		}
+		_ = w.Write(normalizeRow(row, len(td.Header)))
 	}
 	w.Flush()
-	if err := w.Error(); err != nil {
-		return nil, false, err
-	}
 	out := b.Bytes()
 	return out, !bytes.Equal(out, before), nil
 }
@@ -589,10 +582,7 @@ func findMarkdownTables(s, scope string) ([]mdTableBlock, error) {
 			tableLines = append(tableLines, lines[i])
 			offset += len(lines[i])
 		}
-		td, err := parseMarkdownTable(tableLines)
-		if err != nil {
-			return nil, err
-		}
+		td := parseMarkdownTable(tableLines)
 		blocks = append(blocks, mdTableBlock{start: start, end: offset, table: td})
 	}
 	return blocks, nil
@@ -646,14 +636,14 @@ func isMarkdownSeparator(s string) bool {
 	return true
 }
 
-func parseMarkdownTable(lines []string) (tableData, error) {
+func parseMarkdownTable(lines []string) tableData {
 	header := splitPipeRow(lines[0])
 	td := tableData{Header: header}
 	for _, line := range lines[2:] {
 		row := splitPipeRow(line)
 		td.Rows = append(td.Rows, normalizeRow(row, len(header)))
 	}
-	return td, nil
+	return td
 }
 
 func splitPipeRow(line string) []string {

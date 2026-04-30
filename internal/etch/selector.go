@@ -6,6 +6,7 @@ import (
 	"strconv"
 	"strings"
 	"unicode"
+	"unicode/utf8"
 )
 
 type selectorPart struct {
@@ -45,10 +46,7 @@ func ParseSelector(selector string) ([]selectorPart, error) {
 			}
 			n := 0
 			for n < len(s) {
-				r, size := rune(s[n]), 1
-				if r >= 0x80 {
-					r, size = utf8Rune(s[n:])
-				}
+				r, size := utf8.DecodeRuneInString(s[n:])
 				if n == 0 {
 					if !(r == '_' || unicode.IsLetter(r)) {
 						break
@@ -119,13 +117,6 @@ func ParseSelector(selector string) ([]selectorPart, error) {
 		}
 	}
 	return parts, nil
-}
-
-func utf8Rune(s string) (rune, int) {
-	for _, r := range s {
-		return r, len(string(r))
-	}
-	return rune(s[0]), 1
 }
 
 func bracketContent(s string) (int, string, error) {
