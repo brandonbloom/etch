@@ -125,10 +125,9 @@ func TestRunWithoutScriptPathParsesStdin(t *testing.T) {
 	dir := initRepo(t)
 	writeFile(t, dir, "README.md", "# hi\n")
 	commitAll(t, dir, "initial")
-	chdir(t, dir)
 
 	var out, stderr bytes.Buffer
-	code, err := runCLI([]string{"run"}, &out, &stderr)
+	code, err := runCLIAt(dir, []string{"run"}, &out, &stderr)
 	if err != nil || code != exitOK {
 		t.Fatalf("run code=%d err=%v stderr=%s", code, err, stderr.String())
 	}

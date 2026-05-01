@@ -13,7 +13,6 @@ func TestPlanFileCreateAndGuardNoSideEffects(t *testing.T) {
 	writeFile(t, dir, "README.md", "# hi\n")
 	head := commitAll(t, dir, "initial")
 	objectsBefore := gitObjectFiles(t, dir)
-	chdir(t, dir)
 
 	ops := []Operation{}
 	for _, tokens := range [][]string{
@@ -26,7 +25,7 @@ func TestPlanFileCreateAndGuardNoSideEffects(t *testing.T) {
 		}
 		ops = append(ops, op)
 	}
-	w, err := OpenWorkspace(false)
+	w, err := OpenWorkspaceAt(dir, false)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -58,7 +57,6 @@ func TestPlanGuardFailurePreventsLaterOperations(t *testing.T) {
 	dir := initRepo(t)
 	writeFile(t, dir, "README.md", "# hi\n")
 	head := commitAll(t, dir, "initial")
-	chdir(t, dir)
 
 	var ops []Operation
 	for _, tokens := range [][]string{
@@ -71,7 +69,7 @@ func TestPlanGuardFailurePreventsLaterOperations(t *testing.T) {
 		}
 		ops = append(ops, op)
 	}
-	w, err := OpenWorkspace(false)
+	w, err := OpenWorkspaceAt(dir, false)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -90,13 +88,12 @@ func TestPlanFileDeleteNoop(t *testing.T) {
 	dir := initRepo(t)
 	writeFile(t, dir, "README.md", "# hi\n")
 	commitAll(t, dir, "initial")
-	chdir(t, dir)
 
 	op, err := DecodeOperation(Statement{Tokens: []string{"delete", "missing.txt"}})
 	if err != nil {
 		t.Fatal(err)
 	}
-	w, err := OpenWorkspace(false)
+	w, err := OpenWorkspaceAt(dir, false)
 	if err != nil {
 		t.Fatal(err)
 	}

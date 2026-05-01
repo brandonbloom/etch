@@ -13,10 +13,9 @@ func TestMaterializationDirtyWorktreeConflictDoesNotRollbackCommit(t *testing.T)
 	writeFile(t, dir, "state.json", `{"status":"open","note":"base"}`+"\n")
 	base := commitAll(t, dir, "initial")
 	writeFile(t, dir, "state.json", `{"status":"open","note":"local"}`+"\n")
-	chdir(t, dir)
 
 	var out, errb bytes.Buffer
-	code, err := runCLI([]string{"set", "state.json", "status", "complete"}, &out, &errb)
+	code, err := runCLIAt(dir, []string{"set", "state.json", "status", "complete"}, &out, &errb)
 	if err == nil || code != exitFailure {
 		t.Fatalf("runCLI code=%d err=%v stderr=%s", code, err, errb.String())
 	}
@@ -45,7 +44,7 @@ func TestMaterializationDirtyPathUsesWorkspaceCWD(t *testing.T) {
 
 	outside := t.TempDir()
 	writeFile(t, outside, "state.json", "outside\n")
-	chdir(t, outside)
+	setProcessCWDForTest(t, outside)
 
 	_, errb, code, err := runCLIInDir(t, dir, "set", "state.json", "status", "complete")
 	if err == nil || code != exitFailure {
@@ -72,10 +71,9 @@ func TestMaterializationAddAddConflict(t *testing.T) {
 	writeFile(t, dir, "README.md", "# hi\n")
 	base := commitAll(t, dir, "initial")
 	writeFile(t, dir, "new.txt", "local\n")
-	chdir(t, dir)
 
 	var out, errb bytes.Buffer
-	code, err := runCLI([]string{"create", "new.txt", "etch\n"}, &out, &errb)
+	code, err := runCLIAt(dir, []string{"create", "new.txt", "etch\n"}, &out, &errb)
 	if err == nil || code != exitFailure {
 		t.Fatalf("runCLI code=%d err=%v stderr=%s", code, err, errb.String())
 	}
@@ -93,10 +91,9 @@ func TestMaterializationDeleteModifyConflict(t *testing.T) {
 	writeFile(t, dir, "old.txt", "base\n")
 	base := commitAll(t, dir, "initial")
 	writeFile(t, dir, "old.txt", "local\n")
-	chdir(t, dir)
 
 	var out, errb bytes.Buffer
-	code, err := runCLI([]string{"delete", "old.txt"}, &out, &errb)
+	code, err := runCLIAt(dir, []string{"delete", "old.txt"}, &out, &errb)
 	if err == nil || code != exitFailure {
 		t.Fatalf("runCLI code=%d err=%v stderr=%s", code, err, errb.String())
 	}
@@ -119,10 +116,9 @@ func TestMaterializationBinaryRefusalDoesNotOverwrite(t *testing.T) {
 	if err := os.WriteFile(filepath.Join(dir, "old.bin"), []byte{'l', 0, 'x'}, 0o644); err != nil {
 		t.Fatal(err)
 	}
-	chdir(t, dir)
 
 	var out, errb bytes.Buffer
-	code, err := runCLI([]string{"delete", "old.bin"}, &out, &errb)
+	code, err := runCLIAt(dir, []string{"delete", "old.bin"}, &out, &errb)
 	if err == nil || code != exitFailure {
 		t.Fatalf("runCLI code=%d err=%v stderr=%s", code, err, errb.String())
 	}
@@ -162,10 +158,9 @@ func TestMaterializationCleanDeleteUsesGitRestore(t *testing.T) {
 	dir := initRepo(t)
 	writeFile(t, dir, "old.txt", "base\n")
 	commitAll(t, dir, "initial")
-	chdir(t, dir)
 
 	var out, errb bytes.Buffer
-	code, err := runCLI([]string{"delete", "old.txt"}, &out, &errb)
+	code, err := runCLIAt(dir, []string{"delete", "old.txt"}, &out, &errb)
 	if err != nil || code != exitOK {
 		t.Fatalf("runCLI code=%d err=%v stderr=%s", code, err, errb.String())
 	}
@@ -196,10 +191,9 @@ func TestMaterializationCleanConvertedPathUsesGitCheckout(t *testing.T) {
 	if !bytes.Contains(wtBefore, []byte("\r\n")) {
 		t.Fatalf("test setup did not produce CRLF worktree bytes:\n%q", wtBefore)
 	}
-	chdir(t, dir)
 
 	var out, errb bytes.Buffer
-	code, err := runCLI([]string{"set", "state.json", "status", "complete"}, &out, &errb)
+	code, err := runCLIAt(dir, []string{"set", "state.json", "status", "complete"}, &out, &errb)
 	if err != nil || code != exitOK {
 		t.Fatalf("runCLI code=%d err=%v stderr=%s", code, err, errb.String())
 	}
@@ -229,10 +223,9 @@ func TestMaterializationDirtyConvertedPathFailsBeforeCommit(t *testing.T) {
 	if err := os.WriteFile(filepath.Join(dir, "state.json"), []byte(local), 0o644); err != nil {
 		t.Fatal(err)
 	}
-	chdir(t, dir)
 
 	var out, errb bytes.Buffer
-	code, err := runCLI([]string{"set", "state.json", "status", "complete"}, &out, &errb)
+	code, err := runCLIAt(dir, []string{"set", "state.json", "status", "complete"}, &out, &errb)
 	if err == nil || code != exitFailure {
 		t.Fatalf("runCLI code=%d err=%v stdout=%s stderr=%s", code, err, out.String(), errb.String())
 	}
@@ -250,7 +243,7 @@ func TestMaterializationDirtyConvertedPathFailsBeforeCommit(t *testing.T) {
 		t.Fatalf("checkout conversion refusal changed worktree:\n%q", wt)
 	}
 
-	code, err = runCLI([]string{"--no-checkout", "set", "state.json", "status", "complete"}, &out, &errb)
+	code, err = runCLIAt(dir, []string{"--no-checkout", "set", "state.json", "status", "complete"}, &out, &errb)
 	if err != nil || code != exitOK {
 		t.Fatalf("--no-checkout runCLI code=%d err=%v stderr=%s", code, err, errb.String())
 	}

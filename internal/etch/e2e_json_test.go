@@ -78,14 +78,13 @@ func TestE2EJSONAppendAndAddCreateMissingFile(t *testing.T) {
 	dir := initRepo(t)
 	writeFile(t, dir, "README.md", "# hi\n")
 	commitAll(t, dir, "initial")
-	chdir(t, dir)
 
 	var out, errb bytes.Buffer
-	code, err := runCLI([]string{"append", "a.json", "items", "1"}, &out, &errb)
+	code, err := runCLIAt(dir, []string{"append", "a.json", "items", "1"}, &out, &errb)
 	if err != nil || code != exitOK {
 		t.Fatalf("append code=%d err=%v stderr=%s", code, err, errb.String())
 	}
-	code, err = runCLI([]string{"add", "b.json", "items", "1"}, &out, &errb)
+	code, err = runCLIAt(dir, []string{"add", "b.json", "items", "1"}, &out, &errb)
 	if err != nil || code != exitOK {
 		t.Fatalf("add code=%d err=%v stderr=%s", code, err, errb.String())
 	}
@@ -101,10 +100,9 @@ func TestE2ECreateDefaultContent(t *testing.T) {
 	dir := initRepo(t)
 	writeFile(t, dir, "README.md", "# hi\n")
 	commitAll(t, dir, "initial")
-	chdir(t, dir)
 
 	var out, errb bytes.Buffer
-	code, err := runCLI([]string{"create", "a.json"}, &out, &errb)
+	code, err := runCLIAt(dir, []string{"create", "a.json"}, &out, &errb)
 	if err != nil || code != exitOK {
 		t.Fatalf("runCLI code=%d err=%v stderr=%s", code, err, errb.String())
 	}
@@ -118,7 +116,6 @@ func TestE2ECreateExtensionDefaults(t *testing.T) {
 	dir := initRepo(t)
 	writeFile(t, dir, "README.md", "# hi\n")
 	commitAll(t, dir, "initial")
-	chdir(t, dir)
 
 	cases := map[string]string{
 		"config.yaml": "{}\n",
@@ -128,7 +125,7 @@ func TestE2ECreateExtensionDefaults(t *testing.T) {
 	}
 	for path, want := range cases {
 		var out, errb bytes.Buffer
-		code, err := runCLI([]string{"create", path}, &out, &errb)
+		code, err := runCLIAt(dir, []string{"create", path}, &out, &errb)
 		if err != nil || code != exitOK {
 			t.Fatalf("create %s code=%d err=%v stderr=%s", path, code, err, errb.String())
 		}
@@ -144,10 +141,9 @@ func TestE2EJSONSetUsesHEADNotDirtyWorktreeForCommit(t *testing.T) {
 	writeFile(t, dir, "state.json", `{"status":"open","local":false}`+"\n")
 	commitAll(t, dir, "initial")
 	writeFile(t, dir, "state.json", `{"status":"dirty","local":true}`+"\n")
-	chdir(t, dir)
 
 	var out, errb bytes.Buffer
-	code, err := runCLI([]string{"--no-checkout", "set", "state.json", "status", "complete"}, &out, &errb)
+	code, err := runCLIAt(dir, []string{"--no-checkout", "set", "state.json", "status", "complete"}, &out, &errb)
 	if err != nil || code != exitOK {
 		t.Fatalf("runCLI code=%d err=%v stderr=%s", code, err, errb.String())
 	}
@@ -200,7 +196,6 @@ func TestE2ERunDefaultsToStdin(t *testing.T) {
 	dir := initRepo(t)
 	writeFile(t, dir, "README.md", "# hi\n")
 	commitAll(t, dir, "initial")
-	chdir(t, dir)
 
 	oldReadStdin := readStdin
 	readStdin = func() ([]byte, error) {
@@ -209,7 +204,7 @@ func TestE2ERunDefaultsToStdin(t *testing.T) {
 	t.Cleanup(func() { readStdin = oldReadStdin })
 
 	var out, errb bytes.Buffer
-	code, err := runCLI([]string{"run"}, &out, &errb)
+	code, err := runCLIAt(dir, []string{"run"}, &out, &errb)
 	if err != nil || code != exitOK {
 		t.Fatalf("runCLI code=%d err=%v stderr=%s", code, err, errb.String())
 	}

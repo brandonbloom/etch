@@ -165,13 +165,12 @@ Regression coverage asserts that:
 **Spec (§15, §16 Phase 2):** "Implementation code should receive explicit filesystem, index, object-store, and workspace handles instead of reaching for process-global disk state." "Define small filesystem, object-store, base-snapshot, live-index, and working-tree interfaces with in-memory test implementations."
 
 Incremental progress:
-- `OpenWorkspaceAt` and `runCLIAt` let callers provide an explicit working directory, and representative workspace/e2e tests no longer need `os.Chdir`.
+- `OpenWorkspaceAt` and `runCLIAt` let callers provide an explicit working directory. Repository-dependent tests use those entry points instead of mutating process CWD, except for the regression whose subject is process-CWD independence.
 - `Workspace` carries a narrow Git runner interface, with the production implementation isolated in `realGitRunner`. Workspace-owned Git operations route through that boundary, and a focused test verifies runner injection without creating a Git repository.
 - `Workspace` carries a narrow working-tree filesystem interface for live file reads and writes. Materialization uses resolved absolute worktree paths instead of CWD-relative plan paths, with regression coverage for dirty-path materialization while the process CWD is elsewhere.
 
-Remaining implementation gap: path resolution, script reading, and Git object/index temporary stores still use process OS APIs directly. The production Git runner shells out to Git, most tests use real temporary Git repositories, and many tests mutate process CWD. This means:
+Remaining implementation gap: path resolution, script reading, and Git object/index temporary stores still use process OS APIs directly. The production Git runner shells out to Git, and most tests use real temporary Git repositories. This means:
 - Tests cannot model scenarios without touching the filesystem.
-- Tests mutate global process state (CWD) which is not concurrency-safe.
 - The architecture diagram's separation between planner, snapshot store, and git backend is not reflected in the code.
 
 ---

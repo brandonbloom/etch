@@ -14,13 +14,12 @@ func TestGitBackendCommitAndRefCAS(t *testing.T) {
 	dir := initRepo(t)
 	writeFile(t, dir, "a.txt", "a\n")
 	head := commitAll(t, dir, "initial")
-	chdir(t, dir)
 
 	op, err := DecodeOperation(Statement{Tokens: []string{"create", "b.txt", "b\n"}})
 	if err != nil {
 		t.Fatal(err)
 	}
-	w, err := OpenWorkspace(false)
+	w, err := OpenWorkspaceAt(dir, false)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -54,13 +53,12 @@ func TestDryRunAppliesWithGitAm(t *testing.T) {
 	dir := initRepo(t)
 	writeFile(t, dir, "a.txt", "a\n")
 	commitAll(t, dir, "initial")
-	chdir(t, dir)
 
 	op, err := DecodeOperation(Statement{Tokens: []string{"create", "b.txt", "b\n"}})
 	if err != nil {
 		t.Fatal(err)
 	}
-	w, err := OpenWorkspace(false)
+	w, err := OpenWorkspaceAt(dir, false)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -95,10 +93,9 @@ func TestDryRunShorthandDoesNotCommit(t *testing.T) {
 	writeFile(t, dir, "state.json", `{"status":"open"}`+"\n")
 	head := commitAll(t, dir, "initial")
 	objectsBefore := gitObjectFiles(t, dir)
-	chdir(t, dir)
 
 	var out, errb bytes.Buffer
-	code, err := runCLI([]string{"-n", "set", "state.json", "status", "complete"}, &out, &errb)
+	code, err := runCLIAt(dir, []string{"-n", "set", "state.json", "status", "complete"}, &out, &errb)
 	if err != nil || code != exitOK {
 		t.Fatalf("runCLI code=%d err=%v stderr=%s", code, err, errb.String())
 	}
@@ -119,10 +116,9 @@ func TestPlanDoesNotWriteRepositoryObjects(t *testing.T) {
 	writeFile(t, dir, "state.json", `{"status":"open"}`+"\n")
 	head := commitAll(t, dir, "initial")
 	objectsBefore := gitObjectFiles(t, dir)
-	chdir(t, dir)
 
 	var out, errb bytes.Buffer
-	code, err := runCLI([]string{"--plan", "set", "state.json", "status", "complete"}, &out, &errb)
+	code, err := runCLIAt(dir, []string{"--plan", "set", "state.json", "status", "complete"}, &out, &errb)
 	if err != nil || code != exitOK {
 		t.Fatalf("runCLI code=%d err=%v stderr=%s", code, err, errb.String())
 	}
@@ -160,10 +156,9 @@ func TestNoCheckoutIgnoredForPreviewModes(t *testing.T) {
 			writeFile(t, dir, "state.json", `{"status":"open"}`+"\n")
 			head := commitAll(t, dir, "initial")
 			objectsBefore := gitObjectFiles(t, dir)
-			chdir(t, dir)
 
 			var out, errb bytes.Buffer
-			code, err := runCLI(tc.args, &out, &errb)
+			code, err := runCLIAt(dir, tc.args, &out, &errb)
 			if err != nil || code != exitOK {
 				t.Fatalf("runCLI code=%d err=%v stderr=%s", code, err, errb.String())
 			}

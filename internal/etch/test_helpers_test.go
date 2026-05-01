@@ -71,7 +71,9 @@ func stringsTrim(s string) string {
 	return s
 }
 
-func chdir(t *testing.T, dir string) {
+// setProcessCWDForTest exists for tests whose subject is process-CWD behavior.
+// Prefer runCLIAt/OpenWorkspaceAt in ordinary repository tests.
+func setProcessCWDForTest(t *testing.T, dir string) {
 	t.Helper()
 	old, err := os.Getwd()
 	if err != nil {

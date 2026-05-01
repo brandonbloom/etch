@@ -8,10 +8,10 @@ import (
 	"testing"
 )
 
-func runOK(t *testing.T, args ...string) {
+func runOK(t *testing.T, dir string, args ...string) {
 	t.Helper()
 	var out, errb bytes.Buffer
-	code, err := runCLI(args, &out, &errb)
+	code, err := runCLIAt(dir, args, &out, &errb)
 	if err != nil || code != exitOK {
 		t.Fatalf("etch %v code=%d err=%v stdout=%s stderr=%s", args, code, err, out.String(), errb.String())
 	}
@@ -21,12 +21,11 @@ func TestJSONVerbs(t *testing.T) {
 	dir := initRepo(t)
 	writeFile(t, dir, "state.json", `{"tags":["a"],"remove":["x","y","x"]}`+"\n")
 	commitAll(t, dir, "initial")
-	chdir(t, dir)
 
-	runOK(t, "append", "state.json", "tags", `"b"`)
-	runOK(t, "add", "state.json", "tags", `"b"`)
-	runOK(t, "remove", "state.json", "remove", `"x"`)
-	runOK(t, "delete", "state.json", "missing")
+	runOK(t, dir, "append", "state.json", "tags", `"b"`)
+	runOK(t, dir, "add", "state.json", "tags", `"b"`)
+	runOK(t, dir, "remove", "state.json", "remove", `"x"`)
+	runOK(t, dir, "delete", "state.json", "missing")
 	got := testGit(t, dir, "show", "HEAD:state.json")
 	if strings.Count(got, `"b"`) != 1 || strings.Contains(got, `"x"`) {
 		t.Fatalf("JSON verbs result:\n%s", got)
@@ -37,15 +36,14 @@ func TestJSONAddAndRemoveDistinguishLargeNumbers(t *testing.T) {
 	dir := initRepo(t)
 	writeFile(t, dir, "state.json", `{"ids":[9007199254740992]}`+"\n")
 	commitAll(t, dir, "initial")
-	chdir(t, dir)
 
-	runOK(t, "add", "state.json", "ids", "9007199254740993")
+	runOK(t, dir, "add", "state.json", "ids", "9007199254740993")
 	got := testGit(t, dir, "show", "HEAD:state.json")
 	if !strings.Contains(got, "9007199254740992") || !strings.Contains(got, "9007199254740993") {
 		t.Fatalf("JSON add result:\n%s", got)
 	}
 
-	runOK(t, "remove", "state.json", "ids", "9007199254740993")
+	runOK(t, dir, "remove", "state.json", "ids", "9007199254740993")
 	got = testGit(t, dir, "show", "HEAD:state.json")
 	if !strings.Contains(got, "9007199254740992") || strings.Contains(got, "9007199254740993") {
 		t.Fatalf("JSON remove result:\n%s", got)
@@ -105,11 +103,10 @@ func TestYAMLAndFrontmatterVerbs(t *testing.T) {
 	writeFile(t, dir, "config.yaml", "tags:\n  - a\n")
 	writeFile(t, dir, "note.md", "# Note\n")
 	commitAll(t, dir, "initial")
-	chdir(t, dir)
 
-	runOK(t, "yaml", "append", "config.yaml", "tags", `"b"`)
-	runOK(t, "set", "note.md", "frontmatter.status", "draft")
-	runOK(t, "add", "note.md", "frontmatter.tags", `"x"`)
+	runOK(t, dir, "yaml", "append", "config.yaml", "tags", `"b"`)
+	runOK(t, dir, "set", "note.md", "frontmatter.status", "draft")
+	runOK(t, dir, "add", "note.md", "frontmatter.tags", `"x"`)
 	yamlOut := testGit(t, dir, "show", "HEAD:config.yaml")
 	if !strings.Contains(yamlOut, "b") {
 		t.Fatalf("YAML output:\n%s", yamlOut)
@@ -124,11 +121,10 @@ func TestYAMLAndFrontmatterVerbsCreateMissingFiles(t *testing.T) {
 	dir := initRepo(t)
 	writeFile(t, dir, "README.md", "# hi\n")
 	commitAll(t, dir, "initial")
-	chdir(t, dir)
 
-	runOK(t, "append", "config.yaml", "tags", `"b"`)
-	runOK(t, "set", "note.md", "frontmatter.status", "draft")
-	runOK(t, "add", "other.md", "frontmatter.tags", `"x"`)
+	runOK(t, dir, "append", "config.yaml", "tags", `"b"`)
+	runOK(t, dir, "set", "note.md", "frontmatter.status", "draft")
+	runOK(t, dir, "add", "other.md", "frontmatter.tags", `"x"`)
 
 	yamlOut := testGit(t, dir, "show", "HEAD:config.yaml")
 	if !strings.Contains(yamlOut, "tags:") || !strings.Contains(yamlOut, "- b") {
@@ -149,11 +145,10 @@ func TestYAMLAndFrontmatterPreserveLargeNumbers(t *testing.T) {
 	writeFile(t, dir, "config.yaml", "ids:\n  - 9007199254740992\n")
 	writeFile(t, dir, "note.md", "# Note\n")
 	commitAll(t, dir, "initial")
-	chdir(t, dir)
 
-	runOK(t, "add", "config.yaml", "ids", "9007199254740993")
-	runOK(t, "set", "config.yaml", "id", "9007199254740993")
-	runOK(t, "set", "note.md", "frontmatter.id", "9007199254740993")
+	runOK(t, dir, "add", "config.yaml", "ids", "9007199254740993")
+	runOK(t, dir, "set", "config.yaml", "id", "9007199254740993")
+	runOK(t, dir, "set", "note.md", "frontmatter.id", "9007199254740993")
 
 	yamlOut := testGit(t, dir, "show", "HEAD:config.yaml")
 	for _, want := range []string{"9007199254740992", "9007199254740993", "id: 9007199254740993"} {
@@ -172,10 +167,9 @@ func TestYAMLSetHexdumpLikeStringDoesNotParseJSONPrefix(t *testing.T) {
 	dir := initRepo(t)
 	writeFile(t, dir, "doc.yml", "body: value\n")
 	commitAll(t, dir, "initial")
-	chdir(t, dir)
 
 	hexdump := "00000000  aa bb cc dd  |....|\n00000010  00 11 22 33  |..\"3|\n"
-	runOK(t, "set", "doc.yml", "body", hexdump)
+	runOK(t, dir, "set", "doc.yml", "body", hexdump)
 
 	yamlOut := testGit(t, dir, "show", "HEAD:doc.yml")
 	if !strings.Contains(yamlOut, "body: |") {
@@ -200,9 +194,8 @@ func TestYAMLRoundTripPreservesRepresentation(t *testing.T) {
 	dir := initRepo(t)
 	writeFile(t, dir, "config.yaml", "# top\nz: 0x1A # hex spelling\ndefaults: &defaults\n  retries: 3\nitems:\n  - *defaults\na: yes\n")
 	commitAll(t, dir, "initial")
-	chdir(t, dir)
 
-	runOK(t, "set", "config.yaml", "status", "draft")
+	runOK(t, dir, "set", "config.yaml", "status", "draft")
 
 	got := testGit(t, dir, "show", "HEAD:config.yaml")
 	for _, want := range []string{"# top", "0x1A # hex spelling", "&defaults", "- *defaults", "a: yes", "status: draft"} {
@@ -226,9 +219,8 @@ func TestYAMLAnchorMutationPreservesAliases(t *testing.T) {
 	dir := initRepo(t)
 	writeFile(t, dir, "config.yaml", "defaults: &defaults\n  status: open\ncopy: *defaults\n")
 	commitAll(t, dir, "initial")
-	chdir(t, dir)
 
-	runOK(t, "set", "config.yaml", "defaults.status", "closed")
+	runOK(t, dir, "set", "config.yaml", "defaults.status", "closed")
 
 	got := testGit(t, dir, "show", "HEAD:config.yaml")
 	if !strings.Contains(got, "defaults: &defaults\n  status: closed") || !strings.Contains(got, "copy: *defaults") {
@@ -240,10 +232,9 @@ func TestYAMLSelectorBelowAliasFails(t *testing.T) {
 	dir := initRepo(t)
 	writeFile(t, dir, "config.yaml", "defaults: &defaults\n  status: open\ncopy: *defaults\n")
 	head := commitAll(t, dir, "initial")
-	chdir(t, dir)
 
 	var out, errb bytes.Buffer
-	code, err := runCLI([]string{"set", "config.yaml", "copy.status", "closed"}, &out, &errb)
+	code, err := runCLIAt(dir, []string{"set", "config.yaml", "copy.status", "closed"}, &out, &errb)
 	if err == nil || code == exitOK {
 		t.Fatalf("alias mutation succeeded stdout=%s stderr=%s", out.String(), errb.String())
 	}
@@ -256,9 +247,8 @@ func TestFrontmatterRoundTripPreservesRepresentation(t *testing.T) {
 	dir := initRepo(t)
 	writeFile(t, dir, "note.md", "---\n# metadata\ntitle: Old\ntags: &tags\n  - a\ncopy: *tags\n---\n# Note\n")
 	commitAll(t, dir, "initial")
-	chdir(t, dir)
 
-	runOK(t, "set", "note.md", "frontmatter.status", "draft")
+	runOK(t, dir, "set", "note.md", "frontmatter.status", "draft")
 
 	got := testGit(t, dir, "show", "HEAD:note.md")
 	for _, want := range []string{"# metadata", "title: Old", "tags: &tags", "copy: *tags", "status: draft", "# Note"} {
@@ -404,10 +394,9 @@ func TestYAMLVerbMatrixPreservesRepresentation(t *testing.T) {
 			dir := initRepo(t)
 			writeFile(t, dir, "config.yaml", tc.before)
 			head := commitAll(t, dir, "initial")
-			chdir(t, dir)
 
 			var out, errb bytes.Buffer
-			code, err := runCLI(tc.args, &out, &errb)
+			code, err := runCLIAt(dir, tc.args, &out, &errb)
 			if err != nil || code != exitOK {
 				t.Fatalf("etch %v code=%d err=%v stdout=%s stderr=%s", tc.args, code, err, out.String(), errb.String())
 			}
@@ -456,10 +445,9 @@ func TestYAMLErrorMatrixDoesNotCommit(t *testing.T) {
 			dir := initRepo(t)
 			writeFile(t, dir, "config.yaml", tc.before)
 			head := commitAll(t, dir, "initial")
-			chdir(t, dir)
 
 			var out, errb bytes.Buffer
-			code, err := runCLI(tc.args, &out, &errb)
+			code, err := runCLIAt(dir, tc.args, &out, &errb)
 			if err == nil || code == exitOK {
 				t.Fatalf("etch %v unexpectedly succeeded stdout=%s stderr=%s", tc.args, out.String(), errb.String())
 			}
@@ -474,11 +462,10 @@ func TestFrontmatterVerbMatrixPreservesRepresentation(t *testing.T) {
 	dir := initRepo(t)
 	writeFile(t, dir, "note.md", "---\n# metadata\ntitle: Old\ntags:\n  - a\nremove:\n  - x\n  - y\n---\n# Note\n")
 	commitAll(t, dir, "initial")
-	chdir(t, dir)
 
-	runOK(t, "delete", "note.md", "frontmatter.title")
-	runOK(t, "append", "note.md", "frontmatter.tags", `"b"`)
-	runOK(t, "remove", "note.md", "frontmatter.remove", `"x"`)
+	runOK(t, dir, "delete", "note.md", "frontmatter.title")
+	runOK(t, dir, "append", "note.md", "frontmatter.tags", `"b"`)
+	runOK(t, dir, "remove", "note.md", "frontmatter.remove", `"x"`)
 
 	got := testGit(t, dir, "show", "HEAD:note.md")
 	for _, want := range []string{"# metadata", "tags:", "- a", "- b", "remove:", "- y", "# Note"} {
@@ -497,9 +484,8 @@ func TestFrontmatterMultilineStringUsesLiteralBlock(t *testing.T) {
 	dir := initRepo(t)
 	writeFile(t, dir, "note.md", "# Note\n")
 	commitAll(t, dir, "initial")
-	chdir(t, dir)
 
-	runOK(t, "set", "note.md", "frontmatter.body", "line one\nline two\n")
+	runOK(t, dir, "set", "note.md", "frontmatter.body", "line one\nline two\n")
 
 	mdOut := testGit(t, dir, "show", "HEAD:note.md")
 	if !strings.Contains(mdOut, "body: |") || !strings.Contains(mdOut, "  line one\n  line two\n") {
@@ -559,9 +545,8 @@ func TestMarkdownReplaceSection(t *testing.T) {
 			dir := initRepo(t)
 			writeFile(t, dir, "note.md", tc.input)
 			commitAll(t, dir, "initial")
-			chdir(t, dir)
 
-			runOK(t, "replace-section", "note.md", "## Notes", tc.content)
+			runOK(t, dir, "replace-section", "note.md", "## Notes", tc.content)
 			got := testGit(t, dir, "show", "HEAD:note.md")
 			for _, want := range tc.want {
 				if !strings.Contains(got, want) {
@@ -581,13 +566,12 @@ func TestCSVTableVerbs(t *testing.T) {
 	dir := initRepo(t)
 	writeFile(t, dir, "data.csv", "id,status\n1,open\n2,open\n")
 	commitAll(t, dir, "initial")
-	chdir(t, dir)
 
-	runOK(t, "table", "set", "data.csv", "all,status", "done")
-	runOK(t, "table", "row", "append", "data.csv", `{"id":"3","status":"open"}`)
-	runOK(t, "table", "column", "add", "data.csv", "owner", "--default", "Brandon")
-	runOK(t, "table", "column", "rename", "data.csv", "owner", "assignee")
-	runOK(t, "table", "row", "delete", "data.csv", "id=2")
+	runOK(t, dir, "table", "set", "data.csv", "all,status", "done")
+	runOK(t, dir, "table", "row", "append", "data.csv", `{"id":"3","status":"open"}`)
+	runOK(t, dir, "table", "column", "add", "data.csv", "owner", "--default", "Brandon")
+	runOK(t, dir, "table", "column", "rename", "data.csv", "owner", "assignee")
+	runOK(t, dir, "table", "row", "delete", "data.csv", "id=2")
 	got := testGit(t, dir, "show", "HEAD:data.csv")
 	if !strings.Contains(got, "id,status,assignee") || strings.Contains(got, "2,") || !strings.Contains(got, "Brandon") {
 		t.Fatalf("CSV output:\n%s", got)
@@ -598,10 +582,9 @@ func TestMarkdownTableVerbs(t *testing.T) {
 	dir := initRepo(t)
 	writeFile(t, dir, "note.md", "## Inventory\n\n| sku | status |\n| --- | --- |\n| A1 | open |\n")
 	commitAll(t, dir, "initial")
-	chdir(t, dir)
 
-	runOK(t, "table", "set", "note.md", "## Inventory", "sku=A1,status", "done")
-	runOK(t, "table", "row", "append", "note.md", "## Inventory", `{"sku":"B2","status":"open"}`)
+	runOK(t, dir, "table", "set", "note.md", "## Inventory", "sku=A1,status", "done")
+	runOK(t, dir, "table", "row", "append", "note.md", "## Inventory", `{"sku":"B2","status":"open"}`)
 	got := testGit(t, dir, "show", "HEAD:note.md")
 	if !strings.Contains(got, "| A1 | done |") || !strings.Contains(got, "| B2 | open |") {
 		t.Fatalf("Markdown table output:\n%s", got)
@@ -612,9 +595,8 @@ func TestMarkdownTableVerbsIgnoreIndentedCodeTables(t *testing.T) {
 	dir := initRepo(t)
 	writeFile(t, dir, "note.md", "## Inventory\n\n    | sku | status |\n    | --- | --- |\n    | A1 | open |\n\n| sku | status |\n| --- | --- |\n| A1 | open |\n")
 	commitAll(t, dir, "initial")
-	chdir(t, dir)
 
-	runOK(t, "table", "set", "note.md", "## Inventory", "sku=A1,status", "done")
+	runOK(t, dir, "table", "set", "note.md", "## Inventory", "sku=A1,status", "done")
 	got := testGit(t, dir, "show", "HEAD:note.md")
 	if !strings.Contains(got, "    | A1 | open |") {
 		t.Fatalf("Markdown table edit rewrote indented code:\n%s", got)
@@ -628,9 +610,8 @@ func TestMarkdownTableVerbsPreservePrecedingParagraph(t *testing.T) {
 	dir := initRepo(t)
 	writeFile(t, dir, "note.md", "## Inventory\n\nintro\n| sku | status |\n| --- | --- |\n| A1 | open |\n")
 	commitAll(t, dir, "initial")
-	chdir(t, dir)
 
-	runOK(t, "table", "set", "note.md", "## Inventory", "sku=A1,status", "done")
+	runOK(t, dir, "table", "set", "note.md", "## Inventory", "sku=A1,status", "done")
 	got := testGit(t, dir, "show", "HEAD:note.md")
 	if !strings.Contains(got, "intro\n| sku | status |") || !strings.Contains(got, "| A1 | done |") {
 		t.Fatalf("Markdown table output:\n%s", got)
@@ -641,9 +622,8 @@ func TestMarkdownTableVerbsReadEscapedPipes(t *testing.T) {
 	dir := initRepo(t)
 	writeFile(t, dir, "note.md", "## Inventory\n\n| sku | status |\n| --- | --- |\n| A\\|1 | open |\n")
 	commitAll(t, dir, "initial")
-	chdir(t, dir)
 
-	runOK(t, "table", "set", "note.md", "## Inventory", "sku=A|1,status", "done")
+	runOK(t, dir, "table", "set", "note.md", "## Inventory", "sku=A|1,status", "done")
 	got := testGit(t, dir, "show", "HEAD:note.md")
 	if !strings.Contains(got, "| A\\|1 | done |") {
 		t.Fatalf("Markdown table output:\n%s", got)
@@ -654,10 +634,9 @@ func TestMarkdownTableScopeRejectsAmbiguousHeading(t *testing.T) {
 	dir := initRepo(t)
 	writeFile(t, dir, "note.md", "## Inventory\n\n| sku | status |\n| --- | --- |\n| A1 | open |\n\n## Inventory\n\n| sku | status |\n| --- | --- |\n| B2 | open |\n")
 	head := commitAll(t, dir, "initial")
-	chdir(t, dir)
 
 	var out, errb bytes.Buffer
-	code, err := runCLI([]string{"table", "set", "note.md", "## Inventory", "sku=A1,status", "done"}, &out, &errb)
+	code, err := runCLIAt(dir, []string{"table", "set", "note.md", "## Inventory", "sku=A1,status", "done"}, &out, &errb)
 	if err == nil || code == exitOK {
 		t.Fatalf("ambiguous scope succeeded stdout=%s stderr=%s", out.String(), errb.String())
 	}
@@ -675,8 +654,7 @@ func TestBOMPreservedForJSON(t *testing.T) {
 		t.Fatal(err)
 	}
 	commitAll(t, dir, "initial")
-	chdir(t, dir)
-	runOK(t, "set", "state.json", "b", "2")
+	runOK(t, dir, "set", "state.json", "b", "2")
 	got := []byte(testGit(t, dir, "show", "HEAD:state.json"))
 	if len(got) < 3 || got[0] != 0xef || got[1] != 0xbb || got[2] != 0xbf {
 		t.Fatalf("BOM not preserved: %v", got[:min(3, len(got))])

@@ -13,7 +13,6 @@ func TestRetryReplansAfterRefCASConflict(t *testing.T) {
 	writeFile(t, dir, "state.json", `{"status":"open"}`+"\n")
 	writeFile(t, dir, "other.txt", "base\n")
 	commitAll(t, dir, "initial")
-	chdir(t, dir)
 
 	hooked := false
 	beforeUpdateRefHook = func(attempt int) {
@@ -28,7 +27,7 @@ func TestRetryReplansAfterRefCASConflict(t *testing.T) {
 	t.Cleanup(func() { beforeUpdateRefHook = nil })
 
 	var out, errb bytes.Buffer
-	code, err := runCLI([]string{"--retries", "1", "set", "state.json", "status", "complete"}, &out, &errb)
+	code, err := runCLIAt(dir, []string{"--retries", "1", "set", "state.json", "status", "complete"}, &out, &errb)
 	if err != nil || code != exitOK {
 		t.Fatalf("runCLI code=%d err=%v stderr=%s", code, err, errb.String())
 	}
@@ -45,7 +44,6 @@ func TestRetryBudgetExhaustion(t *testing.T) {
 	dir := initRepo(t)
 	writeFile(t, dir, "state.json", `{"status":"open"}`+"\n")
 	commitAll(t, dir, "initial")
-	chdir(t, dir)
 
 	beforeUpdateRefHook = func(attempt int) {
 		path := fmt.Sprintf("tick-%d.txt", attempt)
@@ -56,7 +54,7 @@ func TestRetryBudgetExhaustion(t *testing.T) {
 	t.Cleanup(func() { beforeUpdateRefHook = nil })
 
 	var out, errb bytes.Buffer
-	code, err := runCLI([]string{"--retries", "1", "set", "state.json", "status", "complete"}, &out, &errb)
+	code, err := runCLIAt(dir, []string{"--retries", "1", "set", "state.json", "status", "complete"}, &out, &errb)
 	if err == nil || code != exitFailure {
 		t.Fatalf("runCLI code=%d err=%v stderr=%s", code, err, errb.String())
 	}
