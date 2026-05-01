@@ -21,17 +21,30 @@ type preMaterialize struct {
 	indexAbsent    bool
 	worktree       []byte
 	worktreeAbsent bool
+	// gitClean uses Git's conversion-aware status, so CRLF/smudge-clean paths
+	// can still take the Git checkout path when the user has no local edits.
+	gitClean bool
 }
 
-func NewMaterializer(w *Workspace, plan *Plan, skip bool) Materializer {
+func NewMaterializer(w *Workspace, plan *Plan, skip bool) (Materializer, error) {
 	m := Materializer{w: w, plan: plan, skip: skip, states: map[string]preMaterialize{}}
+	if skip {
+		return m, nil
+	}
 	for _, k := range sortedKeys(plan.Touched) {
 		ch := plan.Touched[k]
 		idx, idxAbsent, _ := w.indexBytes(ch.RepoPath)
 		wt, wtAbsent := readWorkingTree(ch)
-		m.states[k] = preMaterialize{index: idx, indexAbsent: idxAbsent, worktree: wt, worktreeAbsent: wtAbsent}
+		gitClean, err := w.pathClean(ch.RepoPath)
+		if err != nil {
+			return Materializer{}, err
+		}
+		if ch.AbsentBefore && !wtAbsent {
+			gitClean = false
+		}
+		m.states[k] = preMaterialize{index: idx, indexAbsent: idxAbsent, worktree: wt, worktreeAbsent: wtAbsent, gitClean: gitClean}
 	}
-	return m
+	return m, nil
 }
 
 func readWorkingTree(ch fileChange) ([]byte, bool) {
@@ -40,6 +53,30 @@ func readWorkingTree(ch fileChange) ([]byte, bool) {
 		return b, false
 	}
 	return nil, true
+}
+
+func (m Materializer) Preflight() error {
+	if m.skip {
+		return nil
+	}
+	var blocked []string
+	for _, k := range sortedKeys(m.plan.Touched) {
+		ch := m.plan.Touched[k]
+		if m.states[k].gitClean {
+			continue
+		}
+		reason, err := m.w.checkoutConversionRisk(ch.RepoPath)
+		if err != nil {
+			return err
+		}
+		if reason != "" {
+			blocked = append(blocked, fmt.Sprintf("%s (%s)", ch.Path, reason))
+		}
+	}
+	if len(blocked) == 0 {
+		return nil
+	}
+	return failf("dirty checkout conversion path cannot be safely materialized: %s; clean the path or rerun with --no-checkout", strings.Join(blocked, "; "))
 }
 
 func (m Materializer) Apply(commit string, stderr interface {
@@ -53,7 +90,7 @@ func (m Materializer) Apply(commit string, stderr interface {
 	for _, k := range sortedKeys(m.plan.Touched) {
 		ch := m.plan.Touched[k]
 		state := m.states[k]
-		result, err := m.materializeOne(ch, state)
+		result, err := m.materializeOne(commit, ch, state)
 		if err != nil {
 			failures = append(failures, fmt.Sprintf("%s: %s", ch.Path, err))
 			continue
@@ -91,7 +128,12 @@ type materializeResult struct {
 	conflict bool
 }
 
-func (m Materializer) materializeOne(ch fileChange, st preMaterialize) (materializeResult, error) {
+func (m Materializer) materializeOne(commit string, ch fileChange, st preMaterialize) (materializeResult, error) {
+	if st.gitClean {
+		// Clean paths can let Git own checkout conversion and index stat updates.
+		return materializeResult{}, m.w.restorePathFromCommit(commit, ch.RepoPath)
+	}
+
 	base := ch.Before
 	baseAbsent := ch.AbsentBefore
 	newBytes := ch.After

@@ -70,6 +70,13 @@ func (e Executor) Run(ops []Operation, stdout, stderr interface {
 			_, _ = stderr.Write([]byte("etch: nothing to do\n"))
 			return exitOK, nil
 		}
+		materializer, err := NewMaterializer(w, plan, e.opts.NoCheckout)
+		if err != nil {
+			return exitFailure, err
+		}
+		if err := materializer.Preflight(); err != nil {
+			return classifyErr(err), err
+		}
 		tree, err := w.writePlannedTree(plan)
 		if err != nil {
 			return exitFailure, err
@@ -78,7 +85,6 @@ func (e Executor) Run(ops []Operation, stdout, stderr interface {
 		if err != nil {
 			return exitFailure, err
 		}
-		materializer := NewMaterializer(w, plan, e.opts.NoCheckout)
 		if beforeUpdateRefHook != nil {
 			beforeUpdateRefHook(attempt)
 		}

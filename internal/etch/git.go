@@ -372,6 +372,57 @@ func (w *Workspace) updateRef(newCommit string) error {
 	return gitRun(w.CWD, nil, nil, "update-ref", w.Ref, newCommit, w.Head)
 }
 
+func (w *Workspace) pathClean(repoPath string) (bool, error) {
+	out, err := gitOutput(w.CWD, nil, "status", "--porcelain=v1", "-z", "--", repoPath)
+	if err != nil {
+		return false, err
+	}
+	return len(out) == 0, nil
+}
+
+func (w *Workspace) restorePathFromCommit(commit, repoPath string) error {
+	return gitRun(w.CWD, nil, nil, "restore", "--source="+commit, "--staged", "--worktree", "--", repoPath)
+}
+
+func (w *Workspace) checkoutConversionRisk(repoPath string) (string, error) {
+	var reasons []string
+	out, err := gitOutput(w.CWD, nil, "check-attr", "-z", "filter", "working-tree-encoding", "ident", "eol", "--", repoPath)
+	if err != nil {
+		return "", err
+	}
+	fields := bytes.Split(out, []byte{0})
+	for i := 0; i+2 < len(fields); i += 3 {
+		attr := string(fields[i+1])
+		value := string(fields[i+2])
+		switch attr {
+		case "filter":
+			if checkoutAttrSet(value) {
+				reasons = append(reasons, "filter="+value)
+			}
+		case "working-tree-encoding":
+			if checkoutAttrSet(value) {
+				reasons = append(reasons, "working-tree-encoding="+value)
+			}
+		case "ident":
+			if checkoutAttrSet(value) {
+				reasons = append(reasons, "ident="+value)
+			}
+		case "eol":
+			if strings.EqualFold(value, "crlf") {
+				reasons = append(reasons, "eol=crlf")
+			}
+		}
+	}
+	if autocrlf, err := gitOutput(w.CWD, nil, "config", "--bool", "--get", "core.autocrlf"); err == nil && strings.EqualFold(strings.TrimSpace(string(autocrlf)), "true") {
+		reasons = append(reasons, "core.autocrlf=true")
+	}
+	return strings.Join(reasons, ", "), nil
+}
+
+func checkoutAttrSet(value string) bool {
+	return value != "" && value != "unspecified" && value != "unset"
+}
+
 func (w *Workspace) indexBytes(repoPath string) ([]byte, bool, error) {
 	out, err := gitOutput(w.CWD, nil, "show", ":"+repoPath)
 	if err != nil {

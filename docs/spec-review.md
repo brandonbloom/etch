@@ -151,7 +151,12 @@ Regression coverage asserts:
 
 **Spec (§7):** "etch does not emulate Git's full checkout conversion stack, including .gitattributes text/eol rules, core.autocrlf, working-tree-encoding, or clean/smudge/process filters. If a touched path appears to require such conversion for safe materialization, etch fails cleanly."
 
-**Implementation:** No checking for `.gitattributes`, `core.autocrlf`, or filter configuration. A file with a configured smudge filter would be materialized with raw bytes, bypassing the filter and producing incorrect working-tree content.
+Implemented. Clean touched paths are materialized through `git restore --staged --worktree`, letting Git apply checkout conversion. If a touched path was dirty before the commit and appears to require conversion (`filter`, `working-tree-encoding`, `ident`, explicit `eol=crlf`, or `core.autocrlf=true`), etch refuses before writing the commit and suggests cleaning the path or using `--no-checkout`.
+
+Regression coverage asserts that:
+- Clean `eol=crlf` paths are committed with repository-normal LF bytes and materialized with CRLF worktree bytes.
+- Dirty converted paths fail before `HEAD` moves and leave the worktree untouched.
+- `--no-checkout` remains the escape hatch for dirty converted paths.
 
 ---
 

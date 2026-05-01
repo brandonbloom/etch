@@ -127,3 +127,111 @@ func TestMergeStateAllPresentTextConflict(t *testing.T) {
 		}
 	}
 }
+
+func TestMaterializationCleanDeleteUsesGitRestore(t *testing.T) {
+	dir := initRepo(t)
+	writeFile(t, dir, "old.txt", "base\n")
+	commitAll(t, dir, "initial")
+	chdir(t, dir)
+
+	var out, errb bytes.Buffer
+	code, err := runCLI([]string{"delete", "old.txt"}, &out, &errb)
+	if err != nil || code != exitOK {
+		t.Fatalf("runCLI code=%d err=%v stderr=%s", code, err, errb.String())
+	}
+	if _, err := gitOutput(dir, nil, "show", "HEAD:old.txt"); err == nil {
+		t.Fatal("deleted path still exists in HEAD")
+	}
+	if _, err := os.Stat(filepath.Join(dir, "old.txt")); !isNoSuch(err) {
+		t.Fatalf("deleted path still exists in worktree: %v", err)
+	}
+	if got := testGit(t, dir, "status", "--porcelain=v1", "--", "old.txt"); got != "" {
+		t.Fatalf("index/worktree not clean after delete:\n%s", got)
+	}
+}
+
+func TestMaterializationCleanConvertedPathUsesGitCheckout(t *testing.T) {
+	dir := initRepo(t)
+	writeFile(t, dir, ".gitattributes", "*.json text eol=crlf\n")
+	writeFile(t, dir, "state.json", "{\n  \"status\": \"open\"\n}\n")
+	commitAll(t, dir, "initial")
+	if err := os.Remove(filepath.Join(dir, "state.json")); err != nil {
+		t.Fatal(err)
+	}
+	testGit(t, dir, "reset", "--hard", "HEAD")
+	wtBefore, err := os.ReadFile(filepath.Join(dir, "state.json"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !bytes.Contains(wtBefore, []byte("\r\n")) {
+		t.Fatalf("test setup did not produce CRLF worktree bytes:\n%q", wtBefore)
+	}
+	chdir(t, dir)
+
+	var out, errb bytes.Buffer
+	code, err := runCLI([]string{"set", "state.json", "status", "complete"}, &out, &errb)
+	if err != nil || code != exitOK {
+		t.Fatalf("runCLI code=%d err=%v stderr=%s", code, err, errb.String())
+	}
+	headBytes := []byte(testGit(t, dir, "show", "HEAD:state.json"))
+	if bytes.Contains(headBytes, []byte("\r\n")) {
+		t.Fatalf("HEAD contains checkout CRLF bytes:\n%q", headBytes)
+	}
+	wt, err := os.ReadFile(filepath.Join(dir, "state.json"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !bytes.Contains(wt, []byte("\r\n")) || !bytes.Contains(wt, []byte(`"status": "complete"`)) {
+		t.Fatalf("worktree was not restored through Git checkout conversion:\n%q", wt)
+	}
+}
+
+func TestMaterializationDirtyConvertedPathFailsBeforeCommit(t *testing.T) {
+	dir := initRepo(t)
+	writeFile(t, dir, ".gitattributes", "*.json text eol=crlf\n")
+	writeFile(t, dir, "state.json", "{\n  \"status\": \"open\"\n}\n")
+	base := commitAll(t, dir, "initial")
+	if err := os.Remove(filepath.Join(dir, "state.json")); err != nil {
+		t.Fatal(err)
+	}
+	testGit(t, dir, "reset", "--hard", "HEAD")
+	local := "{\r\n  \"status\": \"open\",\r\n  \"note\": \"local\"\r\n}\r\n"
+	if err := os.WriteFile(filepath.Join(dir, "state.json"), []byte(local), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	chdir(t, dir)
+
+	var out, errb bytes.Buffer
+	code, err := runCLI([]string{"set", "state.json", "status", "complete"}, &out, &errb)
+	if err == nil || code != exitFailure {
+		t.Fatalf("runCLI code=%d err=%v stdout=%s stderr=%s", code, err, out.String(), errb.String())
+	}
+	if !strings.Contains(err.Error(), "dirty checkout conversion path") || !strings.Contains(err.Error(), "eol=crlf") {
+		t.Fatalf("error did not explain checkout conversion refusal: %v", err)
+	}
+	if got := stringsTrim(testGit(t, dir, "rev-parse", "HEAD")); got != base {
+		t.Fatalf("checkout conversion refusal updated HEAD: got %s, want %s", got, base)
+	}
+	wt, err := os.ReadFile(filepath.Join(dir, "state.json"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if string(wt) != local {
+		t.Fatalf("checkout conversion refusal changed worktree:\n%q", wt)
+	}
+
+	code, err = runCLI([]string{"--no-checkout", "set", "state.json", "status", "complete"}, &out, &errb)
+	if err != nil || code != exitOK {
+		t.Fatalf("--no-checkout runCLI code=%d err=%v stderr=%s", code, err, errb.String())
+	}
+	if got := stringsTrim(testGit(t, dir, "rev-parse", "HEAD")); got == base {
+		t.Fatal("--no-checkout did not commit after checkout conversion refusal")
+	}
+	wt, err = os.ReadFile(filepath.Join(dir, "state.json"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if string(wt) != local {
+		t.Fatalf("--no-checkout changed worktree:\n%q", wt)
+	}
+}
