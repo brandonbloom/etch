@@ -21,6 +21,15 @@ func testGit(t *testing.T, dir string, args ...string) string {
 	return string(out)
 }
 
+func testGitMayFail(t *testing.T, dir string, args ...string) error {
+	t.Helper()
+	cmd := exec.Command("git", args...)
+	cmd.Dir = dir
+	var stderr bytes.Buffer
+	cmd.Stderr = &stderr
+	return cmd.Run()
+}
+
 func initRepo(t *testing.T) string {
 	t.Helper()
 	dir := t.TempDir()

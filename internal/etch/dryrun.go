@@ -6,6 +6,7 @@ import (
 )
 
 func RenderDryRun(w *Workspace, plan *Plan) (string, error) {
+	git := w.gitRunner()
 	// Native Git already knows how to render the mailbox patch shape we want,
 	// but it needs tree and commit objects to diff. Keep those objects
 	// ephemeral so --dry-run remains a repository-no-write preview.
@@ -25,15 +26,15 @@ func RenderDryRun(w *Workspace, plan *Plan) (string, error) {
 	if err != nil {
 		return "", err
 	}
-	author, err := gitOutput(w.CWD, objects.env, "show", "-s", "--format=%aN <%aE>", commit)
+	author, err := git.output(w.CWD, objects.env, "show", "-s", "--format=%aN <%aE>", commit)
 	if err != nil {
 		return "", err
 	}
-	date, err := gitOutput(w.CWD, objects.env, "show", "-s", "--format=%aD", commit)
+	date, err := git.output(w.CWD, objects.env, "show", "-s", "--format=%aD", commit)
 	if err != nil {
 		return "", err
 	}
-	diff, err := gitOutput(w.CWD, objects.env, "show", "--format=", "--stat", "--patch", "--binary", commit)
+	diff, err := git.output(w.CWD, objects.env, "show", "--format=", "--stat", "--patch", "--binary", commit)
 	if err != nil {
 		return "", err
 	}

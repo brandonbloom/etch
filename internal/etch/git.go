@@ -18,7 +18,16 @@ type Workspace struct {
 	Ref       string
 	Unborn    bool
 	Untracked bool
+	git       gitRunner
 }
+
+type gitRunner interface {
+	output(dir string, env []string, args ...string) ([]byte, error)
+	run(dir string, env []string, stdin []byte, args ...string) error
+	outputStdin(dir string, env []string, stdin []byte, args ...string) ([]byte, error)
+}
+
+type realGitRunner struct{}
 
 // gitObjectStore names where object-writing Git plumbing should put new
 // objects. Preview paths use a temporary store so they can still ask Git for
@@ -46,6 +55,13 @@ func OpenWorkspace(untracked bool) (*Workspace, error) {
 }
 
 func OpenWorkspaceAt(cwd string, untracked bool) (*Workspace, error) {
+	return openWorkspaceAt(cwd, untracked, realGitRunner{})
+}
+
+func openWorkspaceAt(cwd string, untracked bool, runner gitRunner) (*Workspace, error) {
+	if runner == nil {
+		runner = realGitRunner{}
+	}
 	abs, err := filepath.Abs(cwd)
 	if err != nil {
 		return nil, err
@@ -56,7 +72,7 @@ func OpenWorkspaceAt(cwd string, untracked bool) (*Workspace, error) {
 	} else {
 		return nil, failf("cannot resolve working directory %s: %v", cwd, err)
 	}
-	rootBytes, err := gitOutput(cwd, nil, "rev-parse", "--show-toplevel")
+	rootBytes, err := runner.output(cwd, nil, "rev-parse", "--show-toplevel")
 	if err != nil {
 		return nil, failf("not inside a git worktree")
 	}
@@ -64,7 +80,7 @@ func OpenWorkspaceAt(cwd string, untracked bool) (*Workspace, error) {
 	if real, err := filepath.EvalSymlinks(root); err == nil {
 		root = real
 	}
-	headBytes, err := gitOutput(cwd, nil, "rev-parse", "--verify", "HEAD")
+	headBytes, err := runner.output(cwd, nil, "rev-parse", "--verify", "HEAD")
 	unborn := false
 	head := ""
 	if err != nil {
@@ -72,12 +88,19 @@ func OpenWorkspaceAt(cwd string, untracked bool) (*Workspace, error) {
 	} else {
 		head = strings.TrimSpace(string(headBytes))
 	}
-	refBytes, err := gitOutput(cwd, nil, "symbolic-ref", "-q", "HEAD")
+	refBytes, err := runner.output(cwd, nil, "symbolic-ref", "-q", "HEAD")
 	ref := "HEAD"
 	if err == nil {
 		ref = strings.TrimSpace(string(refBytes))
 	}
-	return &Workspace{CWD: cwd, Root: root, Head: head, Ref: ref, Unborn: unborn, Untracked: untracked}, nil
+	return &Workspace{CWD: cwd, Root: root, Head: head, Ref: ref, Unborn: unborn, Untracked: untracked, git: runner}, nil
+}
+
+func (w *Workspace) gitRunner() gitRunner {
+	if w.git != nil {
+		return w.git
+	}
+	return realGitRunner{}
 }
 
 type ResolvedPath struct {
@@ -144,7 +167,8 @@ func (w *Workspace) ReadBase(path ResolvedPath) ([]byte, string, bool) {
 	if w.Unborn {
 		return nil, "100644", true
 	}
-	out, err := gitOutput(w.CWD, nil, "show", w.Head+":"+path.Repo)
+	git := w.gitRunner()
+	out, err := git.output(w.CWD, nil, "show", w.Head+":"+path.Repo)
 	if err != nil {
 		if w.Untracked {
 			if b, ok, _ := readUntrackedFile(path.Abs); ok {
@@ -154,7 +178,7 @@ func (w *Workspace) ReadBase(path ResolvedPath) ([]byte, string, bool) {
 		return nil, "100644", true
 	}
 	mode := "100644"
-	if m, err := gitOutput(w.CWD, nil, "ls-tree", "--format=%(objectmode)", w.Head, "--", path.Repo); err == nil {
+	if m, err := git.output(w.CWD, nil, "ls-tree", "--format=%(objectmode)", w.Head, "--", path.Repo); err == nil {
 		mode = strings.TrimSpace(string(m))
 		if mode == "" {
 			mode = "100644"
@@ -187,7 +211,7 @@ func readUntrackedFile(path string) ([]byte, bool, error) {
 	return nil, false, err
 }
 
-func gitOutput(dir string, env []string, args ...string) ([]byte, error) {
+func (realGitRunner) output(dir string, env []string, args ...string) ([]byte, error) {
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
 	cmd := exec.CommandContext(ctx, "git", args...)
@@ -208,7 +232,7 @@ func gitOutput(dir string, env []string, args ...string) ([]byte, error) {
 	return out, nil
 }
 
-func gitRun(dir string, env []string, stdin []byte, args ...string) error {
+func (realGitRunner) run(dir string, env []string, stdin []byte, args ...string) error {
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
 	cmd := exec.CommandContext(ctx, "git", args...)
@@ -231,7 +255,7 @@ func gitRun(dir string, env []string, stdin []byte, args ...string) error {
 	return nil
 }
 
-func gitOutputStdin(dir string, env []string, stdin []byte, args ...string) ([]byte, error) {
+func (realGitRunner) outputStdin(dir string, env []string, stdin []byte, args ...string) ([]byte, error) {
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
 	cmd := exec.CommandContext(ctx, "git", args...)
@@ -280,7 +304,7 @@ func (w *Workspace) ephemeralObjectStore() (gitObjectStore, error) {
 }
 
 func (w *Workspace) objectDir() (string, error) {
-	out, err := gitOutput(w.CWD, nil, "rev-parse", "--git-path", "objects")
+	out, err := w.gitRunner().output(w.CWD, nil, "rev-parse", "--git-path", "objects")
 	if err != nil {
 		return "", err
 	}
@@ -319,6 +343,7 @@ func (w *Workspace) writePlannedTree(plan *Plan) (string, error) {
 }
 
 func (w *Workspace) buildTreeInObjectStore(changes map[string]fileChange, objects gitObjectStore) (string, error) {
+	git := w.gitRunner()
 	tmp, err := os.CreateTemp("", "etch-index-*")
 	if err != nil {
 		return "", err
@@ -330,19 +355,19 @@ func (w *Workspace) buildTreeInObjectStore(changes map[string]fileChange, object
 	env := append([]string{}, objects.env...)
 	env = append(env, "GIT_INDEX_FILE="+indexPath)
 	if !w.Unborn {
-		if err := gitRun(w.CWD, env, nil, "read-tree", w.Head); err != nil {
+		if err := git.run(w.CWD, env, nil, "read-tree", w.Head); err != nil {
 			return "", err
 		}
 	}
 	for _, key := range sortedKeys(changes) {
 		ch := changes[key]
 		if ch.AbsentAfter {
-			if err := gitRun(w.CWD, env, nil, "update-index", "--force-remove", "--", ch.RepoPath); err != nil {
+			if err := git.run(w.CWD, env, nil, "update-index", "--force-remove", "--", ch.RepoPath); err != nil {
 				return "", err
 			}
 			continue
 		}
-		blob, err := gitOutputStdin(w.CWD, env, ch.After, "hash-object", "-w", "--stdin")
+		blob, err := git.outputStdin(w.CWD, env, ch.After, "hash-object", "-w", "--stdin")
 		if err != nil {
 			return "", err
 		}
@@ -351,11 +376,11 @@ func (w *Workspace) buildTreeInObjectStore(changes map[string]fileChange, object
 			mode = "100644"
 		}
 		spec := fmt.Sprintf("%s,%s,%s", mode, strings.TrimSpace(string(blob)), ch.RepoPath)
-		if err := gitRun(w.CWD, env, nil, "update-index", "--add", "--cacheinfo", spec); err != nil {
+		if err := git.run(w.CWD, env, nil, "update-index", "--add", "--cacheinfo", spec); err != nil {
 			return "", err
 		}
 	}
-	tree, err := gitOutput(w.CWD, env, "write-tree")
+	tree, err := git.output(w.CWD, env, "write-tree")
 	if err != nil {
 		return "", err
 	}
@@ -371,7 +396,7 @@ func (w *Workspace) createCommitInObjectStore(tree, message string, objects gitO
 	if !w.Unborn {
 		args = append(args, "-p", w.Head)
 	}
-	out, err := gitOutputStdin(w.CWD, objects.env, []byte(message), args...)
+	out, err := w.gitRunner().outputStdin(w.CWD, objects.env, []byte(message), args...)
 	if err != nil {
 		return "", err
 	}
@@ -380,13 +405,13 @@ func (w *Workspace) createCommitInObjectStore(tree, message string, objects gitO
 
 func (w *Workspace) updateRef(newCommit string) error {
 	if w.Unborn {
-		return gitRun(w.CWD, nil, nil, "update-ref", w.Ref, newCommit)
+		return w.gitRunner().run(w.CWD, nil, nil, "update-ref", w.Ref, newCommit)
 	}
-	return gitRun(w.CWD, nil, nil, "update-ref", w.Ref, newCommit, w.Head)
+	return w.gitRunner().run(w.CWD, nil, nil, "update-ref", w.Ref, newCommit, w.Head)
 }
 
 func (w *Workspace) pathClean(repoPath string) (bool, error) {
-	out, err := gitOutput(w.CWD, nil, "status", "--porcelain=v1", "-z", "--", repoPath)
+	out, err := w.gitRunner().output(w.CWD, nil, "status", "--porcelain=v1", "-z", "--", repoPath)
 	if err != nil {
 		return false, err
 	}
@@ -394,12 +419,13 @@ func (w *Workspace) pathClean(repoPath string) (bool, error) {
 }
 
 func (w *Workspace) restorePathFromCommit(commit, repoPath string) error {
-	return gitRun(w.CWD, nil, nil, "restore", "--source="+commit, "--staged", "--worktree", "--", repoPath)
+	return w.gitRunner().run(w.CWD, nil, nil, "restore", "--source="+commit, "--staged", "--worktree", "--", repoPath)
 }
 
 func (w *Workspace) checkoutConversionRisk(repoPath string) (string, error) {
 	var reasons []string
-	out, err := gitOutput(w.CWD, nil, "check-attr", "-z", "filter", "working-tree-encoding", "ident", "eol", "--", repoPath)
+	git := w.gitRunner()
+	out, err := git.output(w.CWD, nil, "check-attr", "-z", "filter", "working-tree-encoding", "ident", "eol", "--", repoPath)
 	if err != nil {
 		return "", err
 	}
@@ -426,7 +452,7 @@ func (w *Workspace) checkoutConversionRisk(repoPath string) (string, error) {
 			}
 		}
 	}
-	if autocrlf, err := gitOutput(w.CWD, nil, "config", "--bool", "--get", "core.autocrlf"); err == nil && strings.EqualFold(strings.TrimSpace(string(autocrlf)), "true") {
+	if autocrlf, err := git.output(w.CWD, nil, "config", "--bool", "--get", "core.autocrlf"); err == nil && strings.EqualFold(strings.TrimSpace(string(autocrlf)), "true") {
 		reasons = append(reasons, "core.autocrlf=true")
 	}
 	return strings.Join(reasons, ", "), nil
@@ -437,7 +463,7 @@ func checkoutAttrSet(value string) bool {
 }
 
 func (w *Workspace) indexBytes(repoPath string) ([]byte, bool, error) {
-	out, err := gitOutput(w.CWD, nil, "show", ":"+repoPath)
+	out, err := w.gitRunner().output(w.CWD, nil, "show", ":"+repoPath)
 	if err != nil {
 		return nil, true, nil
 	}
@@ -445,7 +471,7 @@ func (w *Workspace) indexBytes(repoPath string) ([]byte, bool, error) {
 }
 
 func (w *Workspace) headBytes(repoPath string) ([]byte, bool, error) {
-	out, err := gitOutput(w.CWD, nil, "show", "HEAD:"+repoPath)
+	out, err := w.gitRunner().output(w.CWD, nil, "show", "HEAD:"+repoPath)
 	if err != nil {
 		return nil, true, nil
 	}
@@ -453,10 +479,11 @@ func (w *Workspace) headBytes(repoPath string) ([]byte, bool, error) {
 }
 
 func (w *Workspace) updateIndexBytes(repoPath, mode string, b []byte, absent bool) error {
+	git := w.gitRunner()
 	if absent {
-		return gitRun(w.CWD, nil, nil, "update-index", "--force-remove", "--", repoPath)
+		return git.run(w.CWD, nil, nil, "update-index", "--force-remove", "--", repoPath)
 	}
-	blob, err := gitOutputStdin(w.CWD, nil, b, "hash-object", "-w", "--stdin")
+	blob, err := git.outputStdin(w.CWD, nil, b, "hash-object", "-w", "--stdin")
 	if err != nil {
 		return err
 	}
@@ -464,5 +491,5 @@ func (w *Workspace) updateIndexBytes(repoPath, mode string, b []byte, absent boo
 		mode = "100644"
 	}
 	spec := fmt.Sprintf("%s,%s,%s", mode, strings.TrimSpace(string(blob)), repoPath)
-	return gitRun(w.CWD, nil, nil, "update-index", "--add", "--cacheinfo", spec)
+	return git.run(w.CWD, nil, nil, "update-index", "--add", "--cacheinfo", spec)
 }

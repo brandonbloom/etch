@@ -1,6 +1,7 @@
 package etch
 
 import (
+	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
@@ -64,6 +65,53 @@ func TestOpenWorkspaceAtUsesExplicitCWD(t *testing.T) {
 	}
 }
 
+func TestOpenWorkspaceAtUsesInjectedGitRunner(t *testing.T) {
+	dir := t.TempDir()
+	realDir, err := filepath.EvalSymlinks(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	runner := &fakeGitRunner{
+		outputs: map[string]fakeGitResponse{
+			fakeGitKey("output", "rev-parse", "--show-toplevel"): {
+				out: []byte(realDir + "\n"),
+			},
+			fakeGitKey("output", "rev-parse", "--verify", "HEAD"): {
+				out: []byte("abc123\n"),
+			},
+			fakeGitKey("output", "symbolic-ref", "-q", "HEAD"): {
+				out: []byte("refs/heads/main\n"),
+			},
+			fakeGitKey("output", "status", "--porcelain=v1", "-z", "--", "state.json"): {},
+		},
+	}
+
+	w, err := openWorkspaceAt(dir, false, runner)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if w.CWD != realDir || w.Root != realDir || w.Head != "abc123" || w.Ref != "refs/heads/main" || w.Unborn {
+		t.Fatalf("workspace = %#v", w)
+	}
+	clean, err := w.pathClean("state.json")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !clean {
+		t.Fatal("pathClean reported injected clean path dirty")
+	}
+
+	wantCalls := strings.Join([]string{
+		"output rev-parse --show-toplevel",
+		"output rev-parse --verify HEAD",
+		"output symbolic-ref -q HEAD",
+		"output status --porcelain=v1 -z -- state.json",
+	}, "\n")
+	if gotCalls := strings.Join(runner.calls, "\n"); gotCalls != wantCalls {
+		t.Fatalf("git calls:\n%s\nwant:\n%s", gotCalls, wantCalls)
+	}
+}
+
 func TestWorkspaceUntrackedAdmission(t *testing.T) {
 	dir := initRepo(t)
 	writeFile(t, dir, "tracked.txt", "base\n")
@@ -120,4 +168,40 @@ func TestWorkspaceContainedSymlinkAllowedEscapeRejected(t *testing.T) {
 	if _, err := w.Resolve("escape/outside", true, true); err == nil {
 		t.Fatal("symlink escape accepted")
 	}
+}
+
+type fakeGitResponse struct {
+	out []byte
+	err error
+}
+
+type fakeGitRunner struct {
+	outputs map[string]fakeGitResponse
+	calls   []string
+}
+
+func (f *fakeGitRunner) output(dir string, env []string, args ...string) ([]byte, error) {
+	return f.respond("output", args...)
+}
+
+func (f *fakeGitRunner) run(dir string, env []string, stdin []byte, args ...string) error {
+	_, err := f.respond("run", args...)
+	return err
+}
+
+func (f *fakeGitRunner) outputStdin(dir string, env []string, stdin []byte, args ...string) ([]byte, error) {
+	return f.respond("outputStdin", args...)
+}
+
+func (f *fakeGitRunner) respond(kind string, args ...string) ([]byte, error) {
+	f.calls = append(f.calls, kind+" "+strings.Join(args, " "))
+	resp, ok := f.outputs[fakeGitKey(kind, args...)]
+	if !ok {
+		return nil, fmt.Errorf("unexpected fake git call: %s %s", kind, strings.Join(args, " "))
+	}
+	return append([]byte(nil), resp.out...), resp.err
+}
+
+func fakeGitKey(kind string, args ...string) string {
+	return kind + "\x00" + strings.Join(args, "\x00")
 }

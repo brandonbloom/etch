@@ -164,9 +164,11 @@ Regression coverage asserts that:
 
 **Spec (§15, §16 Phase 2):** "Implementation code should receive explicit filesystem, index, object-store, and workspace handles instead of reaching for process-global disk state." "Define small filesystem, object-store, base-snapshot, live-index, and working-tree interfaces with in-memory test implementations."
 
-Incremental progress: `OpenWorkspaceAt` and `runCLIAt` let callers provide an explicit working directory, and representative workspace/e2e tests no longer need `os.Chdir`.
+Incremental progress:
+- `OpenWorkspaceAt` and `runCLIAt` let callers provide an explicit working directory, and representative workspace/e2e tests no longer need `os.Chdir`.
+- `Workspace` carries a narrow Git runner interface, with the production implementation isolated in `realGitRunner`. Workspace-owned Git operations route through that boundary, and a focused test verifies runner injection without creating a Git repository.
 
-Remaining implementation gap: `Workspace` still calls `os.ReadFile()`, `exec.Command("git", ...)`, and other process/disk APIs directly. Most tests still use real temporary Git repositories, and many still mutate process CWD. This means:
+Remaining implementation gap: filesystem access and materialization use `os.ReadFile()`, `os.WriteFile()`, and related disk APIs directly. The production Git runner shells out to Git, most tests use real temporary Git repositories, and many tests mutate process CWD. This means:
 - Tests cannot model scenarios without touching the filesystem.
 - Tests mutate global process state (CWD) which is not concurrency-safe.
 - The architecture diagram's separation between planner, snapshot store, and git backend is not reflected in the code.

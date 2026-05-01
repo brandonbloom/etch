@@ -73,7 +73,7 @@ func TestMaterializationDeleteModifyConflict(t *testing.T) {
 	if got := stringsTrim(testGit(t, dir, "rev-parse", "HEAD")); got == base {
 		t.Fatal("delete/modify conflict rolled back commit")
 	}
-	if _, err := gitOutput(dir, nil, "show", "HEAD:old.txt"); err == nil {
+	if err := testGitMayFail(t, dir, "show", "HEAD:old.txt"); err == nil {
 		t.Fatal("deleted path still exists in HEAD")
 	}
 	wt, _ := os.ReadFile(filepath.Join(dir, "old.txt"))
@@ -139,7 +139,7 @@ func TestMaterializationCleanDeleteUsesGitRestore(t *testing.T) {
 	if err != nil || code != exitOK {
 		t.Fatalf("runCLI code=%d err=%v stderr=%s", code, err, errb.String())
 	}
-	if _, err := gitOutput(dir, nil, "show", "HEAD:old.txt"); err == nil {
+	if err := testGitMayFail(t, dir, "show", "HEAD:old.txt"); err == nil {
 		t.Fatal("deleted path still exists in HEAD")
 	}
 	if _, err := os.Stat(filepath.Join(dir, "old.txt")); !isNoSuch(err) {
