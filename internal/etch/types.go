@@ -43,6 +43,7 @@ func failf(format string, args ...any) error {
 }
 
 type GlobalOptions struct {
+	CWD           string
 	Plan          bool
 	DryRun        bool
 	NoCheckout    bool

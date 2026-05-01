@@ -11,9 +11,8 @@ func TestWorkspaceRejectsEscapingPaths(t *testing.T) {
 	dir := initRepo(t)
 	writeFile(t, dir, "a.txt", "base\n")
 	commitAll(t, dir, "initial")
-	chdir(t, dir)
 
-	w, err := OpenWorkspace(false)
+	w, err := OpenWorkspaceAt(dir, false)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -29,9 +28,8 @@ func TestWorkspaceReadsTrackedBytesFromHEAD(t *testing.T) {
 	writeFile(t, dir, "state.json", `{"status":"base"}`+"\n")
 	commitAll(t, dir, "initial")
 	writeFile(t, dir, "state.json", `{"status":"dirty"}`+"\n")
-	chdir(t, dir)
 
-	w, err := OpenWorkspace(false)
+	w, err := OpenWorkspaceAt(dir, false)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -48,14 +46,31 @@ func TestWorkspaceReadsTrackedBytesFromHEAD(t *testing.T) {
 	}
 }
 
+func TestOpenWorkspaceAtUsesExplicitCWD(t *testing.T) {
+	dir := initRepo(t)
+	writeFile(t, dir, "nested/state.json", `{"status":"base"}`+"\n")
+	commitAll(t, dir, "initial")
+
+	w, err := OpenWorkspaceAt(filepath.Join(dir, "nested"), false)
+	if err != nil {
+		t.Fatal(err)
+	}
+	res, err := w.Resolve("state.json", false, true)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if res.Clean != "state.json" || res.Repo != "nested/state.json" {
+		t.Fatalf("Resolve from explicit CWD = clean %q repo %q", res.Clean, res.Repo)
+	}
+}
+
 func TestWorkspaceUntrackedAdmission(t *testing.T) {
 	dir := initRepo(t)
 	writeFile(t, dir, "tracked.txt", "base\n")
 	commitAll(t, dir, "initial")
 	writeFile(t, dir, "local.txt", "local\n")
-	chdir(t, dir)
 
-	w, err := OpenWorkspace(false)
+	w, err := OpenWorkspaceAt(dir, false)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -71,7 +86,7 @@ func TestWorkspaceUntrackedAdmission(t *testing.T) {
 		t.Fatal("untracked file admitted without --untracked")
 	}
 
-	w, err = OpenWorkspace(true)
+	w, err = OpenWorkspaceAt(dir, true)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -95,8 +110,7 @@ func TestWorkspaceContainedSymlinkAllowedEscapeRejected(t *testing.T) {
 	}
 	testGit(t, dir, "add", ".")
 	testGit(t, dir, "commit", "-m", "symlinks")
-	chdir(t, dir)
-	w, err := OpenWorkspace(false)
+	w, err := OpenWorkspaceAt(dir, false)
 	if err != nil {
 		t.Fatal(err)
 	}

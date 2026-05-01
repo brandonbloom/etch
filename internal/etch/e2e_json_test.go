@@ -12,10 +12,8 @@ func TestE2EJSONSetCommitsAndMaterializes(t *testing.T) {
 	dir := initRepo(t)
 	writeFile(t, dir, "state.json", `{"status":"open"}`+"\n")
 	commitAll(t, dir, "initial")
-	chdir(t, dir)
 
-	var out, errb bytes.Buffer
-	code, err := runCLI([]string{"set", "state.json", "status", "complete"}, &out, &errb)
+	_, errb, code, err := runCLIInDir(t, dir, "set", "state.json", "status", "complete")
 	if err != nil || code != exitOK {
 		t.Fatalf("runCLI code=%d err=%v stderr=%s", code, err, errb.String())
 	}
@@ -40,10 +38,8 @@ func TestE2EExplicitFalseBoolFlagsDoNotEnablePlanModes(t *testing.T) {
 	dir := initRepo(t)
 	writeFile(t, dir, "state.json", `{"status":"open"}`+"\n")
 	commitAll(t, dir, "initial")
-	chdir(t, dir)
 
-	var out, errb bytes.Buffer
-	code, err := runCLI([]string{"--plan=false", "--dry-run=false", "set", "state.json", "status", "complete"}, &out, &errb)
+	out, errb, code, err := runCLIInDir(t, dir, "--plan=false", "--dry-run=false", "set", "state.json", "status", "complete")
 	if err != nil || code != exitOK {
 		t.Fatalf("runCLI code=%d err=%v stderr=%s", code, err, errb.String())
 	}
@@ -60,10 +56,8 @@ func TestE2EJSONSetCreatesMissingFile(t *testing.T) {
 	dir := initRepo(t)
 	writeFile(t, dir, "README.md", "# hi\n")
 	commitAll(t, dir, "initial")
-	chdir(t, dir)
 
-	var out, errb bytes.Buffer
-	code, err := runCLI([]string{"set", "a.json", "x", "1"}, &out, &errb)
+	_, errb, code, err := runCLIInDir(t, dir, "set", "a.json", "x", "1")
 	if err != nil || code != exitOK {
 		t.Fatalf("runCLI code=%d err=%v stderr=%s", code, err, errb.String())
 	}
@@ -177,14 +171,9 @@ func TestE2ERunGuardAndAtomicFailure(t *testing.T) {
 	dir := initRepo(t)
 	writeFile(t, dir, "state.json", `{"status":"open"}`+"\n")
 	head := commitAll(t, dir, "initial")
-	chdir(t, dir)
 
-	script := filepath.Join(dir, "ops.etch")
-	if err := os.WriteFile(script, []byte("contains state.json open\nset state.json status complete\n"), 0o644); err != nil {
-		t.Fatal(err)
-	}
-	var out, errb bytes.Buffer
-	code, err := runCLI([]string{"run", script}, &out, &errb)
+	writeFile(t, dir, "ops.etch", "contains state.json open\nset state.json status complete\n")
+	_, errb, code, err := runCLIInDir(t, dir, "run", "ops.etch")
 	if err != nil || code != exitOK {
 		t.Fatalf("runCLI code=%d err=%v stderr=%s", code, err, errb.String())
 	}
@@ -193,13 +182,8 @@ func TestE2ERunGuardAndAtomicFailure(t *testing.T) {
 	}
 
 	head = stringsTrim(testGit(t, dir, "rev-parse", "HEAD"))
-	bad := filepath.Join(dir, "bad.etch")
-	if err := os.WriteFile(bad, []byte("set state.json other ok\nset state.json missing[9].x nope\n"), 0o644); err != nil {
-		t.Fatal(err)
-	}
-	out.Reset()
-	errb.Reset()
-	code, err = runCLI([]string{"run", bad}, &out, &errb)
+	writeFile(t, dir, "bad.etch", "set state.json other ok\nset state.json missing[9].x nope\n")
+	_, errb, code, err = runCLIInDir(t, dir, "run", "bad.etch")
 	if err == nil || code == exitOK {
 		t.Fatalf("bad run succeeded stderr=%s", errb.String())
 	}

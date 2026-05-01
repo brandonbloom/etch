@@ -35,13 +35,26 @@ func (s gitObjectStore) close() {
 	}
 }
 
+// OpenWorkspace opens the process working directory. Prefer OpenWorkspaceAt
+// when the caller already has an explicit directory.
 func OpenWorkspace(untracked bool) (*Workspace, error) {
 	cwd, err := os.Getwd()
 	if err != nil {
 		return nil, err
 	}
+	return OpenWorkspaceAt(cwd, untracked)
+}
+
+func OpenWorkspaceAt(cwd string, untracked bool) (*Workspace, error) {
+	abs, err := filepath.Abs(cwd)
+	if err != nil {
+		return nil, err
+	}
+	cwd = abs
 	if real, err := filepath.EvalSymlinks(cwd); err == nil {
 		cwd = real
+	} else {
+		return nil, failf("cannot resolve working directory %s: %v", cwd, err)
 	}
 	rootBytes, err := gitOutput(cwd, nil, "rev-parse", "--show-toplevel")
 	if err != nil {

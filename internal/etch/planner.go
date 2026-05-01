@@ -25,6 +25,13 @@ func NewExecutor(opts GlobalOptions) Executor {
 	return Executor{opts: opts}
 }
 
+func (e Executor) openWorkspace() (*Workspace, error) {
+	if e.opts.CWD != "" {
+		return OpenWorkspaceAt(e.opts.CWD, e.opts.Untracked)
+	}
+	return OpenWorkspace(e.opts.Untracked)
+}
+
 func (e Executor) Run(ops []Operation, stdout, stderr interface {
 	Write([]byte) (int, error)
 }) (exitCode, error) {
@@ -47,7 +54,7 @@ func (e Executor) Run(ops []Operation, stdout, stderr interface {
 		if attempt > 0 {
 			sleepRetry(attempt)
 		}
-		w, err := OpenWorkspace(e.opts.Untracked)
+		w, err := e.openWorkspace()
 		if err != nil {
 			return exitFailure, err
 		}

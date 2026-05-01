@@ -48,6 +48,13 @@ func commitAll(t *testing.T, dir, msg string) string {
 	return stringsTrim(testGit(t, dir, "rev-parse", "HEAD"))
 }
 
+func runCLIInDir(t *testing.T, dir string, args ...string) (bytes.Buffer, bytes.Buffer, exitCode, error) {
+	t.Helper()
+	var out, errb bytes.Buffer
+	code, err := runCLIAt(dir, args, &out, &errb)
+	return out, errb, code, err
+}
+
 func stringsTrim(s string) string {
 	for len(s) > 0 && (s[len(s)-1] == '\n' || s[len(s)-1] == '\r' || s[len(s)-1] == ' ' || s[len(s)-1] == '\t') {
 		s = s[:len(s)-1]

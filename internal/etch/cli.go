@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"path/filepath"
 	"strings"
 
 	cli "github.com/urfave/cli/v3"
@@ -26,7 +27,11 @@ func Main(args []string, stdout, stderr io.Writer) int {
 }
 
 func runCLI(args []string, stdout, stderr io.Writer) (exitCode, error) {
-	opts := GlobalOptions{Retries: 3}
+	return runCLIAt("", args, stdout, stderr)
+}
+
+func runCLIAt(cwd string, args []string, stdout, stderr io.Writer) (exitCode, error) {
+	opts := GlobalOptions{CWD: cwd, Retries: 3}
 	var code exitCode
 	stopAfterVerb := 1
 
@@ -137,7 +142,7 @@ func runParsedCLI(opts GlobalOptions, rest []string, stdout, stderr io.Writer) (
 		if len(rest) == 2 {
 			script = rest[1]
 		}
-		stmts, err := ParseScript(script)
+		stmts, err := ParseScriptAt(opts.CWD, script)
 		if err != nil {
 			return exitUsage, err
 		}
@@ -171,7 +176,7 @@ func executeStatements(opts GlobalOptions, stmts []Statement, stdout, stderr io.
 	return exec.Run(ops, stdout, stderr)
 }
 
-func ParseScript(path string) ([]Statement, error) {
+func ParseScriptAt(cwd, path string) ([]Statement, error) {
 	var data []byte
 	var err error
 	name := path
@@ -179,7 +184,11 @@ func ParseScript(path string) ([]Statement, error) {
 		name = "<stdin>"
 		data, err = readStdin()
 	} else {
-		data, err = os.ReadFile(path)
+		readPath := path
+		if cwd != "" && !filepath.IsAbs(readPath) {
+			readPath = filepath.Join(cwd, readPath)
+		}
+		data, err = os.ReadFile(readPath)
 	}
 	if err != nil {
 		return nil, failf("%s", err)
