@@ -57,7 +57,7 @@ func (w *Workspace) objectDir() (string, error) {
 	if !filepath.IsAbs(path) {
 		path = filepath.Join(w.CWD, path)
 	}
-	if real, err := filepath.EvalSymlinks(path); err == nil {
+	if real, err := w.pathResolver().evalSymlinks(path); err == nil {
 		path = real
 	}
 	return path, nil

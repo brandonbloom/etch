@@ -5,8 +5,6 @@ import (
 	"errors"
 	"fmt"
 	"io"
-	"os"
-	"path/filepath"
 	"strings"
 
 	cli "github.com/urfave/cli/v3"
@@ -174,30 +172,6 @@ func executeStatements(opts GlobalOptions, stmts []Statement, stdout, stderr io.
 	}
 	exec := NewExecutor(opts)
 	return exec.Run(ops, stdout, stderr)
-}
-
-func ParseScriptAt(cwd, path string) ([]Statement, error) {
-	var data []byte
-	var err error
-	name := path
-	if path == "-" {
-		name = "<stdin>"
-		data, err = readStdin()
-	} else {
-		readPath := path
-		if cwd != "" && !filepath.IsAbs(readPath) {
-			readPath = filepath.Join(cwd, readPath)
-		}
-		data, err = os.ReadFile(readPath)
-	}
-	if err != nil {
-		return nil, failf("%s", err)
-	}
-	return ParseScriptBytes(name, data)
-}
-
-var readStdin = func() ([]byte, error) {
-	return io.ReadAll(os.Stdin)
 }
 
 func completeShell(_ context.Context, cmd *cli.Command) {

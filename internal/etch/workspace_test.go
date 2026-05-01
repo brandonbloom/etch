@@ -86,7 +86,7 @@ func TestOpenWorkspaceAtUsesInjectedGitRunner(t *testing.T) {
 		},
 	}
 
-	w, err := openWorkspaceAt(dir, false, runner)
+	w, err := openWorkspaceAt(dir, false, workspaceDeps{git: runner})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -109,6 +109,50 @@ func TestOpenWorkspaceAtUsesInjectedGitRunner(t *testing.T) {
 	}, "\n")
 	if gotCalls := strings.Join(runner.calls, "\n"); gotCalls != wantCalls {
 		t.Fatalf("git calls:\n%s\nwant:\n%s", gotCalls, wantCalls)
+	}
+}
+
+func TestWorkspaceResolveUsesInjectedPathResolver(t *testing.T) {
+	runner := &fakeGitRunner{
+		outputs: map[string]fakeGitResponse{
+			fakeGitKey("output", "rev-parse", "--show-toplevel"): {
+				out: []byte("/repo\n"),
+			},
+			fakeGitKey("output", "rev-parse", "--verify", "HEAD"): {
+				out: []byte("abc123\n"),
+			},
+			fakeGitKey("output", "symbolic-ref", "-q", "HEAD"): {
+				out: []byte("refs/heads/main\n"),
+			},
+		},
+	}
+	paths := &fakeWorkspacePaths{
+		cwd: "/work",
+		reals: map[string]string{
+			"/work/alias":              "/repo/sub",
+			"/repo":                    "/repo",
+			"/repo/sub/link/data.json": "/repo/sub/real/data.json",
+		},
+	}
+
+	w, err := openWorkspaceAt("alias", false, workspaceDeps{git: runner, paths: paths})
+	if err != nil {
+		t.Fatal(err)
+	}
+	res, err := w.Resolve("link/data.json", false, true)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if res.Clean != "link/data.json" || res.Abs != "/repo/sub/real/data.json" || res.Repo != "sub/real/data.json" {
+		t.Fatalf("resolved path = %#v", res)
+	}
+	wantEvals := strings.Join([]string{
+		"/work/alias",
+		"/repo",
+		"/repo/sub/link/data.json",
+	}, "\n")
+	if gotEvals := strings.Join(paths.evals, "\n"); gotEvals != wantEvals {
+		t.Fatalf("evalSymlinks calls:\n%s\nwant:\n%s", gotEvals, wantEvals)
 	}
 }
 
@@ -174,7 +218,7 @@ func TestWorkspaceUntrackedAdmissionUsesInjectedWorkingTree(t *testing.T) {
 		path: []byte("local\n"),
 	}}
 
-	w, err := openWorkspaceAtWithDeps(dir, true, workspaceDeps{git: runner, worktree: worktree})
+	w, err := openWorkspaceAt(dir, true, workspaceDeps{git: runner, worktree: worktree})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -277,4 +321,30 @@ func (f *fakeWorkingTreeFS) mkdirAll(path string, perm os.FileMode) error {
 func (f *fakeWorkingTreeFS) remove(path string) error {
 	delete(f.files, path)
 	return nil
+}
+
+type fakeWorkspacePaths struct {
+	cwd   string
+	reals map[string]string
+	evals []string
+}
+
+func (p *fakeWorkspacePaths) getwd() (string, error) {
+	return p.cwd, nil
+}
+
+func (p *fakeWorkspacePaths) abs(path string) (string, error) {
+	if filepath.IsAbs(path) {
+		return filepath.Clean(path), nil
+	}
+	return filepath.Join(p.cwd, path), nil
+}
+
+func (p *fakeWorkspacePaths) evalSymlinks(path string) (string, error) {
+	p.evals = append(p.evals, path)
+	real, ok := p.reals[path]
+	if !ok {
+		return "", os.ErrNotExist
+	}
+	return real, nil
 }

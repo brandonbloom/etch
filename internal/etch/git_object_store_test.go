@@ -13,7 +13,7 @@ func TestPlanAndDryRunUseInjectedTempStore(t *testing.T) {
 	tempRoot := t.TempDir()
 	temp := &recordingTempStore{root: tempRoot}
 
-	w, err := openWorkspaceAtWithDeps(dir, false, workspaceDeps{
+	w, err := openWorkspaceAt(dir, false, workspaceDeps{
 		git:      realGitRunner{},
 		worktree: osWorkingTreeFS{},
 		temp:     temp,

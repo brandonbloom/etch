@@ -3,7 +3,6 @@ package etch
 import (
 	"bytes"
 	"fmt"
-	"os"
 	"path/filepath"
 	"strings"
 )
@@ -18,48 +17,59 @@ type Workspace struct {
 	git       gitRunner
 	worktree  workingTreeFS
 	temp      workspaceTempStore
+	paths     workspacePaths
 }
 
 type workspaceDeps struct {
 	git      gitRunner
 	worktree workingTreeFS
 	temp     workspaceTempStore
+	paths    workspacePaths
+}
+
+func (d workspaceDeps) withDefaults() workspaceDeps {
+	if d.git == nil {
+		d.git = realGitRunner{}
+	}
+	if d.worktree == nil {
+		d.worktree = osWorkingTreeFS{}
+	}
+	if d.temp == nil {
+		d.temp = osWorkspaceTempStore{}
+	}
+	if d.paths == nil {
+		d.paths = osWorkspacePaths{}
+	}
+	return d
 }
 
 // OpenWorkspace opens the process working directory. Prefer OpenWorkspaceAt
 // when the caller already has an explicit directory.
 func OpenWorkspace(untracked bool) (*Workspace, error) {
-	cwd, err := os.Getwd()
+	return openWorkspace(untracked, workspaceDeps{})
+}
+
+func openWorkspace(untracked bool, deps workspaceDeps) (*Workspace, error) {
+	deps = deps.withDefaults()
+	cwd, err := deps.paths.getwd()
 	if err != nil {
 		return nil, err
 	}
-	return OpenWorkspaceAt(cwd, untracked)
+	return openWorkspaceAt(cwd, untracked, deps)
 }
 
 func OpenWorkspaceAt(cwd string, untracked bool) (*Workspace, error) {
-	return openWorkspaceAt(cwd, untracked, realGitRunner{})
+	return openWorkspaceAt(cwd, untracked, workspaceDeps{})
 }
 
-func openWorkspaceAt(cwd string, untracked bool, runner gitRunner) (*Workspace, error) {
-	return openWorkspaceAtWithDeps(cwd, untracked, workspaceDeps{git: runner})
-}
-
-func openWorkspaceAtWithDeps(cwd string, untracked bool, deps workspaceDeps) (*Workspace, error) {
-	if deps.git == nil {
-		deps.git = realGitRunner{}
-	}
-	if deps.worktree == nil {
-		deps.worktree = osWorkingTreeFS{}
-	}
-	if deps.temp == nil {
-		deps.temp = osWorkspaceTempStore{}
-	}
-	abs, err := filepath.Abs(cwd)
+func openWorkspaceAt(cwd string, untracked bool, deps workspaceDeps) (*Workspace, error) {
+	deps = deps.withDefaults()
+	abs, err := deps.paths.abs(cwd)
 	if err != nil {
 		return nil, err
 	}
 	cwd = abs
-	if real, err := filepath.EvalSymlinks(cwd); err == nil {
+	if real, err := deps.paths.evalSymlinks(cwd); err == nil {
 		cwd = real
 	} else {
 		return nil, failf("cannot resolve working directory %s: %v", cwd, err)
@@ -69,7 +79,7 @@ func openWorkspaceAtWithDeps(cwd string, untracked bool, deps workspaceDeps) (*W
 		return nil, failf("not inside a git worktree")
 	}
 	root := strings.TrimSpace(string(rootBytes))
-	if real, err := filepath.EvalSymlinks(root); err == nil {
+	if real, err := deps.paths.evalSymlinks(root); err == nil {
 		root = real
 	}
 	headBytes, err := deps.git.output(cwd, nil, "rev-parse", "--verify", "HEAD")
@@ -85,7 +95,7 @@ func openWorkspaceAtWithDeps(cwd string, untracked bool, deps workspaceDeps) (*W
 	if err == nil {
 		ref = strings.TrimSpace(string(refBytes))
 	}
-	return &Workspace{CWD: cwd, Root: root, Head: head, Ref: ref, Unborn: unborn, Untracked: untracked, git: deps.git, worktree: deps.worktree, temp: deps.temp}, nil
+	return &Workspace{CWD: cwd, Root: root, Head: head, Ref: ref, Unborn: unborn, Untracked: untracked, git: deps.git, worktree: deps.worktree, temp: deps.temp, paths: deps.paths}, nil
 }
 
 type ResolvedPath struct {
@@ -120,14 +130,15 @@ func (w *Workspace) Resolve(input string, mayBeMissing bool, finalSymlink bool) 
 	if mayBeMissing {
 		checkAbs = filepath.Dir(abs)
 	}
+	paths := w.pathResolver()
 	if finalSymlink && !mayBeMissing {
-		if real, err := filepath.EvalSymlinks(abs); err == nil {
+		if real, err := paths.evalSymlinks(abs); err == nil {
 			checkAbs = real
 			abs = real
 		} else if !isNoSuch(err) {
 			return ResolvedPath{}, failf("%s: %v", input, err)
 		}
-	} else if real, err := filepath.EvalSymlinks(checkAbs); err == nil {
+	} else if real, err := paths.evalSymlinks(checkAbs); err == nil {
 		checkAbs = real
 	} else if !isNoSuch(err) {
 		return ResolvedPath{}, failf("%s: %v", input, err)

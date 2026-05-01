@@ -169,10 +169,12 @@ Incremental progress:
 - `Workspace` carries a narrow Git runner interface, with the production implementation isolated in `realGitRunner`. Workspace-owned Git operations route through that boundary, and a focused test verifies runner injection without creating a Git repository.
 - `Workspace` carries a narrow working-tree filesystem interface for live file reads and writes. Materialization uses resolved absolute worktree paths instead of CWD-relative plan paths, with regression coverage for dirty-path materialization while the process CWD is elsewhere.
 - `Workspace` carries a narrow temp-store interface for Git object directories and synthetic index files. Planning and dry-run temp allocations are injectable, isolated under a test-owned directory in regression coverage, and cleaned up after use.
+- Script loading uses an injectable `scriptSource`, so command-line `run` no longer embeds direct script file reads in CLI argument handling.
+- `Workspace` carries a narrow path-resolution interface for process CWD and symlink resolution. Path resolution can be tested with fake symlink targets instead of real filesystem links.
 
-Remaining implementation gap: path resolution and script reading still use process OS APIs directly. The production Git runner shells out to Git, and most tests use real temporary Git repositories. This means:
+Remaining implementation gap: the production Git runner shells out to Git, and most tests use real temporary Git repositories. This means:
 - Tests cannot model scenarios without touching the filesystem.
-- The architecture diagram's separation between planner, snapshot store, and git backend is not reflected in the code.
+- The architecture diagram's separation between planner, snapshot store, and git backend is only partially reflected in the code.
 
 ---
 
