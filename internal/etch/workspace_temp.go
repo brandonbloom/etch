@@ -21,10 +21,7 @@ type workspaceTempFile interface {
 type osWorkspaceTempStore struct{}
 
 func (w *Workspace) tempStore() workspaceTempStore {
-	if w.temp != nil {
-		return w.temp
-	}
-	return osWorkspaceTempStore{}
+	return w.workspaceDeps().temp
 }
 
 func (osWorkspaceTempStore) mkdir(pattern string) (string, error) {

@@ -7,6 +7,9 @@ import (
 	"strings"
 )
 
+// Workspace captures the repository snapshot and working directory that an etch
+// invocation reasons about. All process, Git, and filesystem effects are routed
+// through its private dependency bundle.
 type Workspace struct {
 	CWD       string
 	Root      string
@@ -14,33 +17,7 @@ type Workspace struct {
 	Ref       string
 	Unborn    bool
 	Untracked bool
-	git       gitRunner
-	worktree  workingTreeFS
-	temp      workspaceTempStore
-	paths     workspacePaths
-}
-
-type workspaceDeps struct {
-	git      gitRunner
-	worktree workingTreeFS
-	temp     workspaceTempStore
-	paths    workspacePaths
-}
-
-func (d workspaceDeps) withDefaults() workspaceDeps {
-	if d.git == nil {
-		d.git = realGitRunner{}
-	}
-	if d.worktree == nil {
-		d.worktree = osWorkingTreeFS{}
-	}
-	if d.temp == nil {
-		d.temp = osWorkspaceTempStore{}
-	}
-	if d.paths == nil {
-		d.paths = osWorkspacePaths{}
-	}
-	return d
+	deps      workspaceDeps
 }
 
 // OpenWorkspace opens the process working directory. Prefer OpenWorkspaceAt
@@ -58,6 +35,7 @@ func openWorkspace(untracked bool, deps workspaceDeps) (*Workspace, error) {
 	return openWorkspaceAt(cwd, untracked, deps)
 }
 
+// OpenWorkspaceAt opens the Git worktree containing cwd.
 func OpenWorkspaceAt(cwd string, untracked bool) (*Workspace, error) {
 	return openWorkspaceAt(cwd, untracked, workspaceDeps{})
 }
@@ -95,7 +73,7 @@ func openWorkspaceAt(cwd string, untracked bool, deps workspaceDeps) (*Workspace
 	if err == nil {
 		ref = strings.TrimSpace(string(refBytes))
 	}
-	return &Workspace{CWD: cwd, Root: root, Head: head, Ref: ref, Unborn: unborn, Untracked: untracked, git: deps.git, worktree: deps.worktree, temp: deps.temp, paths: deps.paths}, nil
+	return &Workspace{CWD: cwd, Root: root, Head: head, Ref: ref, Unborn: unborn, Untracked: untracked, deps: deps}, nil
 }
 
 type ResolvedPath struct {

@@ -19,10 +19,7 @@ type workingTreeFS interface {
 type osWorkingTreeFS struct{}
 
 func (w *Workspace) workingTreeFS() workingTreeFS {
-	if w.worktree != nil {
-		return w.worktree
-	}
-	return osWorkingTreeFS{}
+	return w.workspaceDeps().worktree
 }
 
 func (w *Workspace) readWorktreeFile(ch fileChange) ([]byte, bool, error) {

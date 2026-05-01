@@ -17,10 +17,7 @@ type workspacePaths interface {
 type osWorkspacePaths struct{}
 
 func (w *Workspace) pathResolver() workspacePaths {
-	if w.paths != nil {
-		return w.paths
-	}
-	return osWorkspacePaths{}
+	return w.workspaceDeps().paths
 }
 
 func (osWorkspacePaths) getwd() (string, error) {

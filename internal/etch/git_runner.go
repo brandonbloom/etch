@@ -22,10 +22,7 @@ type gitRunner interface {
 type realGitRunner struct{}
 
 func (w *Workspace) gitRunner() gitRunner {
-	if w.git != nil {
-		return w.git
-	}
-	return realGitRunner{}
+	return w.workspaceDeps().git
 }
 
 func (realGitRunner) output(dir string, env []string, args ...string) ([]byte, error) {
