@@ -2,13 +2,10 @@ package etch
 
 import (
 	"bytes"
-	"context"
 	"fmt"
 	"os"
-	"os/exec"
 	"path/filepath"
 	"strings"
-	"time"
 )
 
 type Workspace struct {
@@ -19,15 +16,8 @@ type Workspace struct {
 	Unborn    bool
 	Untracked bool
 	git       gitRunner
+	worktree  workingTreeFS
 }
-
-type gitRunner interface {
-	output(dir string, env []string, args ...string) ([]byte, error)
-	run(dir string, env []string, stdin []byte, args ...string) error
-	outputStdin(dir string, env []string, stdin []byte, args ...string) ([]byte, error)
-}
-
-type realGitRunner struct{}
 
 // gitObjectStore names where object-writing Git plumbing should put new
 // objects. Preview paths use a temporary store so they can still ask Git for
@@ -59,8 +49,15 @@ func OpenWorkspaceAt(cwd string, untracked bool) (*Workspace, error) {
 }
 
 func openWorkspaceAt(cwd string, untracked bool, runner gitRunner) (*Workspace, error) {
+	return openWorkspaceAtWithDeps(cwd, untracked, runner, osWorkingTreeFS{})
+}
+
+func openWorkspaceAtWithDeps(cwd string, untracked bool, runner gitRunner, worktree workingTreeFS) (*Workspace, error) {
 	if runner == nil {
 		runner = realGitRunner{}
+	}
+	if worktree == nil {
+		worktree = osWorkingTreeFS{}
 	}
 	abs, err := filepath.Abs(cwd)
 	if err != nil {
@@ -93,14 +90,7 @@ func openWorkspaceAt(cwd string, untracked bool, runner gitRunner) (*Workspace, 
 	if err == nil {
 		ref = strings.TrimSpace(string(refBytes))
 	}
-	return &Workspace{CWD: cwd, Root: root, Head: head, Ref: ref, Unborn: unborn, Untracked: untracked, git: runner}, nil
-}
-
-func (w *Workspace) gitRunner() gitRunner {
-	if w.git != nil {
-		return w.git
-	}
-	return realGitRunner{}
+	return &Workspace{CWD: cwd, Root: root, Head: head, Ref: ref, Unborn: unborn, Untracked: untracked, git: runner, worktree: worktree}, nil
 }
 
 type ResolvedPath struct {
@@ -171,7 +161,8 @@ func (w *Workspace) ReadBase(path ResolvedPath) ([]byte, string, bool) {
 	out, err := git.output(w.CWD, nil, "show", w.Head+":"+path.Repo)
 	if err != nil {
 		if w.Untracked {
-			if b, ok, _ := readUntrackedFile(path.Abs); ok {
+			b, readErr := w.workingTreeFS().readFile(path.Abs)
+			if readErr == nil {
 				return b, "100644", false
 			}
 		}
@@ -193,88 +184,15 @@ func (w *Workspace) ExistsInAdmittedView(path ResolvedPath) (bool, []byte, strin
 		return true, b, mode, nil
 	}
 	if w.Untracked {
-		if _, _, err := readUntrackedFile(path.Abs); err != nil {
+		b, err := w.workingTreeFS().readFile(path.Abs)
+		if err == nil {
+			return true, b, "100644", nil
+		}
+		if !isNoSuch(err) {
 			return false, nil, "100644", err
 		}
 	}
 	return false, nil, mode, nil
-}
-
-func readUntrackedFile(path string) ([]byte, bool, error) {
-	b, err := os.ReadFile(path)
-	if err == nil {
-		return b, true, nil
-	}
-	if isNoSuch(err) {
-		return nil, false, nil
-	}
-	return nil, false, err
-}
-
-func (realGitRunner) output(dir string, env []string, args ...string) ([]byte, error) {
-	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
-	defer cancel()
-	cmd := exec.CommandContext(ctx, "git", args...)
-	cmd.Dir = dir
-	if env != nil {
-		cmd.Env = append(os.Environ(), env...)
-	}
-	var stderr bytes.Buffer
-	cmd.Stderr = &stderr
-	out, err := cmd.Output()
-	if err != nil {
-		msg := strings.TrimSpace(stderr.String())
-		if msg != "" {
-			return out, fmt.Errorf("%s", msg)
-		}
-		return out, err
-	}
-	return out, nil
-}
-
-func (realGitRunner) run(dir string, env []string, stdin []byte, args ...string) error {
-	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
-	defer cancel()
-	cmd := exec.CommandContext(ctx, "git", args...)
-	cmd.Dir = dir
-	if env != nil {
-		cmd.Env = append(os.Environ(), env...)
-	}
-	if stdin != nil {
-		cmd.Stdin = bytes.NewReader(stdin)
-	}
-	var stderr bytes.Buffer
-	cmd.Stderr = &stderr
-	if err := cmd.Run(); err != nil {
-		msg := strings.TrimSpace(stderr.String())
-		if msg != "" {
-			return fmt.Errorf("%s", msg)
-		}
-		return err
-	}
-	return nil
-}
-
-func (realGitRunner) outputStdin(dir string, env []string, stdin []byte, args ...string) ([]byte, error) {
-	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
-	defer cancel()
-	cmd := exec.CommandContext(ctx, "git", args...)
-	cmd.Dir = dir
-	if env != nil {
-		cmd.Env = append(os.Environ(), env...)
-	}
-	cmd.Stdin = bytes.NewReader(stdin)
-	var stderr bytes.Buffer
-	cmd.Stderr = &stderr
-	out, err := cmd.Output()
-	if err != nil {
-		msg := strings.TrimSpace(stderr.String())
-		if msg != "" {
-			return out, fmt.Errorf("%s", msg)
-		}
-		return out, err
-	}
-	return out, nil
 }
 
 func (w *Workspace) repositoryObjectStore() gitObjectStore {

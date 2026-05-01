@@ -3,8 +3,6 @@ package etch
 import (
 	"bytes"
 	"fmt"
-	"os"
-	"path/filepath"
 	"strings"
 	"unicode/utf8"
 )
@@ -34,7 +32,10 @@ func NewMaterializer(w *Workspace, plan *Plan, skip bool) (Materializer, error) 
 	for _, k := range sortedKeys(plan.Touched) {
 		ch := plan.Touched[k]
 		idx, idxAbsent, _ := w.indexBytes(ch.RepoPath)
-		wt, wtAbsent := readWorkingTree(ch)
+		wt, wtAbsent, err := w.readWorktreeFile(ch)
+		if err != nil {
+			return Materializer{}, err
+		}
 		gitClean, err := w.pathClean(ch.RepoPath)
 		if err != nil {
 			return Materializer{}, err
@@ -45,14 +46,6 @@ func NewMaterializer(w *Workspace, plan *Plan, skip bool) (Materializer, error) 
 		m.states[k] = preMaterialize{index: idx, indexAbsent: idxAbsent, worktree: wt, worktreeAbsent: wtAbsent, gitClean: gitClean}
 	}
 	return m, nil
-}
-
-func readWorkingTree(ch fileChange) ([]byte, bool) {
-	b, err := os.ReadFile(ch.Path)
-	if err == nil {
-		return b, false
-	}
-	return nil, true
 }
 
 func (m Materializer) Preflight() error {
@@ -165,7 +158,7 @@ func (m Materializer) materializeOne(commit string, ch fileChange, st preMateria
 	if err := m.w.updateIndexBytes(ch.RepoPath, ch.Mode, postIndex, postIndexAbsent); err != nil {
 		return materializeResult{}, err
 	}
-	if err := writeWorktree(ch.Path, postWT, postWTAbsent); err != nil {
+	if err := m.w.writeWorktree(ch, postWT, postWTAbsent); err != nil {
 		return materializeResult{}, err
 	}
 	return materializeResult{conflict: wtConflict}, nil
@@ -175,27 +168,14 @@ func (m Materializer) writeBoth(ch fileChange, b []byte, absent bool) error {
 	if err := m.w.updateIndexBytes(ch.RepoPath, ch.Mode, b, absent); err != nil {
 		return err
 	}
-	return writeWorktree(ch.Path, b, absent)
+	return m.w.writeWorktree(ch, b, absent)
 }
 
 func (m Materializer) writeIndexHeadAndWorktree(ch fileChange, conflict []byte, absent bool) error {
 	if err := m.w.updateIndexBytes(ch.RepoPath, ch.Mode, ch.After, ch.AbsentAfter); err != nil {
 		return err
 	}
-	return writeWorktree(ch.Path, conflict, absent)
-}
-
-func writeWorktree(path string, b []byte, absent bool) error {
-	if absent {
-		if err := os.Remove(path); err != nil && !isNoSuch(err) {
-			return err
-		}
-		return nil
-	}
-	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
-		return err
-	}
-	return os.WriteFile(path, b, 0o644)
+	return m.w.writeWorktree(ch, conflict, absent)
 }
 
 func bytesStateEqual(a []byte, aAbsent bool, b []byte, bAbsent bool) bool {

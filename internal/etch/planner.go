@@ -269,7 +269,7 @@ func ensureFileState(w *Workspace, files map[string]fileChange, path string, req
 	if requireExists && absent {
 		return fileChange{}, res, failf("%s is missing", path)
 	}
-	ch := fileChange{Path: res.Clean, RepoPath: res.Repo, Before: before, After: append([]byte(nil), before...), Mode: mode, AbsentBefore: absent, AbsentAfter: absent}
+	ch := fileChange{Path: res.Clean, RepoPath: res.Repo, AbsPath: res.Abs, Before: before, After: append([]byte(nil), before...), Mode: mode, AbsentBefore: absent, AbsentAfter: absent}
 	files[res.Clean] = ch
 	return ch, res, nil
 }
@@ -292,7 +292,7 @@ func planGuard(w *Workspace, files map[string]fileChange, op Operation) (Operati
 	}
 	op.Path = res.Clean
 	op.Target = PlanTarget{Path: res.Clean}
-	ch := fileChange{Path: res.Clean, RepoPath: res.Repo, Before: b, After: b, Mode: mode, AbsentBefore: !exists, AbsentAfter: !exists}
+	ch := fileChange{Path: res.Clean, RepoPath: res.Repo, AbsPath: res.Abs, Before: b, After: b, Mode: mode, AbsentBefore: !exists, AbsentAfter: !exists}
 	if _, ok := files[res.Clean]; !ok {
 		files[res.Clean] = ch
 	}
@@ -326,7 +326,7 @@ func planFileOp(w *Workspace, files map[string]fileChange, op Operation) (Operat
 		} else if existing {
 			return op, false, failf("%s already exists", res.Clean)
 		}
-		ch := fileChange{Path: res.Clean, RepoPath: res.Repo, Before: nil, After: []byte(op.Value), Mode: "100644", AbsentBefore: true, AbsentAfter: false}
+		ch := fileChange{Path: res.Clean, RepoPath: res.Repo, AbsPath: res.Abs, Before: nil, After: []byte(op.Value), Mode: "100644", AbsentBefore: true, AbsentAfter: false}
 		files[res.Clean] = ch
 		op.Path = res.Clean
 		op.Target = PlanTarget{Path: res.Clean}
@@ -360,7 +360,7 @@ func planFileOp(w *Workspace, files map[string]fileChange, op Operation) (Operat
 		if ch, ok := files[dstRes.Clean]; ok && !ch.AbsentAfter {
 			return op, false, failf("%s already exists in transaction", dstRes.Clean)
 		}
-		dst := fileChange{Path: dstRes.Clean, RepoPath: dstRes.Repo, Before: nil, After: append([]byte(nil), src.After...), Mode: src.Mode, AbsentBefore: true, AbsentAfter: false}
+		dst := fileChange{Path: dstRes.Clean, RepoPath: dstRes.Repo, AbsPath: dstRes.Abs, Before: nil, After: append([]byte(nil), src.After...), Mode: src.Mode, AbsentBefore: true, AbsentAfter: false}
 		files[dstRes.Clean] = dst
 		changed := true
 		if op.Verb == "move" {

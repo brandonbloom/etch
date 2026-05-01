@@ -134,6 +134,7 @@ type Plan struct {
 type fileChange struct {
 	Path         string
 	RepoPath     string
+	AbsPath      string
 	Before       []byte
 	After        []byte
 	Mode         string

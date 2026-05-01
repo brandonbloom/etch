@@ -167,8 +167,9 @@ Regression coverage asserts that:
 Incremental progress:
 - `OpenWorkspaceAt` and `runCLIAt` let callers provide an explicit working directory, and representative workspace/e2e tests no longer need `os.Chdir`.
 - `Workspace` carries a narrow Git runner interface, with the production implementation isolated in `realGitRunner`. Workspace-owned Git operations route through that boundary, and a focused test verifies runner injection without creating a Git repository.
+- `Workspace` carries a narrow working-tree filesystem interface for live file reads and writes. Materialization uses resolved absolute worktree paths instead of CWD-relative plan paths, with regression coverage for dirty-path materialization while the process CWD is elsewhere.
 
-Remaining implementation gap: filesystem access and materialization use `os.ReadFile()`, `os.WriteFile()`, and related disk APIs directly. The production Git runner shells out to Git, most tests use real temporary Git repositories, and many tests mutate process CWD. This means:
+Remaining implementation gap: path resolution, script reading, and Git object/index temporary stores still use process OS APIs directly. The production Git runner shells out to Git, most tests use real temporary Git repositories, and many tests mutate process CWD. This means:
 - Tests cannot model scenarios without touching the filesystem.
 - Tests mutate global process state (CWD) which is not concurrency-safe.
 - The architecture diagram's separation between planner, snapshot store, and git backend is not reflected in the code.
@@ -202,9 +203,6 @@ This doesn't handle errors wrapped with `fmt.Errorf("%w", err)` or `errors.Join`
 
 ### `simpleThreeWay` merge is limited
 `materialize.go:211-230` implements a prefix/suffix merge that only handles non-overlapping single-hunk changes. If both ours and theirs modify different regions of the same file, it falls through to conflict. The spec allows this ("etch does not decide which semantic edit should win") but a more complete three-way merge would reduce false conflicts.
-
-### `Materializer` reads working tree from relative paths
-`materialize.go:38` uses `os.ReadFile(ch.Path)` where `ch.Path` is CWD-relative. Fragile if anything changes CWD between `NewMaterializer` and `Apply`, though this doesn't happen in current code.
 
 ### No guard-specific error messages for `contains` with heredoc
 The spec says "Multi-line literals use the same heredoc syntax as mutating values." Tests don't exercise `contains` with heredoc bodies.

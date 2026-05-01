@@ -37,6 +37,36 @@ func TestMaterializationDirtyWorktreeConflictDoesNotRollbackCommit(t *testing.T)
 	}
 }
 
+func TestMaterializationDirtyPathUsesWorkspaceCWD(t *testing.T) {
+	dir := initRepo(t)
+	writeFile(t, dir, "state.json", `{"status":"open","note":"base"}`+"\n")
+	commitAll(t, dir, "initial")
+	writeFile(t, dir, "state.json", `{"status":"local","note":"base"}`+"\n")
+
+	outside := t.TempDir()
+	writeFile(t, outside, "state.json", "outside\n")
+	chdir(t, outside)
+
+	_, errb, code, err := runCLIInDir(t, dir, "set", "state.json", "status", "complete")
+	if err == nil || code != exitFailure {
+		t.Fatalf("runCLI code=%d err=%v stderr=%s", code, err, errb.String())
+	}
+	wt, err := os.ReadFile(filepath.Join(dir, "state.json"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !bytes.Contains(wt, []byte("<<<<<<<")) || !bytes.Contains(wt, []byte("local")) || !bytes.Contains(wt, []byte("complete")) {
+		t.Fatalf("workspace worktree was not materialized:\n%s", wt)
+	}
+	outsideWT, err := os.ReadFile(filepath.Join(outside, "state.json"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if string(outsideWT) != "outside\n" {
+		t.Fatalf("process-CWD file was changed:\n%s", outsideWT)
+	}
+}
+
 func TestMaterializationAddAddConflict(t *testing.T) {
 	dir := initRepo(t)
 	writeFile(t, dir, "README.md", "# hi\n")

@@ -147,6 +147,49 @@ func TestWorkspaceUntrackedAdmission(t *testing.T) {
 	}
 }
 
+func TestWorkspaceUntrackedAdmissionUsesInjectedWorkingTree(t *testing.T) {
+	dir := t.TempDir()
+	realDir, err := filepath.EvalSymlinks(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	path := filepath.Join(realDir, "local.txt")
+	runner := &fakeGitRunner{
+		outputs: map[string]fakeGitResponse{
+			fakeGitKey("output", "rev-parse", "--show-toplevel"): {
+				out: []byte(realDir + "\n"),
+			},
+			fakeGitKey("output", "rev-parse", "--verify", "HEAD"): {
+				out: []byte("abc123\n"),
+			},
+			fakeGitKey("output", "symbolic-ref", "-q", "HEAD"): {
+				out: []byte("refs/heads/main\n"),
+			},
+			fakeGitKey("output", "show", "abc123:local.txt"): {
+				err: fmt.Errorf("not tracked"),
+			},
+		},
+	}
+	worktree := &fakeWorkingTreeFS{files: map[string][]byte{
+		path: []byte("local\n"),
+	}}
+
+	w, err := openWorkspaceAtWithDeps(dir, true, runner, worktree)
+	if err != nil {
+		t.Fatal(err)
+	}
+	exists, b, mode, err := w.ExistsInAdmittedView(ResolvedPath{Clean: "local.txt", Abs: path, Repo: "local.txt"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !exists || string(b) != "local\n" || mode != "100644" {
+		t.Fatalf("ExistsInAdmittedView = exists %v bytes %q mode %q", exists, b, mode)
+	}
+	if got, want := strings.Join(worktree.reads, "\n"), path; got != want {
+		t.Fatalf("working tree reads = %q, want %q", got, want)
+	}
+}
+
 func TestWorkspaceContainedSymlinkAllowedEscapeRejected(t *testing.T) {
 	dir := initRepo(t)
 	writeFile(t, dir, "real/data.json", `{"a":1}`+"\n")
@@ -204,4 +247,34 @@ func (f *fakeGitRunner) respond(kind string, args ...string) ([]byte, error) {
 
 func fakeGitKey(kind string, args ...string) string {
 	return kind + "\x00" + strings.Join(args, "\x00")
+}
+
+type fakeWorkingTreeFS struct {
+	files  map[string][]byte
+	reads  []string
+	writes []string
+}
+
+func (f *fakeWorkingTreeFS) readFile(path string) ([]byte, error) {
+	f.reads = append(f.reads, path)
+	b, ok := f.files[path]
+	if !ok {
+		return nil, os.ErrNotExist
+	}
+	return append([]byte(nil), b...), nil
+}
+
+func (f *fakeWorkingTreeFS) writeFile(path string, b []byte, perm os.FileMode) error {
+	f.writes = append(f.writes, path)
+	f.files[path] = append([]byte(nil), b...)
+	return nil
+}
+
+func (f *fakeWorkingTreeFS) mkdirAll(path string, perm os.FileMode) error {
+	return nil
+}
+
+func (f *fakeWorkingTreeFS) remove(path string) error {
+	delete(f.files, path)
+	return nil
 }
