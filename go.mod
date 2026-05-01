@@ -9,3 +9,5 @@ require github.com/lattice-substrate/json-canon v0.3.4
 require github.com/urfave/cli/v3 v3.8.0
 
 require github.com/theory/jsonpath v0.12.0
+
+require github.com/yuin/goldmark v1.8.2

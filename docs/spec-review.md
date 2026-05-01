@@ -67,14 +67,15 @@ Not used. Hand-rolled selector parser in `selector.go`. The parser appears funct
 
 ### github.com/yuin/goldmark (§15, §17, status: "Selected, parser-only")
 
-Not used. Markdown heading and section parsing is string-based in `formats.go:148-213`. Consequences:
-- ATX heading detection (`atxLevel`) accepts tabs as spacing, which is correct per CommonMark, but doesn't handle:
-  - Headings inside fenced code blocks (would be treated as headings).
-  - Headings inside HTML blocks.
-  - Headings with closing `#` sequences.
-  - Setext headings (not ATX, but present in real Markdown).
-- Table parsing doesn't handle escaped pipes in cells for reading (only for writing via `renderMarkdownTable`).
-- No handling of indented code blocks that look like pipe tables.
+Implemented. Markdown heading, section, and GFM table discovery use goldmark in `formats.go`.
+
+Resolved behaviors:
+- Headings inside fenced code blocks and HTML blocks are ignored.
+- Closing ATX marker sequences and setext headings are recognized.
+- GFM table discovery ignores indented code blocks that look like pipe tables.
+- Escaped pipes in table cells are read as data.
+
+Residual caveat: Markdown table writes normalize table formatting and alignment markers through `renderMarkdownTable`.
 
 ---
 

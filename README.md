@@ -96,7 +96,7 @@ Porcelain commands infer the format from the file extension:
 | `append <path> <selector> <value>` | Append a value to an array. |
 | `add <path> <selector> <value>` | Ensure an array contains a value. |
 | `remove <path> <selector> <value>` | Ensure an array does not contain a value. |
-| `replace-section <path> <heading> <content>` | Replace the body under one Markdown ATX heading. |
+| `replace-section <path> <heading> <content>` | Replace the body under one Markdown heading. |
 | `create <path> [<content>]` | Create a file with explicit or extension-aware default content. |
 | `move <src> <dst>` | Move a file path. |
 | `copy <src> <dst>` | Copy a file path. |

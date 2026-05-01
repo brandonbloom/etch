@@ -468,15 +468,69 @@ func TestFrontmatterMultilineStringUsesLiteralBlock(t *testing.T) {
 }
 
 func TestMarkdownReplaceSection(t *testing.T) {
-	dir := initRepo(t)
-	writeFile(t, dir, "note.md", "# Title\n\n## Notes\nold\n\n## Next\nkeep\n")
-	commitAll(t, dir, "initial")
-	chdir(t, dir)
+	tests := []struct {
+		name    string
+		input   string
+		content string
+		want    []string
+		reject  []string
+	}{
+		{
+			name:    "replaces body until next peer heading",
+			input:   "# Title\n\n## Notes\nold\n\n## Next\nkeep\n",
+			content: "new\nbody\n",
+			want:    []string{"## Notes\nnew\nbody\n## Next"},
+			reject:  []string{"old"},
+		},
+		{
+			name:    "ignores fenced headings",
+			input:   "# Title\n\n```md\n## Notes\nold\n```\n\n## Notes\nreal\n\n## Next\nkeep\n",
+			content: "new\n",
+			want:    []string{"```md\n## Notes\nold\n```", "## Notes\nnew\n## Next"},
+			reject:  []string{"real"},
+		},
+		{
+			name:    "ignores HTML block headings",
+			input:   "# Title\n\n<div>\n## Notes\nold\n</div>\n\n## Notes\nreal\n\n## Next\nkeep\n",
+			content: "new\n",
+			want:    []string{"<div>\n## Notes\nold\n</div>", "## Notes\nnew\n## Next"},
+			reject:  []string{"real"},
+		},
+		{
+			name:    "stops at setext heading",
+			input:   "# Title\n\n## Notes\nold\n\nNext\n----\nkeep\n",
+			content: "new\n",
+			want:    []string{"## Notes\nnew\nNext\n----\nkeep\n"},
+			reject:  []string{"old"},
+		},
+		{
+			name:    "matches closing ATX markers",
+			input:   "# Title\n\n## Notes ##\nold\n\n## Next\nkeep\n",
+			content: "new\n",
+			want:    []string{"## Notes ##\nnew\n## Next"},
+			reject:  []string{"old"},
+		},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			dir := initRepo(t)
+			writeFile(t, dir, "note.md", tc.input)
+			commitAll(t, dir, "initial")
+			chdir(t, dir)
 
-	runOK(t, "replace-section", "note.md", "## Notes", "new\nbody\n")
-	got := testGit(t, dir, "show", "HEAD:note.md")
-	if !strings.Contains(got, "## Notes\nnew\nbody\n## Next") || strings.Contains(got, "old") {
-		t.Fatalf("replace-section output:\n%s", got)
+			runOK(t, "replace-section", "note.md", "## Notes", tc.content)
+			got := testGit(t, dir, "show", "HEAD:note.md")
+			for _, want := range tc.want {
+				if !strings.Contains(got, want) {
+					t.Fatalf("replace-section output missing %q:\n%s", want, got)
+				}
+			}
+			for _, reject := range tc.reject {
+				if strings.Contains(got, reject) {
+					t.Fatalf("replace-section output still contains %q:\n%s", reject, got)
+				}
+			}
+		})
 	}
 }
 
@@ -508,6 +562,67 @@ func TestMarkdownTableVerbs(t *testing.T) {
 	got := testGit(t, dir, "show", "HEAD:note.md")
 	if !strings.Contains(got, "| A1 | done |") || !strings.Contains(got, "| B2 | open |") {
 		t.Fatalf("Markdown table output:\n%s", got)
+	}
+}
+
+func TestMarkdownTableVerbsIgnoreIndentedCodeTables(t *testing.T) {
+	dir := initRepo(t)
+	writeFile(t, dir, "note.md", "## Inventory\n\n    | sku | status |\n    | --- | --- |\n    | A1 | open |\n\n| sku | status |\n| --- | --- |\n| A1 | open |\n")
+	commitAll(t, dir, "initial")
+	chdir(t, dir)
+
+	runOK(t, "table", "set", "note.md", "## Inventory", "sku=A1,status", "done")
+	got := testGit(t, dir, "show", "HEAD:note.md")
+	if !strings.Contains(got, "    | A1 | open |") {
+		t.Fatalf("Markdown table edit rewrote indented code:\n%s", got)
+	}
+	if !strings.Contains(got, "| A1 | done |") {
+		t.Fatalf("Markdown table output:\n%s", got)
+	}
+}
+
+func TestMarkdownTableVerbsPreservePrecedingParagraph(t *testing.T) {
+	dir := initRepo(t)
+	writeFile(t, dir, "note.md", "## Inventory\n\nintro\n| sku | status |\n| --- | --- |\n| A1 | open |\n")
+	commitAll(t, dir, "initial")
+	chdir(t, dir)
+
+	runOK(t, "table", "set", "note.md", "## Inventory", "sku=A1,status", "done")
+	got := testGit(t, dir, "show", "HEAD:note.md")
+	if !strings.Contains(got, "intro\n| sku | status |") || !strings.Contains(got, "| A1 | done |") {
+		t.Fatalf("Markdown table output:\n%s", got)
+	}
+}
+
+func TestMarkdownTableVerbsReadEscapedPipes(t *testing.T) {
+	dir := initRepo(t)
+	writeFile(t, dir, "note.md", "## Inventory\n\n| sku | status |\n| --- | --- |\n| A\\|1 | open |\n")
+	commitAll(t, dir, "initial")
+	chdir(t, dir)
+
+	runOK(t, "table", "set", "note.md", "## Inventory", "sku=A|1,status", "done")
+	got := testGit(t, dir, "show", "HEAD:note.md")
+	if !strings.Contains(got, "| A\\|1 | done |") {
+		t.Fatalf("Markdown table output:\n%s", got)
+	}
+}
+
+func TestMarkdownTableScopeRejectsAmbiguousHeading(t *testing.T) {
+	dir := initRepo(t)
+	writeFile(t, dir, "note.md", "## Inventory\n\n| sku | status |\n| --- | --- |\n| A1 | open |\n\n## Inventory\n\n| sku | status |\n| --- | --- |\n| B2 | open |\n")
+	head := commitAll(t, dir, "initial")
+	chdir(t, dir)
+
+	var out, errb bytes.Buffer
+	code, err := runCLI([]string{"table", "set", "note.md", "## Inventory", "sku=A1,status", "done"}, &out, &errb)
+	if err == nil || code == exitOK {
+		t.Fatalf("ambiguous scope succeeded stdout=%s stderr=%s", out.String(), errb.String())
+	}
+	if !strings.Contains(err.Error(), `markdown scope "## Inventory" is ambiguous`) {
+		t.Fatalf("err = %v", err)
+	}
+	if got := stringsTrim(testGit(t, dir, "rev-parse", "HEAD")); got != head {
+		t.Fatalf("failed scope mutation moved HEAD to %s", got)
 	}
 }
 

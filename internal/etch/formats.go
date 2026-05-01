@@ -8,7 +8,14 @@ import (
 	"unicode/utf8"
 
 	"github.com/brandonbloom/etch/internal/jsonx"
+	"github.com/yuin/goldmark"
+	goldast "github.com/yuin/goldmark/ast"
+	"github.com/yuin/goldmark/extension"
+	mdast "github.com/yuin/goldmark/extension/ast"
+	"github.com/yuin/goldmark/text"
 )
+
+var markdownEngine = goldmark.New(goldmark.WithExtensions(extension.GFM))
 
 func evalStructuredBytes(path, part, selector, verb, rawValue string, before []byte) ([]byte, bool, error) {
 	switch {
@@ -103,66 +110,150 @@ func evalReplaceSection(path, heading, content string, before []byte) ([]byte, b
 	if !utf8.Valid(raw) {
 		return nil, false, failf("invalid UTF-8 in Markdown input")
 	}
-	s := string(raw)
-	lines := strings.SplitAfter(s, "\n")
-	offset := 0
-	type hit struct {
-		lineStart int
-		bodyStart int
-		level     int
+	sections, err := markdownSections(raw, heading)
+	if err != nil {
+		return nil, false, err
 	}
-	var hits []hit
-	for _, line := range lines {
-		text := strings.TrimRight(line, "\r\n")
-		if strings.TrimSpace(text) == heading && atxLevel(text) > 0 {
-			hits = append(hits, hit{lineStart: offset, bodyStart: offset + len(line), level: atxLevel(text)})
-		}
-		offset += len(line)
-	}
-	if len(hits) == 0 {
+	if len(sections) == 0 {
 		return nil, false, failf("heading %q not found in %s", heading, path)
 	}
-	if len(hits) > 1 {
+	if len(sections) > 1 {
 		return nil, false, failf("heading %q is ambiguous in %s", heading, path)
 	}
-	h := hits[0]
-	end := len(s)
-	offset = 0
-	for _, line := range lines {
-		if offset <= h.lineStart {
-			offset += len(line)
-			continue
-		}
-		text := strings.TrimRight(line, "\r\n")
-		lvl := atxLevel(text)
-		if lvl > 0 && lvl <= h.level {
-			end = offset
-			break
-		}
-		offset += len(line)
-	}
+	section := sections[0]
 	repl := content
 	if repl != "" && !strings.HasSuffix(repl, "\n") {
 		repl += "\n"
 	}
-	out := []byte(s[:h.bodyStart] + repl + s[end:])
+	out := make([]byte, 0, len(raw)-(section.BodyEnd-section.Heading.BodyStart)+len(repl))
+	out = append(out, raw[:section.Heading.BodyStart]...)
+	out = append(out, repl...)
+	out = append(out, raw[section.BodyEnd:]...)
 	out = withUTF8BOM(out, bom)
 	return out, !bytes.Equal(out, before), nil
 }
 
-func atxLevel(line string) int {
-	trim := strings.TrimLeft(line, " \t")
+type markdownSection struct {
+	Heading markdownHeading
+	BodyEnd int
+}
+
+type markdownHeading struct {
+	Level     int
+	Content   string
+	LineStart int
+	BodyStart int
+}
+
+func parseMarkdownHeadingSelector(heading string) (markdownHeading, error) {
+	raw := []byte(heading)
+	if !bytes.HasSuffix(raw, []byte("\n")) {
+		raw = append(raw, '\n')
+	}
+	headings := markdownHeadings(raw)
+	if len(headings) != 1 || strings.TrimSpace(string(raw[headings[0].BodyStart:])) != "" {
+		return markdownHeading{}, usagef("section selector must be a single Markdown heading")
+	}
+	return headings[0], nil
+}
+
+func markdownHeadings(raw []byte) []markdownHeading {
+	doc := parseMarkdownDocument(raw)
+	var headings []markdownHeading
+	_ = goldast.Walk(doc, func(n goldast.Node, entering bool) (goldast.WalkStatus, error) {
+		if !entering {
+			return goldast.WalkContinue, nil
+		}
+		heading, ok := n.(*goldast.Heading)
+		if !ok {
+			return goldast.WalkContinue, nil
+		}
+		if heading.Parent() != doc || heading.Lines().Len() == 0 {
+			return goldast.WalkSkipChildren, nil
+		}
+		lineStart, bodyStart := markdownHeadingBlockRange(raw, heading)
+		headings = append(headings, markdownHeading{
+			Level:     heading.Level,
+			Content:   strings.TrimSpace(string(heading.Lines().Value(raw))),
+			LineStart: lineStart,
+			BodyStart: bodyStart,
+		})
+		return goldast.WalkSkipChildren, nil
+	})
+	return headings
+}
+
+func parseMarkdownDocument(raw []byte) goldast.Node {
+	return markdownEngine.Parser().Parse(text.NewReader(raw))
+}
+
+func markdownSections(raw []byte, selector string) ([]markdownSection, error) {
+	target, err := parseMarkdownHeadingSelector(selector)
+	if err != nil {
+		return nil, err
+	}
+	headings := markdownHeadings(raw)
+	var sections []markdownSection
+	for i, h := range headings {
+		if h.Level == target.Level && h.Content == target.Content {
+			sections = append(sections, markdownSection{
+				Heading: h,
+				BodyEnd: markdownSectionBodyEnd(raw, headings, i),
+			})
+		}
+	}
+	return sections, nil
+}
+
+func markdownSectionBodyEnd(raw []byte, headings []markdownHeading, idx int) int {
+	for _, next := range headings[idx+1:] {
+		if next.Level <= headings[idx].Level {
+			return next.LineStart
+		}
+	}
+	return len(raw)
+}
+
+func markdownHeadingBlockRange(raw []byte, heading *goldast.Heading) (int, int) {
+	lines := heading.Lines()
+	first := lines.At(0)
+	start := markdownLineStart(raw, first.Start)
+	firstEnd := markdownLineEnd(raw, start)
+	if markdownLineIsATXHeading(raw[start:firstEnd]) {
+		return start, firstEnd
+	}
+	last := lines.At(lines.Len() - 1)
+	textLineEnd := markdownLineEnd(raw, last.Stop)
+	return start, markdownLineEnd(raw, textLineEnd)
+}
+
+func markdownLineStart(raw []byte, pos int) int {
+	if pos > len(raw) {
+		pos = len(raw)
+	}
+	return bytes.LastIndexByte(raw[:pos], '\n') + 1
+}
+
+func markdownLineEnd(raw []byte, pos int) int {
+	if pos >= len(raw) {
+		return len(raw)
+	}
+	if i := bytes.IndexByte(raw[pos:], '\n'); i >= 0 {
+		return pos + i + 1
+	}
+	return len(raw)
+}
+
+func markdownLineIsATXHeading(line []byte) bool {
+	line = bytes.TrimLeft(line, " \t")
 	n := 0
-	for n < len(trim) && trim[n] == '#' {
+	for n < len(line) && line[n] == '#' {
 		n++
 	}
 	if n == 0 || n > 6 {
-		return 0
+		return false
 	}
-	if len(trim) > n && trim[n] != ' ' && trim[n] != '\t' {
-		return 0
-	}
-	return n
+	return n == len(line) || line[n] == ' ' || line[n] == '\t' || line[n] == '\r' || line[n] == '\n'
 }
 
 type tableData struct {
@@ -519,7 +610,7 @@ func evalMarkdownTable(op Operation, before []byte) ([]byte, bool, error) {
 	if !utf8.Valid(raw) {
 		return nil, false, failf("invalid UTF-8 in Markdown input")
 	}
-	blocks, err := findMarkdownTables(string(raw), op.Target.Scope)
+	blocks, err := findMarkdownTables(raw, op.Target.Scope)
 	if err != nil {
 		return nil, false, err
 	}
@@ -544,110 +635,106 @@ func evalMarkdownTable(op Operation, before []byte) ([]byte, bool, error) {
 	if err := mutateTable(&td, op); err != nil {
 		return nil, false, err
 	}
-	rendered := renderMarkdownTable(td)
-	s := string(raw)
-	out := []byte(s[:block.start] + rendered + s[block.end:])
+	rendered := []byte(renderMarkdownTable(td))
+	out := make([]byte, 0, len(raw)-(block.end-block.start)+len(rendered))
+	out = append(out, raw[:block.start]...)
+	out = append(out, rendered...)
+	out = append(out, raw[block.end:]...)
 	out = withUTF8BOM(out, bom)
 	return out, !bytes.Equal(out, before), nil
 }
 
-func findMarkdownTables(s, scope string) ([]mdTableBlock, error) {
-	scopeStart, scopeEnd, err := markdownScope(s, scope)
+func findMarkdownTables(raw []byte, scope string) ([]mdTableBlock, error) {
+	scopeStart, scopeEnd, err := markdownScopeRange(raw, scope)
 	if err != nil {
 		return nil, err
 	}
-	lines := strings.SplitAfter(s[scopeStart:scopeEnd], "\n")
-	offset := scopeStart
 	var blocks []mdTableBlock
-	for i := 0; i+1 < len(lines); i++ {
-		header := strings.TrimSpace(lines[i])
-		sep := strings.TrimSpace(lines[i+1])
-		if !isPipeRow(header) || !isMarkdownSeparator(sep) {
-			offset += len(lines[i])
-			continue
+	doc := parseMarkdownDocument(raw)
+	_ = goldast.Walk(doc, func(n goldast.Node, entering bool) (goldast.WalkStatus, error) {
+		if !entering {
+			return goldast.WalkContinue, nil
 		}
-		start := offset
-		tableLines := []string{lines[i], lines[i+1]}
-		offset += len(lines[i]) + len(lines[i+1])
-		i++
-		for i+1 < len(lines) && isPipeRow(strings.TrimSpace(lines[i+1])) {
-			i++
-			tableLines = append(tableLines, lines[i])
-			offset += len(lines[i])
+		table, ok := n.(*mdast.Table)
+		if !ok {
+			return goldast.WalkContinue, nil
 		}
-		td := parseMarkdownTable(tableLines)
-		blocks = append(blocks, mdTableBlock{start: start, end: offset, table: td})
-	}
+		start, end := markdownTableBlockRange(raw, table)
+		if start < scopeStart || end > scopeEnd {
+			return goldast.WalkSkipChildren, nil
+		}
+		blocks = append(blocks, mdTableBlock{
+			start: start,
+			end:   end,
+			table: markdownTableData(raw, table),
+		})
+		return goldast.WalkSkipChildren, nil
+	})
 	return blocks, nil
 }
 
-func markdownScope(s, scope string) (int, int, error) {
+func markdownScopeRange(raw []byte, scope string) (int, int, error) {
 	if scope == "" || scope == "doc" {
-		return 0, len(s), nil
+		return 0, len(raw), nil
 	}
-	lines := strings.SplitAfter(s, "\n")
-	offset := 0
-	foundStart := -1
-	level := 0
-	for _, line := range lines {
-		text := strings.TrimRight(line, "\r\n")
-		lvl := atxLevel(text)
-		if foundStart == -1 {
-			if strings.TrimSpace(text) == scope && lvl > 0 {
-				foundStart = offset + len(line)
-				level = lvl
-			}
-		} else if lvl > 0 && lvl <= level {
-			return foundStart, offset, nil
-		}
-		offset += len(line)
+	sections, err := markdownSections(raw, scope)
+	if err != nil {
+		return 0, 0, err
 	}
-	if foundStart == -1 {
+	if len(sections) == 0 {
 		return 0, 0, failf("markdown scope %q not found", scope)
 	}
-	return foundStart, len(s), nil
-}
-
-func isPipeRow(s string) bool {
-	return strings.Contains(s, "|")
-}
-
-func isMarkdownSeparator(s string) bool {
-	cells := splitPipeRow(s)
-	if len(cells) == 0 {
-		return false
+	if len(sections) > 1 {
+		return 0, 0, failf("markdown scope %q is ambiguous", scope)
 	}
-	for _, cell := range cells {
-		t := strings.Trim(cell, " :-")
-		if t != "" {
-			return false
-		}
-		if !strings.Contains(cell, "-") {
-			return false
-		}
-	}
-	return true
+	section := sections[0]
+	return section.Heading.BodyStart, section.BodyEnd, nil
 }
 
-func parseMarkdownTable(lines []string) tableData {
-	header := splitPipeRow(lines[0])
-	td := tableData{Header: header}
-	for _, line := range lines[2:] {
-		row := splitPipeRow(line)
-		td.Rows = append(td.Rows, normalizeRow(row, len(header)))
+func markdownTableBlockRange(raw []byte, table *mdast.Table) (int, int) {
+	startPos := table.Pos()
+	if header := table.FirstChild(); header != nil && header.Pos() >= 0 {
+		startPos = header.Pos()
+	}
+	if startPos < 0 {
+		startPos = 0
+	}
+	start := markdownLineStart(raw, startPos)
+	headerEnd := markdownLineEnd(raw, start)
+	end := markdownLineEnd(raw, headerEnd)
+	for row := table.FirstChild(); row != nil; row = row.NextSibling() {
+		if row.Pos() >= 0 {
+			end = max(end, markdownLineEnd(raw, row.Pos()))
+		}
+		for cell := row.FirstChild(); cell != nil; cell = cell.NextSibling() {
+			lines := cell.Lines()
+			for i := range lines.Len() {
+				end = max(end, markdownLineEnd(raw, lines.At(i).Stop))
+			}
+		}
+	}
+	return start, end
+}
+
+func markdownTableData(raw []byte, table *mdast.Table) tableData {
+	header := table.FirstChild()
+	if header == nil {
+		return tableData{}
+	}
+	td := tableData{Header: markdownTableCells(raw, header)}
+	for row := header.NextSibling(); row != nil; row = row.NextSibling() {
+		td.Rows = append(td.Rows, normalizeRow(markdownTableCells(raw, row), len(td.Header)))
 	}
 	return td
 }
 
-func splitPipeRow(line string) []string {
-	line = strings.TrimSpace(line)
-	line = strings.TrimPrefix(line, "|")
-	line = strings.TrimSuffix(line, "|")
-	parts := strings.Split(line, "|")
-	for i := range parts {
-		parts[i] = strings.TrimSpace(parts[i])
+func markdownTableCells(raw []byte, row goldast.Node) []string {
+	var cells []string
+	for cell := row.FirstChild(); cell != nil; cell = cell.NextSibling() {
+		text := strings.TrimSpace(string(cell.Text(raw)))
+		cells = append(cells, strings.ReplaceAll(text, `\|`, `|`))
 	}
-	return parts
+	return cells
 }
 
 func renderMarkdownTable(td tableData) string {
