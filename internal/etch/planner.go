@@ -2,8 +2,10 @@ package etch
 
 import (
 	"bytes"
+	"crypto/rand"
 	"errors"
 	"fmt"
+	"math/big"
 	"strings"
 	"time"
 
@@ -16,6 +18,8 @@ type Executor struct {
 }
 
 var beforeUpdateRefHook func(attempt int)
+var retrySleep = time.Sleep
+var retryRandomDuration = randomRetryDuration
 
 func NewExecutor(opts GlobalOptions) Executor {
 	return Executor{opts: opts}
@@ -116,20 +120,48 @@ func isRetryableCAS(err error) bool {
 }
 
 func sleepRetry(attempt int) {
+	window := retryBackoffWindow(attempt)
+	if window.Max == 0 {
+		return
+	}
+	retrySleep(retryRandomDuration(window))
+}
+
+type retryWindow struct {
+	Min time.Duration
+	Max time.Duration
+}
+
+func retryBackoffWindow(attempt int) retryWindow {
 	switch attempt {
 	case 1:
-		return
+		return retryWindow{}
 	case 2:
-		sleepMillis(75)
+		return retryWindow{Min: 50 * time.Millisecond, Max: 150 * time.Millisecond}
 	case 3:
-		sleepMillis(150)
+		return retryWindow{Min: 100 * time.Millisecond, Max: 300 * time.Millisecond}
+	case 4:
+		return retryWindow{Min: 200 * time.Millisecond, Max: 600 * time.Millisecond}
+	case 5:
+		return retryWindow{Min: 400 * time.Millisecond, Max: 1200 * time.Millisecond}
 	default:
-		sleepMillis(300)
+		if attempt >= 6 {
+			return retryWindow{Min: 800 * time.Millisecond, Max: 2000 * time.Millisecond}
+		}
+		return retryWindow{}
 	}
 }
 
-func sleepMillis(ms int) {
-	time.Sleep(time.Duration(ms) * time.Millisecond)
+func randomRetryDuration(window retryWindow) time.Duration {
+	if window.Max <= window.Min {
+		return window.Min
+	}
+	width := window.Max - window.Min
+	n, err := rand.Int(rand.Reader, big.NewInt(int64(width)+1))
+	if err != nil {
+		return window.Min + width/2
+	}
+	return window.Min + time.Duration(n.Int64())
 }
 
 func PlanOperations(w *Workspace, opts GlobalOptions, ops []Operation) (*Plan, error) {

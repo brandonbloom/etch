@@ -121,15 +121,18 @@ Regression coverage asserts that `--no-checkout --plan` and `--no-checkout --dry
 | 2 | 50-150ms |
 | 3 | 100-300ms |
 
-**Implementation** (`planner.go:117-129`):
-| Retry | Actual |
+Implemented. Retry sleeps now use randomized delays within the spec windows, including capped exponential windows for explicit higher retry budgets:
+
+| Retry | Sleep window |
 |---|---|
 | 1 | immediate |
-| 2 | fixed 75ms |
-| 3 | fixed 150ms |
-| 4+ | fixed 300ms |
+| 2 | 50-150ms |
+| 3 | 100-300ms |
+| 4 | 200-600ms |
+| 5 | 400-1200ms |
+| 6+ | 800-2000ms |
 
-No randomization. The spec says "Exact randomization and timer mechanics are implementation details" but immediately follows with concern about lockstep retries. The spec's higher budget (retries 4-6) uses "capped exponential backoff so many agents do not retry in lockstep." Fixed delays defeat this purpose.
+Regression coverage asserts the retry windows and verifies that `sleepRetry` uses the randomized delay hook without sleeping on the first retry.
 
 ---
 
