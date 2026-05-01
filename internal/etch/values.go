@@ -2,12 +2,19 @@ package etch
 
 import (
 	"fmt"
+	"math"
+	"math/big"
 	"reflect"
+	"strconv"
 	"strings"
 	"unicode/utf8"
 
 	"github.com/brandonbloom/etch/internal/jsonx"
 )
+
+// semanticNumber is the comparable form used by semantic equality after
+// normalizing JSON and YAML numeric scalars without lossy float64 coercion.
+type semanticNumber string
 
 func parseValue(raw string) any {
 	if v, err := jsonx.DecodeValue([]byte(raw)); err == nil {
@@ -88,6 +95,71 @@ func canonicalSemantic(v any) any {
 		}
 		return out
 	default:
+		if scalar, ok := canonicalScalarSemantic(x); ok {
+			return scalar
+		}
 		return x
 	}
+}
+
+// canonicalScalarSemantic converts numeric scalar values into an exact shared
+// representation, so 1, 1.0, and 1e0 compare equal while distinct large
+// integers remain distinct.
+func canonicalScalarSemantic(v any) (any, bool) {
+	switch x := v.(type) {
+	case jsonx.Number:
+		return canonicalNumberSemantic(string(x)), true
+	case int:
+		return canonicalIntSemantic(int64(x)), true
+	case int8:
+		return canonicalIntSemantic(int64(x)), true
+	case int16:
+		return canonicalIntSemantic(int64(x)), true
+	case int32:
+		return canonicalIntSemantic(int64(x)), true
+	case int64:
+		return canonicalIntSemantic(x), true
+	case uint:
+		return canonicalUintSemantic(uint64(x)), true
+	case uint8:
+		return canonicalUintSemantic(uint64(x)), true
+	case uint16:
+		return canonicalUintSemantic(uint64(x)), true
+	case uint32:
+		return canonicalUintSemantic(uint64(x)), true
+	case uint64:
+		return canonicalUintSemantic(x), true
+	case float32:
+		return canonicalFloatSemantic(float64(x), 32), true
+	case float64:
+		return canonicalFloatSemantic(x, 64), true
+	default:
+		return nil, false
+	}
+}
+
+func canonicalIntSemantic(i int64) semanticNumber {
+	return canonicalNumberSemantic(strconv.FormatInt(i, 10))
+}
+
+func canonicalUintSemantic(u uint64) semanticNumber {
+	return canonicalNumberSemantic(strconv.FormatUint(u, 10))
+}
+
+func canonicalFloatSemantic(f float64, bitSize int) any {
+	if math.IsNaN(f) || math.IsInf(f, 0) {
+		return f
+	}
+	return canonicalNumberSemantic(strconv.FormatFloat(f, 'g', -1, bitSize))
+}
+
+func canonicalNumberSemantic(s string) semanticNumber {
+	r, ok := new(big.Rat).SetString(s)
+	if !ok {
+		return semanticNumber(s)
+	}
+	if r.IsInt() {
+		return semanticNumber(r.Num().String())
+	}
+	return semanticNumber(r.String())
 }

@@ -5,6 +5,7 @@ import (
 	"reflect"
 	"strings"
 
+	"github.com/brandonbloom/etch/internal/jsonx"
 	"github.com/goccy/go-yaml"
 	"github.com/goccy/go-yaml/ast"
 	"github.com/goccy/go-yaml/parser"
@@ -425,7 +426,13 @@ func newYAMLContainerNode(next selectorPart) ast.Node {
 }
 
 func newYAMLValueNode(value any) (ast.Node, error) {
-	node, err := yaml.ValueToNode(value, yaml.UseLiteralStyleIfMultiline(true))
+	node, err := yaml.ValueToNode(
+		value,
+		yaml.UseLiteralStyleIfMultiline(true),
+		yaml.CustomMarshaler[jsonx.Number](func(n jsonx.Number) ([]byte, error) {
+			return n.MarshalJSON()
+		}),
+	)
 	if err != nil {
 		return nil, err
 	}
@@ -613,28 +620,6 @@ func yamlNodeSemantic(node ast.Node) any {
 
 func canonicalYAMLSemantic(value any) any {
 	switch v := value.(type) {
-	case int:
-		return float64(v)
-	case int8:
-		return float64(v)
-	case int16:
-		return float64(v)
-	case int32:
-		return float64(v)
-	case int64:
-		return float64(v)
-	case uint:
-		return float64(v)
-	case uint8:
-		return float64(v)
-	case uint16:
-		return float64(v)
-	case uint32:
-		return float64(v)
-	case uint64:
-		return float64(v)
-	case float32:
-		return float64(v)
 	case []any:
 		out := make([]any, len(v))
 		for i := range v {
@@ -656,6 +641,9 @@ func canonicalYAMLSemantic(value any) any {
 	case yamlTagSemantic:
 		return yamlTagSemantic{Tag: v.Tag, Value: canonicalYAMLSemantic(v.Value)}
 	default:
+		if scalar, ok := canonicalScalarSemantic(value); ok {
+			return scalar
+		}
 		return value
 	}
 }

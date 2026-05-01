@@ -33,6 +33,25 @@ func TestJSONVerbs(t *testing.T) {
 	}
 }
 
+func TestJSONAddAndRemoveDistinguishLargeNumbers(t *testing.T) {
+	dir := initRepo(t)
+	writeFile(t, dir, "state.json", `{"ids":[9007199254740992]}`+"\n")
+	commitAll(t, dir, "initial")
+	chdir(t, dir)
+
+	runOK(t, "add", "state.json", "ids", "9007199254740993")
+	got := testGit(t, dir, "show", "HEAD:state.json")
+	if !strings.Contains(got, "9007199254740992") || !strings.Contains(got, "9007199254740993") {
+		t.Fatalf("JSON add result:\n%s", got)
+	}
+
+	runOK(t, "remove", "state.json", "ids", "9007199254740993")
+	got = testGit(t, dir, "show", "HEAD:state.json")
+	if !strings.Contains(got, "9007199254740992") || strings.Contains(got, "9007199254740993") {
+		t.Fatalf("JSON remove result:\n%s", got)
+	}
+}
+
 func TestJSONSetPreservesSurroundingSource(t *testing.T) {
 	before := []byte("{\n  \"z\": 0,\n  \"status\" : \"open\",\n  \"nested\": {\"keep\":true}\n}\n")
 
@@ -122,6 +141,30 @@ func TestYAMLAndFrontmatterVerbsCreateMissingFiles(t *testing.T) {
 	otherOut := testGit(t, dir, "show", "HEAD:other.md")
 	if !strings.HasPrefix(otherOut, "---\n") || !strings.Contains(otherOut, "- x") {
 		t.Fatalf("frontmatter add output:\n%s", otherOut)
+	}
+}
+
+func TestYAMLAndFrontmatterPreserveLargeNumbers(t *testing.T) {
+	dir := initRepo(t)
+	writeFile(t, dir, "config.yaml", "ids:\n  - 9007199254740992\n")
+	writeFile(t, dir, "note.md", "# Note\n")
+	commitAll(t, dir, "initial")
+	chdir(t, dir)
+
+	runOK(t, "add", "config.yaml", "ids", "9007199254740993")
+	runOK(t, "set", "config.yaml", "id", "9007199254740993")
+	runOK(t, "set", "note.md", "frontmatter.id", "9007199254740993")
+
+	yamlOut := testGit(t, dir, "show", "HEAD:config.yaml")
+	for _, want := range []string{"9007199254740992", "9007199254740993", "id: 9007199254740993"} {
+		if !strings.Contains(yamlOut, want) {
+			t.Fatalf("YAML output missing %q:\n%s", want, yamlOut)
+		}
+	}
+
+	mdOut := testGit(t, dir, "show", "HEAD:note.md")
+	if !strings.Contains(mdOut, "id: 9007199254740993") {
+		t.Fatalf("frontmatter output:\n%s", mdOut)
 	}
 }
 

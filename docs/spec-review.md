@@ -138,18 +138,12 @@ Regression coverage asserts the retry windows and verifies that `sleepRetry` use
 
 ## Moderate: Numeric Precision in Value Parsing
 
-`values.go:26-29` converts all parsed JSON numbers to `float64`:
-```go
-case json.Number:
-    if i, err := strconv.ParseInt(string(x), 10, 64); err == nil {
-        return float64(i)
-    }
-```
+Implemented. CLI JSON value parsing preserves number tokens as `jsonx.Number` instead of converting them to `float64`. Semantic equality canonicalizes JSON and YAML numeric scalars through exact rational values, so `1`, `1.0`, and `1e0` compare equal while distinct large integers stay distinct.
 
-Integers larger than 2^53 lose precision when converted to float64. For example, `9007199254740993` becomes `9007199254740992`. This affects:
-- `add`/`remove` semantic equality comparisons.
-- Round-trip fidelity of JSON values.
-- The spec's statement that "numbers compare by parsed numeric value in the accepted format domain."
+Regression coverage asserts:
+- JSON value decoding and marshaling preserve large integer spelling.
+- JSON `add` and `remove` distinguish `9007199254740992` from `9007199254740993`.
+- YAML and Markdown frontmatter writes preserve large integer spelling.
 
 ---
 

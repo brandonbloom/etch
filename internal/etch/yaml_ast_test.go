@@ -65,10 +65,10 @@ func TestCanonicalYAMLSemanticNormalizesNestedValues(t *testing.T) {
 		},
 	})
 	want := map[string]any{
-		"n": float64(1),
+		"n": semanticNumber("1"),
 		"items": []any{
-			float64(2),
-			map[string]any{"f": float64(3.5)},
+			semanticNumber("2"),
+			map[string]any{"f": semanticNumber("7/2")},
 		},
 	}
 	if !reflect.DeepEqual(got, want) {
