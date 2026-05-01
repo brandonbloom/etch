@@ -138,6 +138,51 @@ func TestPlanDoesNotWriteRepositoryObjects(t *testing.T) {
 	}
 }
 
+func TestNoCheckoutIgnoredForPreviewModes(t *testing.T) {
+	for _, tc := range []struct {
+		name string
+		args []string
+		want string
+	}{
+		{
+			name: "plan",
+			args: []string{"--no-checkout", "--plan", "set", "state.json", "status", "complete"},
+			want: `"tree":`,
+		},
+		{
+			name: "dry-run",
+			args: []string{"--no-checkout", "--dry-run", "set", "state.json", "status", "complete"},
+			want: "diff --git",
+		},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			dir := initRepo(t)
+			writeFile(t, dir, "state.json", `{"status":"open"}`+"\n")
+			head := commitAll(t, dir, "initial")
+			objectsBefore := gitObjectFiles(t, dir)
+			chdir(t, dir)
+
+			var out, errb bytes.Buffer
+			code, err := runCLI(tc.args, &out, &errb)
+			if err != nil || code != exitOK {
+				t.Fatalf("runCLI code=%d err=%v stderr=%s", code, err, errb.String())
+			}
+			if got := stringsTrim(testGit(t, dir, "rev-parse", "HEAD")); got != head {
+				t.Fatalf("%s advanced HEAD to %s, want %s", tc.name, got, head)
+			}
+			if objectsAfter := gitObjectFiles(t, dir); !reflect.DeepEqual(objectsAfter, objectsBefore) {
+				t.Fatalf("%s wrote repository objects\nbefore=%v\nafter=%v", tc.name, objectsBefore, objectsAfter)
+			}
+			if !strings.Contains(out.String(), tc.want) {
+				t.Fatalf("%s output missing %q:\n%s", tc.name, tc.want, out.String())
+			}
+			if strings.Contains(errb.String(), "checkout skipped") {
+				t.Fatalf("%s reported checkout skip despite preview mode:\n%s", tc.name, errb.String())
+			}
+		})
+	}
+}
+
 func gitObjectFiles(t *testing.T, dir string) []string {
 	t.Helper()
 	objectDir := stringsTrim(testGit(t, dir, "rev-parse", "--git-path", "objects"))

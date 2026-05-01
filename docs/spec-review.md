@@ -95,12 +95,9 @@ Regression coverage asserts that both direct planning and CLI `--plan`/`--dry-ru
 - `etch --help` — "terse one-screen reference" (~400 tokens)
 - `etch help` — "humans, agents needing examples" (~1500 tokens)
 
-**Implementation:** `cli.go:119-121` maps `--help` to the `help` command:
-```go
-if arg == "--help" {
-    rest = append(rest, "help")
-```
-Both produce identical output. The `shortHelp` constant (~400 tokens) exists but is only shown when `etch` is invoked with zero arguments (`cli.go:58-61`), not for `--help`.
+Implemented. The urfave/cli root command uses `shortHelp` for `--help`, while the `help` command prints the longer command table and topics.
+
+Regression coverage asserts that `etch --help` returns the short reference and `etch help` returns the long help surface.
 
 ---
 
@@ -108,14 +105,9 @@ Both produce identical output. The `shortHelp` constant (~400 tokens) exists but
 
 **Spec:** "--no-checkout applies only to successful committing invocations; it has no meaning with --plan or --dry-run." (§3)
 
-**Implementation:** `cli.go:48-49` returns exit code 2:
-```go
-if opts.NoCheckout && (opts.Plan || opts.DryRun) {
-    return exitUsage, usagef("--no-checkout has no effect with --plan or --dry-run")
-}
-```
+Implemented. Preview modes accept `--no-checkout` and ignore it, preserving `--plan` and `--dry-run` behavior without emitting checkout-skip diagnostics.
 
-"Has no meaning" implies silent acceptance, not a usage error. An agent adding `--no-checkout` to all invocations would break on `--plan`/`--dry-run`.
+Regression coverage asserts that `--no-checkout --plan` and `--no-checkout --dry-run` both succeed, leave `HEAD` and repository objects unchanged, and do not report skipped materialization.
 
 ---
 

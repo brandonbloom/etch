@@ -89,9 +89,6 @@ func runParsedCLI(opts GlobalOptions, rest []string, stdout, stderr io.Writer) (
 	if opts.Plan && opts.DryRun {
 		return exitUsage, usagef("--plan and --dry-run are mutually exclusive")
 	}
-	if opts.NoCheckout && (opts.Plan || opts.DryRun) {
-		return exitUsage, usagef("--no-checkout has no effect with --plan or --dry-run")
-	}
 	if opts.Message != "" && (opts.MessagePrefix != "" || opts.MessageSuffix != "") {
 		return exitUsage, usagef("--message is mutually exclusive with --message-prefix and --message-suffix")
 	}
