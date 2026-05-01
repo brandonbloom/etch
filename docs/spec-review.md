@@ -168,8 +168,9 @@ Incremental progress:
 - `OpenWorkspaceAt` and `runCLIAt` let callers provide an explicit working directory. Repository-dependent tests use those entry points instead of mutating process CWD, except for the regression whose subject is process-CWD independence.
 - `Workspace` carries a narrow Git runner interface, with the production implementation isolated in `realGitRunner`. Workspace-owned Git operations route through that boundary, and a focused test verifies runner injection without creating a Git repository.
 - `Workspace` carries a narrow working-tree filesystem interface for live file reads and writes. Materialization uses resolved absolute worktree paths instead of CWD-relative plan paths, with regression coverage for dirty-path materialization while the process CWD is elsewhere.
+- `Workspace` carries a narrow temp-store interface for Git object directories and synthetic index files. Planning and dry-run temp allocations are injectable, isolated under a test-owned directory in regression coverage, and cleaned up after use.
 
-Remaining implementation gap: path resolution, script reading, and Git object/index temporary stores still use process OS APIs directly. The production Git runner shells out to Git, and most tests use real temporary Git repositories. This means:
+Remaining implementation gap: path resolution and script reading still use process OS APIs directly. The production Git runner shells out to Git, and most tests use real temporary Git repositories. This means:
 - Tests cannot model scenarios without touching the filesystem.
 - The architecture diagram's separation between planner, snapshot store, and git backend is not reflected in the code.
 

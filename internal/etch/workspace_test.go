@@ -174,7 +174,7 @@ func TestWorkspaceUntrackedAdmissionUsesInjectedWorkingTree(t *testing.T) {
 		path: []byte("local\n"),
 	}}
 
-	w, err := openWorkspaceAtWithDeps(dir, true, runner, worktree)
+	w, err := openWorkspaceAtWithDeps(dir, true, workspaceDeps{git: runner, worktree: worktree})
 	if err != nil {
 		t.Fatal(err)
 	}
