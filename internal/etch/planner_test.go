@@ -3,6 +3,7 @@ package etch
 import (
 	"os"
 	"path/filepath"
+	"reflect"
 	"strings"
 	"testing"
 )
@@ -11,6 +12,7 @@ func TestPlanFileCreateAndGuardNoSideEffects(t *testing.T) {
 	dir := initRepo(t)
 	writeFile(t, dir, "README.md", "# hi\n")
 	head := commitAll(t, dir, "initial")
+	objectsBefore := gitObjectFiles(t, dir)
 	chdir(t, dir)
 
 	ops := []Operation{}
@@ -40,6 +42,9 @@ func TestPlanFileCreateAndGuardNoSideEffects(t *testing.T) {
 	}
 	if got := stringsTrim(testGit(t, dir, "rev-parse", "HEAD")); got != head {
 		t.Fatalf("planning moved HEAD to %s", got)
+	}
+	if objectsAfter := gitObjectFiles(t, dir); !reflect.DeepEqual(objectsAfter, objectsBefore) {
+		t.Fatalf("planning wrote repository objects\nbefore=%v\nafter=%v", objectsBefore, objectsAfter)
 	}
 	if _, err := osStat(filepathJoin(dir, "notes/today.md")); err == nil {
 		t.Fatal("planning wrote working-tree file")

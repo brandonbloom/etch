@@ -66,7 +66,11 @@ func (e Executor) Run(ops []Operation, stdout, stderr interface {
 			_, _ = stderr.Write([]byte("etch: nothing to do\n"))
 			return exitOK, nil
 		}
-		commit, err := w.createCommit(plan.Tree, plan.Commit.Message)
+		tree, err := w.writePlannedTree(plan)
+		if err != nil {
+			return exitFailure, err
+		}
+		commit, err := w.writeCommitObject(tree, plan.Commit.Message)
 		if err != nil {
 			return exitFailure, err
 		}
@@ -151,7 +155,7 @@ func PlanOperations(w *Workspace, opts GlobalOptions, ops []Operation) (*Plan, e
 		planOps = append(planOps, planned)
 	}
 
-	tree, err := w.buildTree(files)
+	tree, err := w.computePlannedTreeOID(files)
 	if err != nil {
 		return nil, err
 	}

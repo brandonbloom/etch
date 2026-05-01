@@ -6,19 +6,34 @@ import (
 )
 
 func RenderDryRun(w *Workspace, plan *Plan) (string, error) {
-	commit, err := w.createCommit(plan.Tree, plan.Commit.Message)
+	// Native Git already knows how to render the mailbox patch shape we want,
+	// but it needs tree and commit objects to diff. Keep those objects
+	// ephemeral so --dry-run remains a repository-no-write preview.
+	objects, err := w.ephemeralObjectStore()
 	if err != nil {
 		return "", err
 	}
-	author, err := gitOutput(w.CWD, nil, "show", "-s", "--format=%aN <%aE>", commit)
+	defer objects.close()
+	tree, err := w.buildTreeInObjectStore(plan.Touched, objects)
 	if err != nil {
 		return "", err
 	}
-	date, err := gitOutput(w.CWD, nil, "show", "-s", "--format=%aD", commit)
+	if tree != plan.Tree {
+		return "", failf("planned tree changed while rendering dry-run: got %s, want %s", tree, plan.Tree)
+	}
+	commit, err := w.createCommitInObjectStore(tree, plan.Commit.Message, objects)
 	if err != nil {
 		return "", err
 	}
-	diff, err := gitOutput(w.CWD, nil, "show", "--format=", "--stat", "--patch", "--binary", commit)
+	author, err := gitOutput(w.CWD, objects.env, "show", "-s", "--format=%aN <%aE>", commit)
+	if err != nil {
+		return "", err
+	}
+	date, err := gitOutput(w.CWD, objects.env, "show", "-s", "--format=%aD", commit)
+	if err != nil {
+		return "", err
+	}
+	diff, err := gitOutput(w.CWD, objects.env, "show", "--format=", "--stat", "--patch", "--binary", commit)
 	if err != nil {
 		return "", err
 	}

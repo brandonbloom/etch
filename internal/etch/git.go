@@ -20,6 +20,21 @@ type Workspace struct {
 	Untracked bool
 }
 
+// gitObjectStore names where object-writing Git plumbing should put new
+// objects. Preview paths use a temporary store so they can still ask Git for
+// exact blob/tree/commit OIDs without leaving dangling objects in the repo;
+// execution paths use the repository store at the explicit persistence boundary.
+type gitObjectStore struct {
+	env     []string
+	cleanup func()
+}
+
+func (s gitObjectStore) close() {
+	if s.cleanup != nil {
+		s.cleanup()
+	}
+}
+
 func OpenWorkspace(untracked bool) (*Workspace, error) {
 	cwd, err := os.Getwd()
 	if err != nil {
@@ -116,7 +131,7 @@ func (w *Workspace) ReadBase(path ResolvedPath) ([]byte, string, bool) {
 	if w.Unborn {
 		return nil, "100644", true
 	}
-	out, err := gitOutput(w.CWD, nil, "show", "HEAD:"+path.Repo)
+	out, err := gitOutput(w.CWD, nil, "show", w.Head+":"+path.Repo)
 	if err != nil {
 		if w.Untracked {
 			if b, ok, _ := readUntrackedFile(path.Abs); ok {
@@ -126,7 +141,7 @@ func (w *Workspace) ReadBase(path ResolvedPath) ([]byte, string, bool) {
 		return nil, "100644", true
 	}
 	mode := "100644"
-	if m, err := gitOutput(w.CWD, nil, "ls-tree", "--format=%(objectmode)", "HEAD", "--", path.Repo); err == nil {
+	if m, err := gitOutput(w.CWD, nil, "ls-tree", "--format=%(objectmode)", w.Head, "--", path.Repo); err == nil {
 		mode = strings.TrimSpace(string(m))
 		if mode == "" {
 			mode = "100644"
@@ -225,7 +240,72 @@ func gitOutputStdin(dir string, env []string, stdin []byte, args ...string) ([]b
 	return out, nil
 }
 
-func (w *Workspace) buildTree(changes map[string]fileChange) (string, error) {
+func (w *Workspace) repositoryObjectStore() gitObjectStore {
+	return gitObjectStore{}
+}
+
+// ephemeralObjectStore lets Git read existing repository objects through
+// alternates while writing all new objects into a throwaway directory. Git OIDs
+// are content-addressed, so the resulting planned tree ID is the same one the
+// repository store will produce later if the invocation is committed.
+func (w *Workspace) ephemeralObjectStore() (gitObjectStore, error) {
+	objectDir, err := w.objectDir()
+	if err != nil {
+		return gitObjectStore{}, err
+	}
+	tmp, err := os.MkdirTemp("", "etch-objects-*")
+	if err != nil {
+		return gitObjectStore{}, err
+	}
+	return gitObjectStore{
+		env: []string{
+			"GIT_OBJECT_DIRECTORY=" + tmp,
+			"GIT_ALTERNATE_OBJECT_DIRECTORIES=" + objectDir,
+		},
+		cleanup: func() { _ = os.RemoveAll(tmp) },
+	}, nil
+}
+
+func (w *Workspace) objectDir() (string, error) {
+	out, err := gitOutput(w.CWD, nil, "rev-parse", "--git-path", "objects")
+	if err != nil {
+		return "", err
+	}
+	path := strings.TrimSpace(string(out))
+	if !filepath.IsAbs(path) {
+		path = filepath.Join(w.CWD, path)
+	}
+	if real, err := filepath.EvalSymlinks(path); err == nil {
+		path = real
+	}
+	return path, nil
+}
+
+// computePlannedTreeOID returns the tree object ID for a plan without
+// populating the repository object database.
+func (w *Workspace) computePlannedTreeOID(changes map[string]fileChange) (string, error) {
+	objects, err := w.ephemeralObjectStore()
+	if err != nil {
+		return "", err
+	}
+	defer objects.close()
+	return w.buildTreeInObjectStore(changes, objects)
+}
+
+// writePlannedTree is the execution boundary where planned file bytes become
+// persistent repository objects.
+func (w *Workspace) writePlannedTree(plan *Plan) (string, error) {
+	tree, err := w.buildTreeInObjectStore(plan.Touched, w.repositoryObjectStore())
+	if err != nil {
+		return "", err
+	}
+	if plan.Tree != "" && tree != plan.Tree {
+		return "", failf("planned tree changed while writing objects: got %s, want %s", tree, plan.Tree)
+	}
+	return tree, nil
+}
+
+func (w *Workspace) buildTreeInObjectStore(changes map[string]fileChange, objects gitObjectStore) (string, error) {
 	tmp, err := os.CreateTemp("", "etch-index-*")
 	if err != nil {
 		return "", err
@@ -234,9 +314,10 @@ func (w *Workspace) buildTree(changes map[string]fileChange) (string, error) {
 	_ = tmp.Close()
 	_ = os.Remove(indexPath)
 	defer os.Remove(indexPath)
-	env := []string{"GIT_INDEX_FILE=" + indexPath}
+	env := append([]string{}, objects.env...)
+	env = append(env, "GIT_INDEX_FILE="+indexPath)
 	if !w.Unborn {
-		if err := gitRun(w.CWD, env, nil, "read-tree", "HEAD"); err != nil {
+		if err := gitRun(w.CWD, env, nil, "read-tree", w.Head); err != nil {
 			return "", err
 		}
 	}
@@ -248,7 +329,7 @@ func (w *Workspace) buildTree(changes map[string]fileChange) (string, error) {
 			}
 			continue
 		}
-		blob, err := gitOutputStdin(w.CWD, nil, ch.After, "hash-object", "-w", "--stdin")
+		blob, err := gitOutputStdin(w.CWD, env, ch.After, "hash-object", "-w", "--stdin")
 		if err != nil {
 			return "", err
 		}
@@ -268,12 +349,16 @@ func (w *Workspace) buildTree(changes map[string]fileChange) (string, error) {
 	return strings.TrimSpace(string(tree)), nil
 }
 
-func (w *Workspace) createCommit(tree, message string) (string, error) {
+func (w *Workspace) writeCommitObject(tree, message string) (string, error) {
+	return w.createCommitInObjectStore(tree, message, w.repositoryObjectStore())
+}
+
+func (w *Workspace) createCommitInObjectStore(tree, message string, objects gitObjectStore) (string, error) {
 	args := []string{"commit-tree", tree}
 	if !w.Unborn {
 		args = append(args, "-p", w.Head)
 	}
-	out, err := gitOutputStdin(w.CWD, nil, []byte(message), args...)
+	out, err := gitOutputStdin(w.CWD, objects.env, []byte(message), args...)
 	if err != nil {
 		return "", err
 	}

@@ -83,11 +83,9 @@ Residual caveat: Markdown table writes normalize table formatting and alignment 
 
 **Spec:** "--dry-run: Emit git-am-compatible patch to stdout, do not write or commit." (§3) "--plan and --dry-run skip execution entirely." (§3)
 
-**Implementation:** `dryrun.go:9-10` calls `w.createCommit(plan.Tree, plan.Commit.Message)` which invokes `git commit-tree`, writing a commit object and blob objects into the git object store. The ref is not updated, but objects are written.
+Implemented. `PlanOperations` computes the planned tree OID through an ephemeral object store, while execution crosses an explicit `writePlannedTree` / `writeCommitObject` boundary before updating refs. `RenderDryRun` uses the same ephemeral object-store path for temporary tree and commit objects needed to delegate patch rendering to native Git.
 
-The `buildTree` call in `PlanOperations` also writes blob objects (via `git hash-object -w`) and tree objects (via `git write-tree`). This happens for `--plan` and `--dry-run` because planning runs before the mode check.
-
-Dangling objects will be garbage-collected eventually, but every `--plan` or `--dry-run` invocation writes objects to `.git/objects`.
+Regression coverage asserts that both direct planning and CLI `--plan`/`--dry-run` leave the repository object database unchanged.
 
 ---
 
