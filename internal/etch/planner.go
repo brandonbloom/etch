@@ -503,7 +503,7 @@ func buildCommitMessage(opts GlobalOptions, ops []Operation) string {
 	msg := "etch: no changes"
 	if len(mut) == 1 {
 		subj := "etch " + mut[0].Descriptor
-		if len(subj) <= 72 && !strings.Contains(subj, "\n") {
+		if commitSubjectFits(subj, opts) {
 			msg = subj
 		} else {
 			msg = "etch " + descriptorWithoutValue(mut[0])
@@ -528,13 +528,45 @@ func buildCommitMessage(opts GlobalOptions, ops []Operation) string {
 			msg += "\n- " + op.Descriptor
 		}
 	}
-	if opts.MessagePrefix != "" {
-		msg = opts.MessagePrefix + msg
+	return applyCommitMessageModifiers(msg, opts)
+}
+
+func commitSubjectFits(subject string, opts GlobalOptions) bool {
+	subject = opts.SubjectPrefix + subject + opts.SubjectSuffix
+	return len(subject) <= 72 && !strings.Contains(subject, "\n")
+}
+
+func applyCommitMessageModifiers(msg string, opts GlobalOptions) string {
+	subject, body := splitCommitMessage(msg)
+	subject = opts.SubjectPrefix + subject + opts.SubjectSuffix
+	body = joinCommitBodyBlocks(opts.BodyPrefix, body, opts.BodySuffix)
+	if body == "" {
+		return subject
 	}
-	if opts.MessageSuffix != "" {
-		msg += opts.MessageSuffix
+	return subject + "\n\n" + body
+}
+
+func splitCommitMessage(msg string) (subject, body string) {
+	subject, body, ok := strings.Cut(msg, "\n\n")
+	if !ok {
+		return msg, ""
 	}
-	return msg
+	return subject, body
+}
+
+func joinCommitBodyBlocks(blocks ...string) string {
+	var out string
+	for _, block := range blocks {
+		if block == "" {
+			continue
+		}
+		if out == "" {
+			out = block
+			continue
+		}
+		out = strings.TrimRight(out, "\n") + "\n\n" + strings.TrimLeft(block, "\n")
+	}
+	return out
 }
 
 func descriptorWithoutValue(op Operation) string {

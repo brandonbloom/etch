@@ -250,8 +250,10 @@ Useful flags:
 | `--no-checkout` | Commit without materializing touched paths into the checkout. |
 | `--untracked` | Admit untracked source paths under CWD. |
 | `--message <m>` | Override the generated commit message. |
-| `--message-prefix <m>` | Prepend the generated commit message. |
-| `--message-suffix <m>` | Append the generated commit message. |
+| `--subject-prefix <s>` | Prepend literal text to the generated commit subject. |
+| `--subject-suffix <s>` | Append literal text to the generated commit subject. |
+| `--body-prefix <s>` | Prepend a body block before the generated commit body. |
+| `--body-suffix <s>` | Append a body block after the generated commit body. |
 | `--retries <n>` | Retry optimistic ref-update conflicts. The default is `3`. |
 | `--allow-empty` | Permit an empty commit for mutating invocations. |
 

@@ -49,8 +49,10 @@ type GlobalOptions struct {
 	NoCheckout    bool
 	Untracked     bool
 	Message       string
-	MessagePrefix string
-	MessageSuffix string
+	SubjectPrefix string
+	SubjectSuffix string
+	BodyPrefix    string
+	BodySuffix    string
 	Retries       int
 	AllowEmpty    bool
 }
@@ -72,6 +74,9 @@ type Statement struct {
 	Loc    SourceLoc
 }
 
+// CommandClass describes a command's content-change behavior within one
+// transaction. It is not a promise that re-running the same command after a
+// successful commit will still succeed against the new base.
 type CommandClass string
 
 const (

@@ -52,13 +52,15 @@ Top-level flags:
 | `--no-checkout` | — | After committing, do not materialize touched paths into the working tree. |
 | `--untracked` | — | Permit target paths under CWD that are not tracked by git. |
 | `--message <m>` | — | Override auto-generated commit message. |
-| `--message-prefix <m>` | — | Prepend to auto-generated message. |
-| `--message-suffix <m>` | — | Append to auto-generated message. |
+| `--subject-prefix <s>` | — | Prepend literal text to the auto-generated subject line. |
+| `--subject-suffix <s>` | — | Append literal text to the auto-generated subject line. |
+| `--body-prefix <s>` | — | Prepend a body block before the auto-generated body. |
+| `--body-suffix <s>` | — | Append a body block after the auto-generated body. |
 | `--retries <n>` | — | Retry budget on optimistic-concurrency conflict. `0` disables retries. Default `3`. |
 | `--allow-empty` | — | Permit a commit with no content change when at least one mutating command was supplied. |
 | `--version` | — | Alias for `etch version`. |
 
-`--plan` and `--dry-run` are mutually exclusive and skip execution entirely. `--no-checkout` applies only to successful committing invocations; it has no meaning with `--plan` or `--dry-run`. `--message` is mutually exclusive with `--message-prefix` and `--message-suffix`; prefix and suffix may be combined with each other.
+`--plan` and `--dry-run` are mutually exclusive and skip execution entirely. `--no-checkout` applies only to successful committing invocations; with `--plan` or `--dry-run` it is accepted and ignored. `--message` is mutually exclusive with subject/body message modifiers; subject and body modifiers may be combined with each other.
 
 Introspection commands that do not evaluate a verb or script do not require CWD to be inside a git worktree and do not read repository state unless their own help says otherwise. This includes `--help`, `help`, `version`, `--version`, and `verbs --json`.
 
@@ -159,7 +161,9 @@ The resulting rule: porcelain Markdown selectors may use explicit part prefixes 
 | Files | `create`, `delete`, `move`, `copy` | File-level verbs use explicit etch names rather than shell primitive names. Signatures are `create <path> <content>`, `delete <path>`, `move <src> <dst>`, and `copy <src> <dst>`. `create` and `copy` fail if the destination exists in the transaction base. `delete` is idempotent when the path is absent from the transaction base. `move` fails if the source is absent or destination exists in the transaction base. |
 | Transaction guards | `exists`, `missing`, `contains` | Guards have no stdout and make no content changes. They participate in the same plan and transaction as mutating operations, and the invocation aborts with exit 1 before side effects if any guard is false. |
 
-YAML and frontmatter operations edit the document representation, not the YAML graph after anchor and alias resolution. Anchors and aliases are concrete syntax. Mutating an anchored node edits that node's representation; aliases remain alias nodes and downstream YAML readers may observe the updated anchor value through normal YAML resolution. Selectors do not dereference aliases, so a selector segment below an alias is a type error. Setting an alias node replaces that alias occurrence only.
+JSON operations edit the document representation, not just a decoded data value. Duplicate object member names are accepted as source syntax so localized edits can preserve the rest of the file. A member selector chooses the first matching member in source order; setting that selected member replaces that AST node only. JSON value operands that are materialized into data values collapse duplicate object member names with last-name-wins map semantics, so callers should avoid duplicate names in value operands.
+
+YAML and frontmatter operations edit the document representation, not the YAML graph after anchor and alias resolution. Anchors and aliases are concrete syntax. Mutating an anchored node edits that node's representation; aliases remain alias nodes and downstream YAML readers may observe the updated anchor value through normal YAML resolution. Selectors do not dereference aliases, so a selector segment below an alias is a type error. Setting an alias node replaces that alias occurrence only. MVP YAML and frontmatter selectors address the first YAML document; multi-document YAML selection is deferred. New and replaced YAML nodes are generated snippets, so touched nodes may use generated formatting while untouched surrounding representation is preserved where the parser can preserve it.
 
 For JSON, YAML, and frontmatter `add` and `remove`, structural equality is semantic rather than byte-spelling equality within the same document-representation model. Editing the representation means etch preserves and rewrites source structure; it does not make array membership depend on superficial source spelling. Object and mapping key order, whitespace, quoting style, and numeric spelling for numeric values do not affect equality; arrays remain ordered, strings compare after decoding, and numbers compare by parsed numeric value in the accepted format domain. YAML aliases compare as alias nodes by anchor name and are not equal to the values they would resolve to. For example, `{"a":1,"b":2}` and `{"b":2,"a":1}` are equal for `add` and `remove`.
 
@@ -250,7 +254,7 @@ Markdown is not just prose in the target repositories. The early Markdown surfac
 
 Tasks and inline fields need a separate selector design pass before they graduate into the MVP table above.
 
-Each command is annotated by class in the help table: `guard`, `idempotent`, or `non-idempotent`. `idempotent` and `non-idempotent` commands are mutating commands. Idempotent commands that produce no content change are no-ops and don't contribute to the commit; non-idempotent commands (`append`) always produce changes. Guards make no content change and only preserve or reject the admitted input state.
+Each command is annotated by class in the help table: `guard`, `idempotent`, or `non-idempotent`. `idempotent` and `non-idempotent` commands are mutating commands. Idempotency describes content-change behavior within a transaction base, not whether the same command can be safely re-run after a successful commit against a new base. Idempotent commands that produce no content change are no-ops and don't contribute to the commit; non-idempotent commands (`append`) always produce changes. Guards make no content change and only preserve or reject the admitted input state.
 
 ## 6. Plans
 
@@ -437,7 +441,7 @@ If both index and worktree match base, materialization is an ordinary checkout o
 1. Rebase the live index layer with `base = old HEAD`, `ours = new HEAD`, and `theirs = pre-materialization index`.
 2. Rebase the working-tree layer with `base = pre-materialization index`, `ours = post-materialization index`, and `theirs = pre-materialization worktree`.
 
-Clean merges preserve staged and unstaged layers relative to the new `HEAD`: pre-existing staged changes remain staged after being rebased, and pre-existing unstaged changes remain unstaged after being rebased. If a text merge conflicts, etch writes familiar conflict markers to the working tree, leaves the path dirty, and exits 1 after the commit exists. The index is not put into an unmerged multi-stage state in MVP. If an index-layer conflict cannot be represented without an unmerged index, etch writes the conflict to the working tree and leaves the live index at the new `HEAD` entry for that path, making the recovery visible rather than silently preserving a stale staged blob. For binary paths, or if text merge machinery cannot produce a usable result, etch fails cleanly without overwriting the current working-tree file.
+Clean merges preserve staged and unstaged layers relative to the new `HEAD`: pre-existing staged changes remain staged after being rebased, and pre-existing unstaged changes remain unstaged after being rebased. If a text merge conflicts, etch writes familiar conflict markers to the working tree, leaves the path dirty, and exits 1 after the commit exists. The MVP merge engine may conservatively report a conflict for complex text edits it cannot confidently merge, even when a more complete merge algorithm could prove the edits independent. The index is not put into an unmerged multi-stage state in MVP. If an index-layer conflict cannot be represented without an unmerged index, etch writes the conflict to the working tree and leaves the live index at the new `HEAD` entry for that path, making the recovery visible rather than silently preserving a stale staged blob. For binary paths, or if text merge machinery cannot produce a usable result, etch fails cleanly without overwriting the current working-tree file.
 
 Create, copy, and move-destination materialization use `base = absent` and `ours = new HEAD bytes`. If the local index or worktree state is absent or already equal to the new bytes, the path materializes cleanly. If local text was concurrently created with different bytes, etch writes add/add conflict markers. If either side is binary or unmergeable, etch fails cleanly without overwriting the local path.
 
@@ -526,7 +530,7 @@ Value previews are deterministic:
 - Longer or multi-line UTF-8 values render with `...` truncation only. For strings, the ellipsis lives inside the JSON string (`"prefix..."`). For objects and arrays, the compact JSON rendering is cut on a character boundary and ends with `...`; truncated previews are not required to be parseable JSON.
 - Non-UTF-8 values render as `<binary, N bytes>`.
 - Value previews should fit within 80 characters. If a descriptor would exceed 120 characters, the preview budget is reduced so the descriptor fits; if the target alone consumes the line budget, the value preview is omitted from that descriptor.
-- Single-op subjects include an exact value preview only if the full subject fits on one line within 72 characters. Otherwise the subject omits the value and the body contains `Value: <value-preview>`.
+- Single-op subjects include an exact value preview only if the full subject, including subject modifiers, fits on one line within 72 characters. Otherwise the subject omits the value and the body contains `Value: <value-preview>`.
 - Commit messages do not include value hashes. Hashes are plan metadata; commit-message values are human previews.
 
 - Single op with a short value: subject only, `etch <verb> <path> <selector> <value-preview>` (e.g., `etch set posts/hello.md frontmatter.title "Hello, world"`).
@@ -552,7 +556,7 @@ etch set posts/hello.md frontmatter.summary
 Value: "This summary is long enough that it needs a bounded preview..."
 ```
 
-`--message` overrides entirely and is mutually exclusive with `--message-prefix` and `--message-suffix`. `--message-prefix` and `--message-suffix` compose with the auto-generated message and may be used together. Configurable templates are deferred.
+`--message` overrides entirely and is mutually exclusive with subject/body message modifiers. `--subject-prefix` and `--subject-suffix` are literal affixes for the first line only; etch does not insert spaces or punctuation, so callers include the exact boundary text they want, such as `--subject-prefix "feat: "`, `--subject-prefix "fixup! "`, or `--subject-suffix " [skip ci]"`. `--body-prefix` and `--body-suffix` add body blocks before and after the generated body. When a generated body and a body modifier are both present, etch joins the blocks with a blank line. If the generated message has no body, a body modifier creates one. Configurable templates are deferred.
 
 ### Idempotency and the empty-commit case
 
@@ -678,9 +682,9 @@ Implementation code should receive explicit filesystem, index, object-store, and
 
 ### CLI front door
 
-The CLI front door owns top-level flag parsing, env-var defaults, command dispatch, and the split between one-shot invocation, `run`, help, verb catalog, plan, dry-run, checkout control, and committing execution. It also enforces global flag incompatibilities before any file reads, discovers the concrete workspace, and constructs the explicit filesystem/object/index handles passed to lower layers.
+The CLI front door owns top-level flag parsing, command dispatch, and the split between one-shot invocation, `run`, help, verb catalog, plan, dry-run, checkout control, and committing execution. It also enforces global flag incompatibilities before any file reads, discovers the concrete workspace, and constructs the explicit filesystem/object/index handles passed to lower layers. MVP top-level flags do not have etch-specific environment-variable defaults.
 
-Dependency posture: use `urfave/cli/v3` for top-level command, flag, help, and environment-variable behavior. The Go standard library flag parser follows older Plan 9-style conventions and is the wrong user-facing surface for a modern CLI. etch still keeps verb decoding in project code so the catalog remains the source of truth for argv, scripts, help, and `verbs --json`. The `urfave/cli` boundary must stop before verb operands, for example with root `StopOnNthArg=1`, so values beginning with `-` remain etch arguments rather than being consumed as top-level flags.
+Dependency posture: use `urfave/cli/v3` for top-level command, flag, help, and completion behavior. The Go standard library flag parser follows older Plan 9-style conventions and is the wrong user-facing surface for a modern CLI. etch still keeps verb decoding in project code so the catalog remains the source of truth for argv, scripts, help, and `verbs --json`. The `urfave/cli` boundary must stop before verb operands, for example with root `StopOnNthArg=1`, so values beginning with `-` remain etch arguments rather than being consumed as top-level flags.
 
 ### Argv and script parser
 
@@ -720,7 +724,7 @@ Dependency posture: evaluators should be project code. Their contracts are etch'
 
 The planner is the pure core for mutating invocations. It owns input-set construction, but it does not perform raw filesystem or object-store reads itself: it asks the workspace snapshot store for base-snapshot file content, admitted untracked source content, path facts needed for containment and source admission, and base-ref state. In MVP, the base snapshot is `HEAD`; future multi-execution transactions may supply a virtual tree. The planner applies all operations atomically in memory, computes per-file before/after hashes, asks the git backend to build the planned tree, generates the commit message, and emits an in-memory plan. Canonical JSON is one rendering of that plan, not the object the executor consumes.
 
-Dependency posture: plan hashes are computed over RFC 8785 JSON Canonicalization Scheme bytes. etch canonicalizes original UTF-8 JSON input bytes, not Go values produced by `encoding/json`. Inputs must satisfy the JCS/I-JSON domain: valid UTF-8, no duplicate object member names after escape decoding, no lone surrogates or noncharacters, and finite IEEE-754 binary64 numbers in the accepted range. Object members are sorted by RFC 8785 UTF-16 code-unit order, and canonical output is exact UTF-8 bytes with no trailing newline. The selected candidate is `github.com/lattice-substrate/json-canon/jcs`, pending etch integration fixtures and acceptance of its Go version/platform constraints. Hashing uses the Go standard library.
+Dependency posture: plan hashes are computed over RFC 8785 JSON Canonicalization Scheme bytes. etch first renders the plan schema to deterministic JSON, excluding execution-only in-memory fields, then canonicalizes those bytes with the selected JCS implementation. The plan schema contains no inline user JSON values, so duplicate-name and arbitrary-number hazards from edited documents do not enter plan canonicalization. Object members are sorted by RFC 8785 UTF-16 code-unit order, and canonical output is exact UTF-8 bytes with no trailing newline. The selected implementation is `github.com/lattice-substrate/json-canon/jcs`; hashing uses the Go standard library.
 
 ### Workspace snapshot store
 
@@ -793,17 +797,17 @@ This section records dependency candidates, recommendations, explicit user selec
 | Area | Decision | Status | Rationale |
 |---|---|---|---|
 | Language/runtime | Go standard library | Baseline | Use for hashing, path handling, filesystem access, CSV parsing, process execution, and small data structures. Do not use `flag` for the user-facing CLI. |
-| CLI framework | `github.com/urfave/cli/v3` | Selected, passthrough-gated | Supports modern command callbacks, typed/env-backed flags, subcommands, generated/custom help, and shell completion. Use a passthrough boundary such as root `StopOnNthArg=1`; keep etch's command decoder catalog-driven above it. |
+| CLI framework | `github.com/urfave/cli/v3` | Selected, integrated | Supports modern command callbacks, typed flags, subcommands, generated/custom help, and shell completion. Use a passthrough boundary such as root `StopOnNthArg=1`; keep etch's command decoder catalog-driven above it. |
 | Script parsing | Hand-written tokenizer | Spec-selected | The grammar is intentionally smaller than shell; no expansion or execution semantics should be imported. |
 | Embedded shell parsing | `mvdan/sh`-style shell parser | Rejected by spec | Shell syntax was evaluated and rejected because command substitution, expansion, and broader shell semantics break auditability. |
 | Verb catalog | Plain Go catalog data | Spec-selected | The catalog should project to dispatch, help, and `verbs --json` without a schema/codegen dependency. |
-| Selector parsing | `github.com/theory/jsonpath` | Recommended candidate | RFC 9535 implementation with no runtime dependencies and stable `spec` AST surface. Etch can reject non-singular syntax before evaluation, then adapter-walk admitted selectors. |
+| Selector parsing | `github.com/theory/jsonpath` | Selected, integrated | RFC 9535 implementation with no runtime dependencies and stable `spec` AST surface. Etch rejects non-singular syntax before evaluation, then adapter-walks admitted selectors. |
 | Selector parsing | `github.com/speakeasy-api/jsonpath` | Evaluated, not recommended | Public API is a YAML-node evaluator with private AST. Its tokenizer is not enough of a parser-only validation surface for etch's singular selector contract. |
-| JSON | `encoding/json/v2` | Brandon-selected with toolchain caveat | Prefer v2 semantics for stricter JSON behavior and deterministic output options. Confirm target Go version and `GOEXPERIMENT=jsonv2` status before implementation. |
+| JSON | `encoding/json/v2` | Brandon-selected, integrated | Prefer v2 semantics for stricter JSON behavior and deterministic output options. Project tasks set `GOEXPERIMENT=jsonv2` through Mise. |
 | CSV | `encoding/csv` | Spec-selected | CSV is standard-library covered and reuses the shared table row, column, range, and JSON-row semantics. |
-| YAML | `github.com/goccy/go-yaml` | Selected, fixture-gated | Use parser/token/AST APIs for comments, key order, anchors, aliases, token positions, and generated YAML snippets. Etch owns selector evaluation and localized byte rewrites; whole-document emission is allowed only where fixtures prove acceptable preservation. |
-| Markdown | `github.com/yuin/goldmark` plus `extension.GFM` | Selected, parser-only | Use goldmark for CommonMark/GFM structure, source segments, headings, task-list semantics, and table nodes. Markdown adapters preserve untouched bytes by splicing original source ranges. |
-| JCS canonicalization | `github.com/lattice-substrate/json-canon/jcs` | Selected candidate, fixture-gated | Best fit for plan hashing: byte-in/byte-out API, strict parser, duplicate-key rejection, UTF-16 key sorting, and broad conformance fixtures. Requires acceptance of Go version/platform constraints. |
+| YAML | `github.com/goccy/go-yaml` | Selected, integrated | Use parser/token/AST APIs for comments, key order, anchors, aliases, token positions, and generated YAML snippets. Etch owns selector evaluation and localized byte rewrites; whole-document emission is allowed only where fixtures prove acceptable preservation. |
+| Markdown | `github.com/yuin/goldmark` plus `extension.GFM` | Selected, integrated parser-only | Use goldmark for CommonMark/GFM structure, source segments, headings, task-list semantics, and table nodes. Markdown adapters preserve untouched bytes by splicing original source ranges. |
+| JCS canonicalization | `github.com/lattice-substrate/json-canon/jcs` | Selected, integrated | Used for plan hashing after etch renders the plan schema to deterministic JSON. Provides UTF-16 key sorting and canonical UTF-8 output for the plan bytes. |
 | JCS canonicalization | `github.com/gowebpki/jcs` | Evaluated, not recommended | Usable byte-in/byte-out API, but parser behavior is too loose for etch plan hashes unless wrapped in a strict JSON/I-JSON validator. |
 | JCS canonicalization | `github.com/ucarion/jcs` | Evaluated, not recommended | Canonicalizes Go values rather than original JSON bytes, so duplicate keys and input-domain violations can be lost before canonicalization. |
 | JCS reference fixtures | `github.com/cyberphone/json-canonicalization` | Reference, not dependency | Upstream/reference source for JCS fixtures and provenance. The Go implementation is GOPATH-shaped and not the best etch dependency. |

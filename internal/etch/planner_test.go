@@ -142,6 +142,89 @@ func TestPlanHashUsesJCSCanonicalBytes(t *testing.T) {
 	}
 }
 
+func TestBuildCommitMessageAppliesSubjectAndBodyModifiers(t *testing.T) {
+	ops := []Operation{{
+		Verb:       "set",
+		Class:      ClassIdempotent,
+		Descriptor: `set state.json $.status "done"`,
+		Value:      `"done"`,
+	}}
+
+	got := buildCommitMessage(GlobalOptions{
+		SubjectPrefix: "feat: ",
+		SubjectSuffix: " [skip ci]",
+	}, ops)
+	want := `feat: etch set state.json $.status "done" [skip ci]`
+	if got != want {
+		t.Fatalf("message = %q, want %q", got, want)
+	}
+
+	got = buildCommitMessage(GlobalOptions{
+		BodySuffix: "Refs: #1",
+	}, ops)
+	want = `etch set state.json $.status "done"` + "\n\nRefs: #1"
+	if got != want {
+		t.Fatalf("message = %q, want %q", got, want)
+	}
+}
+
+func TestBuildCommitMessageJoinsBodyModifiersWithGeneratedBody(t *testing.T) {
+	ops := []Operation{
+		{
+			Verb:       "set",
+			Class:      ClassIdempotent,
+			Target:     PlanTarget{Path: "state.json"},
+			Descriptor: `set state.json $.status "done"`,
+			Value:      `"done"`,
+		},
+		{
+			Verb:       "delete",
+			Class:      ClassIdempotent,
+			Target:     PlanTarget{Path: "state.json"},
+			Descriptor: `delete state.json $.old`,
+		},
+	}
+
+	got := buildCommitMessage(GlobalOptions{
+		SubjectPrefix: "feat: ",
+		BodyPrefix:    "Context: generated",
+		BodySuffix:    "\n\nRefs: #1",
+	}, ops)
+	want := strings.Join([]string{
+		"feat: etch: 2 changes in state.json",
+		"",
+		"Context: generated",
+		"",
+		"Changes:",
+		`- set state.json $.status "done"`,
+		"- delete state.json $.old",
+		"",
+		"Refs: #1",
+	}, "\n")
+	if got != want {
+		t.Fatalf("message = %q, want %q", got, want)
+	}
+}
+
+func TestBuildCommitMessageSubjectModifiersAffectValueFallback(t *testing.T) {
+	ops := []Operation{{
+		Verb:       "set",
+		Class:      ClassIdempotent,
+		Descriptor: `set state.json $.status "1234567890123456789012345678901234567890"`,
+		Value:      `"1234567890123456789012345678901234567890"`,
+	}}
+
+	got := buildCommitMessage(GlobalOptions{SubjectPrefix: "feat: "}, ops)
+	want := strings.Join([]string{
+		"feat: etch set state.json $.status",
+		"",
+		`Value: "1234567890123456789012345678901234567890"`,
+	}, "\n")
+	if got != want {
+		t.Fatalf("message = %q, want %q", got, want)
+	}
+}
+
 func filepathJoin(elem ...string) string {
 	return filepath.Join(elem...)
 }

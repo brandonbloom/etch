@@ -541,8 +541,10 @@ Core flags:
   --no-checkout          commit without materializing touched paths
   --untracked            admit untracked source paths under CWD
   --message <m>          override generated commit message
-  --message-prefix <m>   prepend generated commit message
-  --message-suffix <m>   append generated commit message
+  --subject-prefix <s>   prepend literal text to generated commit subject
+  --subject-suffix <s>   append literal text to generated commit subject
+  --body-prefix <s>      prepend a block to generated commit body
+  --body-suffix <s>      append a block to generated commit body
   --retries <n>          retry CAS conflicts, default 3
   --allow-empty          permit empty commit for mutating invocations
   --version              print version and exit

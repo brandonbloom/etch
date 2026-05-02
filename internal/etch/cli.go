@@ -50,8 +50,10 @@ func runCLIAt(cwd string, args []string, stdout, stderr io.Writer) (exitCode, er
 			&cli.BoolFlag{Name: "no-checkout", Usage: "commit without materializing touched paths", Destination: &opts.NoCheckout},
 			&cli.BoolFlag{Name: "untracked", Usage: "admit untracked source paths under CWD", Destination: &opts.Untracked},
 			&cli.StringFlag{Name: "message", Usage: "override generated commit message", Destination: &opts.Message},
-			&cli.StringFlag{Name: "message-prefix", Usage: "prepend generated commit message", Destination: &opts.MessagePrefix},
-			&cli.StringFlag{Name: "message-suffix", Usage: "append generated commit message", Destination: &opts.MessageSuffix},
+			&cli.StringFlag{Name: "subject-prefix", Usage: "prepend literal text to generated commit subject", Destination: &opts.SubjectPrefix},
+			&cli.StringFlag{Name: "subject-suffix", Usage: "append literal text to generated commit subject", Destination: &opts.SubjectSuffix},
+			&cli.StringFlag{Name: "body-prefix", Usage: "prepend a block to generated commit body", Destination: &opts.BodyPrefix},
+			&cli.StringFlag{Name: "body-suffix", Usage: "append a block to generated commit body", Destination: &opts.BodySuffix},
 			&cli.IntFlag{Name: "retries", Usage: "retry CAS conflicts", Value: 3, Destination: &opts.Retries},
 			&cli.BoolFlag{Name: "allow-empty", Usage: "permit empty commit for mutating invocations", Destination: &opts.AllowEmpty},
 			&cli.BoolFlag{Name: "version", Usage: "print version and exit"},
@@ -92,8 +94,8 @@ func runParsedCLI(opts GlobalOptions, rest []string, stdout, stderr io.Writer) (
 	if opts.Plan && opts.DryRun {
 		return exitUsage, usagef("--plan and --dry-run are mutually exclusive")
 	}
-	if opts.Message != "" && (opts.MessagePrefix != "" || opts.MessageSuffix != "") {
-		return exitUsage, usagef("--message is mutually exclusive with --message-prefix and --message-suffix")
+	if opts.Message != "" && (opts.SubjectPrefix != "" || opts.SubjectSuffix != "" || opts.BodyPrefix != "" || opts.BodySuffix != "") {
+		return exitUsage, usagef("--message is mutually exclusive with subject/body message modifiers")
 	}
 	if opts.Retries < 0 {
 		return exitUsage, usagef("--retries must be non-negative")
@@ -205,8 +207,10 @@ func globalFlagCompletions() []string {
 		"--no-checkout",
 		"--untracked",
 		"--message",
-		"--message-prefix",
-		"--message-suffix",
+		"--subject-prefix",
+		"--subject-suffix",
+		"--body-prefix",
+		"--body-suffix",
 		"--retries",
 		"--allow-empty",
 		"--version",

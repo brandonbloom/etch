@@ -107,7 +107,7 @@ func TestShellCompletionThroughCLI(t *testing.T) {
 	if err != nil || code != exitOK {
 		t.Fatalf("flag completion code=%d err=%v stderr=%s", code, err, errb.String())
 	}
-	for _, want := range []string{"--plan\n", "-n\n"} {
+	for _, want := range []string{"--plan\n", "-n\n", "--subject-prefix\n", "--body-suffix\n"} {
 		if !strings.Contains(out.String(), want) {
 			t.Fatalf("flag completion missing %q:\n%s", want, out.String())
 		}
