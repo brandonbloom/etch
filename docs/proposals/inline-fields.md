@@ -2,6 +2,7 @@
 status: draft
 depends_on:
   - markdown-addressing
+  - value-syntax-and-assignment-items
 ---
 
 # Markdown Fields

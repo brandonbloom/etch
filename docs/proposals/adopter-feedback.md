@@ -37,7 +37,7 @@ Review these in priority order:
 
 1. [Markdown fields](inline-fields.md)
 2. [Markdown addressing](markdown-addressing.md)
-3. [Field assignment items](field-assignment-items.md)
+3. [Value syntax and assignment items](value-syntax-and-assignment-items.md)
 4. [Markdown block IDs](block-ids.md)
 5. [Markdown section insertion and block whitespace](section-insertion.md)
 6. [Transaction batching](transactions.md)

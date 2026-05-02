@@ -108,6 +108,9 @@ future command exposes them as an explicit last-resort escape hatch.
   line on the other side, using the file's newline style.
 - When the section body is empty, the fragment starts immediately after the
   heading line with one newline.
+- This empty-section behavior is intentionally different from non-empty
+  insertion: no blank separator is needed until there is existing content to
+  separate from the inserted block fragment.
 - When appending to an existing list as the same list, callers should use
   `list add` rather than `section append`; section insertion always creates
   a block boundary.

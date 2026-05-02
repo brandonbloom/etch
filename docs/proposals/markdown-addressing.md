@@ -32,7 +32,7 @@ deletion should use the same vocabulary for locating parts of a Markdown file.
 - `--item <literal>` selects one Markdown list item, including task, plain,
   numbered, and bullet-list items.
 - `--item-type` narrows an `--item` selection. It is repeatable, and repeated
-  item-type constraints are AND-ed.
+  item-type constraints are AND-ed across independent axes.
 - `--task <literal>` is shorthand for `--item <literal> --item-type task`.
 - `--item-type` without `--item` or `--task` is an error.
 - `--after` and `--before` identify a location relative to an existing anchor
@@ -93,8 +93,15 @@ meanings.
   such as `1.` or `1)`.
 - `--item-type bullet` matches list items with a bullet-list marker: `-`, `+`,
   or `*`.
-- Contradictory item-type combinations, such as `task` with `plain` or
-  `numbered` with `bullet`, are errors.
+- Item types have two axes: task state (`task` or `plain`) and marker shape
+  (`numbered` or `bullet`). Repeating `--item-type` can combine one constraint
+  from each axis, such as `--item-type task --item-type numbered`.
+- Contradictory item-type combinations within the same axis, such as `task`
+  with `plain` or `numbered` with `bullet`, are errors.
+- Numbered tasks, such as `1. [ ] Do thing`, are supported. They match
+  `--item-type task --item-type numbered`. If a valid item-type combination has
+  no matching source item, that is an ordinary no-match error, not a selector
+  syntax error.
 - Item matching is source-normalized, not rendered-text-normalized. Etch
   normalizes away the list marker, checkbox marker, surrounding whitespace, and
   Dataview inline field annotations.
@@ -130,9 +137,19 @@ Code:
 - Add reusable Markdown addressing helpers for body, section, item, item-type,
   task shorthand, anchor resolution, and placement resolution.
 - Add fixtures for title and ATX heading matching, repeated headings, closing
-  heading markers, item source normalization, item-type filters, ambiguous
-  items, nested items, multiline items, head/tail placement, before/after
-  placement, and conflicting placement flags.
+  heading markers, item source normalization, item-type filters, numbered
+  tasks, ambiguous items, nested items, multiline items, head/tail placement,
+  before/after placement, and conflicting placement flags.
+
+Verification:
+
+- Unit-test item-type classification independently from item text matching.
+- Include examples for bullet tasks, numbered tasks, plain bullet items, and
+  plain numbered items.
+- Assert that `task` with `plain` and `numbered` with `bullet` fail as
+  contradictory filters.
+- Assert that a valid but absent combination, such as a numbered task in a file
+  with only bullet tasks, fails as a no-match.
 
 ## Rationale
 
