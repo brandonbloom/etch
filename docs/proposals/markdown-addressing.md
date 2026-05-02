@@ -7,9 +7,9 @@ depends_on: []
 
 ## Summary
 
-Define shared addressing rules for Markdown body operations. Inline fields,
-section insertion, task/list operations, and future section deletion should use
-the same vocabulary for locating parts of a Markdown file.
+Define shared addressing and placement rules for Markdown body operations.
+Inline fields, section insertion, task/list operations, and future section
+deletion should use the same vocabulary for locating parts of a Markdown file.
 
 ## Candidate Addressing Flags
 
@@ -21,6 +21,8 @@ the same vocabulary for locating parts of a Markdown file.
 --task <literal>
 --after <literal>
 --before <literal>
+--head
+--tail
 ```
 
 ## Scopes And Ranges
@@ -33,25 +35,36 @@ the same vocabulary for locating parts of a Markdown file.
   item-type constraints are AND-ed.
 - `--task <literal>` is shorthand for `--item <literal> --item-type task`.
 - `--item-type` without `--item` or `--task` is an error.
-- `--after` and `--before` narrow the selected body, section, or item scope.
+- `--after` and `--before` identify a location relative to an existing anchor
+  inside the selected body, section, or item scope.
+- `--head` and `--tail` identify the start or end of the selected body,
+  section, list, or item scope.
 - Missing selectors are errors for mutating commands that need an existing
   location.
 - Ambiguous selectors are errors. Etch reports the candidate locations rather
   than choosing one.
 
-## Insertions
+## Placement
 
-Addressing identifies ranges. Insertion direction belongs to the command using
-the address.
+Markdown addressing can select a range, a placement point, or both. Commands
+decide which kind of address they accept, but they should use these shared
+meanings.
 
 - Commands whose subcommand encodes direction, such as `section append` and
   `section prepend`, use that direction.
-- Commands that create content inside a selected range should define their own
-  placement policy, such as field-specific `--head`/`--tail`, operation-specific
-  defaults, or requiring `--after`/`--before`.
-- `--after <literal>` and `--before <literal>` narrow the range and can also
-  provide a concrete insertion point for commands that create content near
-  existing text.
+- Commands whose verb creates a new item without encoding direction, such as
+  `list add`, should default to `--tail` unless the command specifies a more
+  specific default.
+- `--head` places new content at the beginning of the selected scope.
+- `--tail` places new content at the end of the selected scope.
+- `--after <literal>` places new content immediately after the unique matching
+  anchor inside the selected scope.
+- `--before <literal>` places new content immediately before the unique matching
+  anchor inside the selected scope.
+- `--head`, `--tail`, `--after`, and `--before` are mutually exclusive for
+  commands that create one insertion point.
+- If a command has an operation-specific placement default, explicitly passing
+  one placement flag overrides that default.
 - If a command cannot determine one insertion point, it should fail. Etch is
   mostly driven by agents, and a failed structural mutation can fall back to an
   ordinary manual edit.
@@ -115,10 +128,11 @@ Docs:
 Code:
 
 - Add reusable Markdown addressing helpers for body, section, item, item-type,
-  task shorthand, and anchor resolution.
+  task shorthand, anchor resolution, and placement resolution.
 - Add fixtures for title and ATX heading matching, repeated headings, closing
   heading markers, item source normalization, item-type filters, ambiguous
-  items, nested items, and multiline items.
+  items, nested items, multiline items, head/tail placement, before/after
+  placement, and conflicting placement flags.
 
 ## Rationale
 

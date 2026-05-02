@@ -8,23 +8,26 @@ depends_on:
 
 ## Summary
 
-Add section insertion commands that append or prepend block fragments under an
-existing ATX heading without requiring callers to read, concatenate, and replace
-the whole section body.
+Add a coherent section command family. `section append` and `section prepend`
+insert block fragments under an existing ATX heading without requiring callers
+to read, concatenate, and replace the whole section body. `section replace`
+replaces the whole section body.
 
 This proposal includes the block-fragment whitespace model because that is what
 makes insertion safe for generated scripts.
 
 ## Candidate Commands
 
-The command shape should group operations by Markdown object: `section append`
-and `section prepend`. This keeps section operations together and leaves room
-for later commands such as `section delete` or `section move`.
+The command shape should group operations by Markdown object. This makes
+section operations one family and leaves room for later commands such as
+`section delete` or `section move`.
 
 ```sh
+etch section replace <path> <heading> <content>
 etch section append <path> <heading> <content>
 etch section prepend <path> <heading> <content>
 
+etch md section replace <path> <heading> <content>
 etch md section append <path> <heading> <content>
 etch md section prepend <path> <heading> <content>
 ```
@@ -41,13 +44,19 @@ EOF
 
 ## Section Semantics
 
-- `<heading>` uses the same exact ATX heading selector as `replace-section`.
+- `<heading>` uses the shared Markdown heading selector rules from
+  [Markdown Addressing](markdown-addressing.md).
 - Missing or ambiguous headings are errors.
-- Content is inserted at the end or beginning of the selected section body,
+- `section replace` replaces the whole selected section body.
+- `section append` inserts content at the end of the selected section body,
   inside the section boundary.
+- `section prepend` inserts content at the beginning of the selected section
+  body, inside the section boundary.
 - The caller owns the interior bytes of `<content>`.
-- Etch owns the boundary whitespace where the fragment meets the existing
-  section body.
+- For append and prepend, Etch owns the boundary whitespace where the fragment
+  meets the existing section body.
+- `replace-section` is removed in favor of `section replace`; this is an
+  intentional breaking change from the MVP spelling.
 
 ## Block Model
 
@@ -90,51 +99,56 @@ future command exposes them as an explicit last-resort escape hatch.
   blank-only fragment.
 - Etch preserves interior bytes, including interior blank lines, indentation,
   list markers, code fences, and inline markup.
-- Etch inserts the minimum boundary whitespace needed to keep the old content
-  and inserted fragment from merging into one paragraph, code block, table, or
-  other accidental structure.
+- If the section body is non-empty, Etch trims trailing blank lines from the
+  existing body for append and leading blank lines from the existing body for
+  prepend.
+- When both the existing section body and inserted fragment are non-empty, Etch
+  separates them with exactly one blank line. In source terms, that means two
+  newline sequences between the last nonblank line on one side and the first
+  line on the other side, using the file's newline style.
 - When the section body is empty, the fragment starts immediately after the
   heading line with one newline.
-- When inserting next to paragraph-like or table-like content, Etch uses one
-  blank line as the separator.
 - When appending to an existing list as the same list, callers should use
-  `list append` rather than relying on `section append` spacing heuristics.
-- `replace-section` remains the raw whole-body operation for callers that need
-  exact surrounding whitespace control.
+  `list add` rather than `section append`; section insertion always creates
+  a block boundary.
+- When appending rows to an existing table, callers should use table row
+  operations rather than `section append`.
 
 ## Rationale
 
 This keeps "append to an ingestion section" atomic from `HEAD`. Without this
 operation, a script must read the section, concatenate text, and call
-`replace-section`, which reintroduces stale-read and dirty-checkout risk.
+`section replace`, which reintroduces stale-read and dirty-checkout risk.
 
-Blank lines in Markdown are structural. They can separate paragraphs, loosen
-lists, end blockquotes, and prevent accidental table or code-block extension.
-Etch should therefore make boundary whitespace deterministic for insertion
-commands.
+Blank lines in Markdown are structural. Rather than infer a block-type-specific
+spacing matrix, `section append` and `section prepend` use one deterministic
+block boundary for every non-empty insertion. More specific operations can
+handle list adjacency, table rows, and other structures that intentionally need
+tighter spacing.
 
 ## Impact
 
 Spec:
 
+- Replace the `replace-section` spelling with `section replace`.
 - Add `section append` and `section prepend` to the Markdown verb surface.
 - Define Markdown block-fragment insertion and boundary-whitespace rules.
 
 Docs:
 
-- Extend `md` plumbing help and `verbs --json` documentation.
-- Add examples for section append/prepend around paragraphs, lists, and empty
-  sections.
+- Extend `md` plumbing help and `verbs --json` documentation for
+  `section replace`, `section append`, and `section prepend`.
+- Add examples for section replace/append/prepend around paragraphs, lists, and
+  empty sections.
 
 Code:
 
-- Add plan and commit-message descriptors for section insertion.
-- Add fixtures for empty sections, paragraph boundaries, table boundaries,
-  fenced code boundaries, list adjacency, leading and trailing blank lines in
-  payloads, and files with no trailing newline.
+- Add plan and commit-message descriptors for section replace and insertion.
+- Add fixtures for empty sections, non-empty append, non-empty prepend,
+  deterministic one-blank-line boundaries, list adjacency, table adjacency,
+  leading and trailing blank lines in payloads, existing body boundary trimming,
+  and files with no trailing newline.
 
 ## Open Questions
 
 - Should a later `--create` flag create the section when absent?
-- Are the proposed block-fragment spacing rules acceptable, or should callers
-  have a command-local flag for exact raw insertion?

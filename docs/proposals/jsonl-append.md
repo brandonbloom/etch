@@ -36,16 +36,36 @@ monomorphic plumbing for callers that want explicit format selection.
 - `<json-value>` must be strict JSON.
 - JSON Lines and NDJSON both allow any valid JSON value per line. Etch should
   accept any JSON value, though event-log conventions should use objects.
-- Etch validates that every existing non-empty line is valid JSON before
-  appending.
+- Etch validates the new value and the append boundary, not the whole existing
+  file.
+- Empty files are valid append targets.
+- Non-empty files must end with a newline. Etch fails rather than silently
+  repairing a missing trailing newline, because the previous record boundary is
+  ambiguous.
+- If the append boundary is blank, Etch fails. JSON Lines disallows blank
+  records, and Etch should not append past a malformed tail.
 - The appended value is rendered as one compact JSON line plus `\n`.
-- The command is non-idempotent.
+- The command is non-idempotent and always produces a content change.
 - `.jsonl` and `.ndjson` are handled by the same adapter. There is no separate
   NDJSON command family unless users need spelling aliases.
-- Blank lines are rejected by default because JSON Lines disallows them. A
-  future compatibility flag could ignore blank lines if needed for NDJSON files
-  produced by permissive tools.
+- Existing non-tail lines are not parsed or scanned. Old malformed records
+  remain possible; this command validates only what it touches.
 - There is no JSONL `set`, `delete`, `remove`, or `move` in the first version.
+
+## Retry And Idempotency
+
+- `jsonl append` participates in Etch's normal ref-CAS retry loop.
+- If a CAS retry is needed, Etch replans against the new `HEAD` and appends the
+  event once to the updated file.
+- Etch's own failed CAS attempt does not duplicate an event because the failed
+  attempt did not update the ref.
+- Etch does not deduplicate events across successful commits or concurrent
+  writers. If the same command is run twice successfully, the event appears
+  twice.
+- `--allow-empty` has no practical effect on `jsonl append`; the operation is
+  non-idempotent and cannot become a no-op.
+- Workflows that need higher-level retry safety should include a stable event
+  ID in the JSON object. Idempotent append-by-key would be a separate proposal.
 
 ## Other Operations
 
@@ -82,7 +102,8 @@ References:
 Spec:
 
 - Add JSONL as a supported format for append-only mutation.
-- Define JSONL validation, rendering, no-op, and malformed-line behavior.
+- Define JSONL boundary validation, rendering, non-idempotency, retry behavior,
+  and malformed-tail behavior.
 - Define porcelain `append` arity for `.jsonl` and `.ndjson` paths.
 
 Docs:
@@ -94,10 +115,12 @@ Code:
 
 - Add `append` dispatch for `.jsonl` and `.ndjson` paths.
 - Add `jsonl append` to the verb catalog.
-- Add a JSONL adapter that validates existing lines and appends compact JSON.
+- Add a JSONL adapter that validates the append boundary and appends compact
+  JSON.
 - Add fixtures for empty files, files with and without trailing newlines,
-  malformed existing lines, blank lines, non-object JSON values, `.ndjson`
-  paths, porcelain arity, and compact rendering.
+  blank tail boundaries, malformed non-tail existing lines, non-object JSON
+  values, `.ndjson` paths, porcelain arity, CAS retry, duplicate successful
+  invocations, and compact rendering.
 
 ## Open Questions
 

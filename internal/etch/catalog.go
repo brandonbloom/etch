@@ -532,7 +532,7 @@ func defaultCreateContent(path string) string {
 	}
 }
 
-const shortHelp = `usage: etch [--plan|-n|--dry-run] [flags] <verb> [args...]
+const shortHelp = `usage: etch [flags] <verb> [args...]
        etch run [script]
 
 Core flags:
@@ -549,7 +549,8 @@ Core flags:
   --allow-empty          permit empty commit for mutating invocations
   --version              print version and exit
 
-Use "etch help" for the porcelain verb table, or "etch help --all" for plumbing commands too.
+Use "etch help" for the porcelain verb table, "etch help scripts" for batch scripts,
+or "etch help --all" for plumbing commands too.
 `
 
 func printHelp(w io.Writer, topic string, all bool) error {
@@ -570,10 +571,14 @@ func printHelp(w io.Writer, topic string, all bool) error {
 		}
 		fmt.Fprintln(w)
 		if all {
-			fmt.Fprint(w, "Topics: model, selectors, values, plans, security, conflicts, table, csv\n")
+			fmt.Fprint(w, "Topics: model, scripts, selectors, values, fields, plans, security, conflicts, table, csv\n")
 		} else {
-			fmt.Fprint(w, "Topics: model, selectors, values, plans, security, conflicts, table, csv. Use --all for plumbing commands.\n")
+			fmt.Fprint(w, "Topics: model, scripts, selectors, values, fields, plans, security, conflicts, table, csv. Use --all for plumbing commands.\n")
 		}
+	case "scripts":
+		fmt.Fprint(w, scriptsHelp)
+	case "fields":
+		fmt.Fprint(w, fieldsHelp)
 	case "selectors":
 		fmt.Fprint(w, selectorsHelp)
 	case "values":
@@ -624,6 +629,16 @@ Examples:
   {"status":"done"}
 `
 
+const fieldsHelp = `Markdown fields: use frontmatter for note-global metadata; use inline fields for body-local metadata.
+
+Frontmatter fits whole-note schema fields such as owner, source, status, and stable IDs.
+Inline fields fit metadata attached to a paragraph, list item, task, or local note context.
+
+Examples:
+  etch set note.md status '"Driving"'
+  etch set note.md done "2026-05-01" --task "Send follow-up"
+`
+
 const plansHelp = `--plan emits JSON describing operations, input/output hashes, planned tree, and commit message.
 --dry-run lowers the same plan to a mailbox patch intended for git am.
 `
@@ -638,6 +653,14 @@ The commit is durable once the ref update succeeds; resolve conflict markers, th
 
 const modelHelp = `Mutating invocations read tracked inputs from HEAD, not from dirty checkout files.
 All operations in one invocation are planned together and commit as one transaction unless every mutating operation is a no-op.
+`
+
+const scriptsHelp = `etch run [script] executes a batch script as one transaction.
+
+The script path is optional. Omit it or pass "-" to read the script from stdin.
+Every statement is planned together against one base tree, so later statements see earlier statements.
+If parsing, guards, or mutations fail, the batch produces no commit.
+On success, the whole batch produces one commit unless every mutating statement is a no-op.
 `
 
 const tableHelp = `Tables are ordered rows and named columns of string cells.

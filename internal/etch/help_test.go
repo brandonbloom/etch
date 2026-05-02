@@ -7,7 +7,7 @@ import (
 )
 
 func TestHelpTopicsSnapshotSmoke(t *testing.T) {
-	for _, topic := range []string{"", "model", "selectors", "values", "plans", "security", "conflicts", "table", "csv"} {
+	for _, topic := range []string{"", "model", "scripts", "selectors", "values", "fields", "plans", "security", "conflicts", "table", "csv"} {
 		var out bytes.Buffer
 		if err := printHelp(&out, topic, false); err != nil {
 			t.Fatalf("help %q: %v", topic, err)

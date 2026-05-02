@@ -2,17 +2,14 @@
 status: draft
 depends_on:
   - markdown-addressing
-  - section-insertion
-  - inline-fields
 ---
 
 # Markdown Task and List Operations
 
 ## Summary
 
-Add a narrow Markdown task/list layer for checkbox toggles and list-item
-appends. This proposal is deliberately narrower than generic Markdown list
-editing.
+Add a narrow Markdown task/list layer for checkbox toggles and list-item adds.
+This proposal is deliberately narrower than generic Markdown list editing.
 
 ## Dataview Background
 
@@ -30,14 +27,16 @@ completion the Dataview write behavior Etch should intentionally mirror.
 ```sh
 etch task complete <path> [--section <heading>] [--after <literal>] [--before <literal>] <text>
 etch task reopen <path> [--section <heading>] [--after <literal>] [--before <literal>] <text>
-etch list append <path> <heading> <item>
+etch list add <path> <heading> <text> [--task] [--before <literal>] [--after <literal>]
+etch task add <path> <heading> <text> [--before <literal>] [--after <literal>]
 ```
 
 Examples:
 
 ```sh
 etch task complete memory/2026-04-29.md --section "## Action Items" "Send follow-up"
-etch list append memory/2026-04-29.md "## Action Items" "- [ ] Send follow-up"
+etch list add memory/2026-04-29.md "## Action Items" "Send follow-up" --task
+etch task add memory/2026-04-29.md "## Action Items" "Send follow-up"
 ```
 
 ## Semantics
@@ -47,42 +46,63 @@ etch list append memory/2026-04-29.md "## Action Items" "- [ ] Send follow-up"
   anchor window.
 - `task complete` changes only the checkbox marker from `[ ]` to `[x]`.
 - `task reopen` changes only `[x]` to `[ ]`.
-- Dataview recognizes task/list metadata fields such as `due`, `completion`,
-  `created`, `start`, and `scheduled`.
-- Dataview can read those fields from ordinary inline fields and from
-  task/list date shorthand conventions. If Etch adds an option that creates
-  completion metadata while completing a task, it should write an ordinary
-  inline field such as `[completion:: 2026-04-29]` because that form is explicit
-  and easy to update deterministically.
-- If Etch later updates an existing task/list date field and the source already
-  uses Dataview shorthand, it should preserve that source form rather than add
-  a duplicate inline field for the same meaning.
-- `list append` appends one complete list item under a section and preserves the
-  caller's marker spelling.
+- `list add` adds one list item under the selected heading. `<text>` is
+  plain item text, not Markdown list item source.
+- `list add` defaults to tail placement within the selected compatible list.
+- `--before` and `--after` use the placement rules from
+  [Markdown Addressing](markdown-addressing.md) to choose an insertion point
+  relative to an existing item in the selected section.
+- `task add` is shorthand for `list add ... --task`.
+- `list add ... --task` constructs an unchecked task item.
+- If the selected section already contains a compatible list, Etch follows that
+  list's marker style. Bullet lists reuse the existing bullet marker. Numbered
+  lists continue numbering.
+- If the selected section has no compatible list, plain `list add` defaults
+  to `- <text>` and `--task` defaults to `- [ ] <text>`.
+- `list add` rejects multiline text in the first version.
+- `list add` rejects text that already starts with a Markdown list marker;
+  callers pass item text, not full list item source.
 - List-item moves are deferred. They are likely a filtered case of a broader
   Markdown block move operation, where the source range is restricted to one
   list item and the destination is a section, list, or neighboring block.
+
+## Deferred Dataview Metadata
+
+Dataview recognizes task/list metadata fields such as `due`, `completion`,
+`created`, `start`, and `scheduled`. Task completion metadata is useful, but it
+depends on Markdown inline field mutation and should not be part of the first
+task/list operation.
+
+If Etch later adds an option that creates completion metadata while completing a
+task, it should write an ordinary inline field such as
+`[completion:: 2026-04-29]` because that form is explicit and easy to update
+deterministically. If Etch updates an existing task/list date field and the
+source already uses Dataview shorthand, it should preserve that source form
+rather than add a duplicate inline field for the same meaning.
 
 ## Impact
 
 Spec:
 
 - Add task/list selector rules.
+- Define list add placement, marker inference, and validation.
 - Define task status preservation for non-`x` custom statuses before supporting
   custom status mutation.
 
 Docs:
 
-- Add examples for completing, reopening, and appending list items.
-- Explain interaction with Dataview completion metadata.
+- Add examples for completing, reopening, adding plain list items, and adding
+  task items.
+- Explain deferred interaction with Dataview completion metadata.
 
 Code:
 
-- Add `task complete`, `task reopen`, and `list append` to the verb catalog if
-  approved.
+- Add `task complete`, `task reopen`, `list add`, and `task add` to the
+  verb catalog if approved.
 - Add fixtures for exact task matching, ambiguous task text, section scoping,
-  nested tasks, multiline list items, optional Dataview completion metadata,
-  and no-op behavior.
+  nested tasks, list add marker inference, default tail placement, before/after
+  placement, task add shorthand, multiline add refusal, full-source add
+  refusal, optional Dataview completion metadata, and no-op behavior.
 
 ## Deferred Move Design
 
@@ -101,11 +121,9 @@ destination list structure without guessing.
 
 ## Open Questions
 
-- Should `task complete` optionally set `[completion:: <date>]` in the same
-  operation?
+- Should `task complete` later set `[completion:: <date>]` in the same
+  operation, or should that stay a separate Markdown field operation?
 - Should Etch preserve custom task statuses, or should the first version only
   handle `[ ]` and `[x]`?
 - Is `list move` useful enough as a filtered command, or should all moves wait
   for a general Markdown block move proposal?
-- Should `list append` accept only complete Markdown list item source, or should
-  it infer the marker from the surrounding list?

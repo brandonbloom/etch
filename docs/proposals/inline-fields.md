@@ -107,8 +107,8 @@ etch set memory/tasks/follow-up.md trace-id "abc123" --task "Send follow-up" --h
 - Creating an inline field uses the `<field>` operand literally as the source
   field name.
 - Creating a page-level or section-level inline field uses full-line syntax.
-  The placement flag for field creation is still open; candidate spellings are
-  `--head` and `--tail` on `set`, rather than a shared `--at` flag.
+  Placement uses the shared Markdown addressing rules. If no placement flag is
+  supplied, the command should use an operation-specific default.
 - Creating an item-local inline field through `--item` or `--task` uses
   bracketed syntax.
 - `--hidden` applies only when creating an inline field. It uses parenthesized
@@ -138,9 +138,7 @@ frontmatter, and body-local inline fields require address flags.
 
 - Repeated-key list editing, likely as `append` or `add` with address
   flags.
-- Page-level and section-level inline field creation placement, including
-  whether to use `--head`/`--tail`, operation-specific defaults, or only
-  `--after`/`--before`.
+- Page-level and section-level inline field creation placement defaults.
 - Task/list date shorthand mutation.
 - Typed inline value rendering.
 - `--near <literal>`, unless it is deterministic and ambiguity-safe.
@@ -163,7 +161,7 @@ Docs:
 
 - Add examples for frontmatter default, page-level inline fields, section-local
   fields, item-local fields, and hidden fields.
-- Cross-link to Markdown addressing and frontmatter migration guidance.
+- Cross-link to Markdown addressing and `etch help fields`.
 
 Code:
 
@@ -180,4 +178,4 @@ Code:
 ## Open Questions
 
 - Should `--body` be the flag for page-level inline fields, or should that spell
-  as `--inline`, `--head`, or `--tail` depending on insertion placement?
+  as `--inline`?

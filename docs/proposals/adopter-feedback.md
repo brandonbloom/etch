@@ -26,7 +26,7 @@ MVP Etch already covers several adopter needs:
 
 - JSON cache and stats object updates via JSON `set`, `append`, `add`,
   `delete`, and `remove`.
-- Whole-section daily log replacement via `replace-section`.
+- Whole-section daily log replacement, renamed here to `section replace`.
 - Calendar Markdown tables through table row and cell commands.
 - Committed-state guards through `exists`, `missing`, and `contains`.
 - Note-global Markdown metadata when the adopter stores it in YAML frontmatter.
@@ -37,19 +37,21 @@ Review these in priority order:
 
 1. [Markdown fields](inline-fields.md)
 2. [Markdown addressing](markdown-addressing.md)
-3. [Markdown block IDs](block-ids.md)
-4. [Markdown section insertion and block whitespace](section-insertion.md)
-5. [Transaction batching](transactions.md)
-6. [Markdown task and list operations](task-list-ops.md)
-7. [JSONL append](jsonl-append.md)
-8. [TOML set/delete](toml-set-delete.md)
-9. [Frontmatter migration guidance](frontmatter-migration.md)
+3. [Field assignment items](field-assignment-items.md)
+4. [Markdown block IDs](block-ids.md)
+5. [Markdown section insertion and block whitespace](section-insertion.md)
+6. [Transaction batching](transactions.md)
+7. [Markdown task and list operations](task-list-ops.md)
+8. [JSONL append](jsonl-append.md)
+9. [TOML set/delete](toml-set-delete.md)
 10. [Template-based creation](template-creation.md)
 
 The first two proposals are the highest-leverage adopter-driven additions.
 Transaction batching is listed before task/list operations because commit
 volume and HEAD-sourced virtual state affect how comfortable adopters can be
 with frequent script-driven mutations.
+
+Related guidance: `etch help fields`.
 
 ## Shared Goals
 
