@@ -113,3 +113,17 @@ func TestShellCompletionThroughCLI(t *testing.T) {
 		}
 	}
 }
+
+func TestCommandPathCompletionsUseCatalog(t *testing.T) {
+	got := strings.Join(commandCompletions([]string{"md", "table", "row", ""}), "\n")
+	for _, want := range []string{"append", "insert", "delete"} {
+		if !strings.Contains(got, want) {
+			t.Fatalf("nested command completions missing %q: %q", want, got)
+		}
+	}
+
+	got = strings.Join(commandLocalFlagCompletions([]string{"set", "state.json", "count"}), "\n")
+	if !strings.Contains(got, "--json") {
+		t.Fatalf("local flag completions missing --json: %q", got)
+	}
+}

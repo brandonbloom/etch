@@ -17,163 +17,140 @@ type VerbInfo struct {
 	Canonical   bool         `json:"canonical"`
 }
 
-func verbCatalog() []VerbInfo {
-	return []VerbInfo{
-		{"set", "set <path> <selector> <value>|<selector=value>...", "Set JSON/YAML/frontmatter values.", ClassIdempotent, true},
-		{"delete", "delete <path> [<selector>]", "Delete a file or selected JSON/YAML/frontmatter value.", ClassIdempotent, true},
-		{"append", "append <path> <selector> <value|--json value>", "Append a value to an array.", ClassNonIdempotent, true},
-		{"add", "add <path> <selector> <value|--json value>", "Ensure an array contains a value.", ClassIdempotent, true},
-		{"remove", "remove <path> <selector> <value|--json value>", "Ensure an array does not contain a value.", ClassIdempotent, true},
-		{"replace-section", "replace-section <path> <heading> <content>", "Replace the body under one Markdown heading.", ClassIdempotent, true},
-		{"create", "create <path> [<content>]", "Create a new file; omitted content uses an extension-aware default.", ClassIdempotent, true},
-		{"move", "move <src> <dst>", "Move a file path.", ClassIdempotent, true},
-		{"copy", "copy <src> <dst>", "Copy a file path.", ClassIdempotent, true},
-		{"exists", "exists <path>", "Guard that a path exists in the admitted input view.", ClassGuard, true},
-		{"missing", "missing <path>", "Guard that a path is missing in the admitted input view.", ClassGuard, true},
-		{"contains", "contains <path> <literal>", "Guard that admitted file bytes contain a literal.", ClassGuard, true},
-		{"json set", "json set <path> <selector> <value>|<selector=value>...", "Set JSON values.", ClassIdempotent, true},
-		{"json delete", "json delete <path> <selector>", "Delete a JSON value.", ClassIdempotent, true},
-		{"json append", "json append <path> <selector> <value|--json value>", "Append to a JSON array.", ClassNonIdempotent, true},
-		{"json add", "json add <path> <selector> <value|--json value>", "Ensure a JSON array contains a value.", ClassIdempotent, true},
-		{"json remove", "json remove <path> <selector> <value|--json value>", "Remove matching values from a JSON array.", ClassIdempotent, true},
-		{"yaml set", "yaml set <path> <selector> <value>|<selector=value>...", "Set YAML values.", ClassIdempotent, true},
-		{"yaml delete", "yaml delete <path> <selector>", "Delete a YAML value.", ClassIdempotent, true},
-		{"yaml append", "yaml append <path> <selector> <value|--json value>", "Append to a YAML sequence.", ClassNonIdempotent, true},
-		{"yaml add", "yaml add <path> <selector> <value|--json value>", "Ensure a YAML sequence contains a value.", ClassIdempotent, true},
-		{"yaml remove", "yaml remove <path> <selector> <value|--json value>", "Remove matching values from a YAML sequence.", ClassIdempotent, true},
-		{"frontmatter set", "frontmatter set <path> <selector> <value>|<selector=value>...", "Set Markdown YAML frontmatter.", ClassIdempotent, true},
-		{"frontmatter delete", "frontmatter delete <path> <selector>", "Delete Markdown YAML frontmatter.", ClassIdempotent, true},
-		{"frontmatter append", "frontmatter append <path> <selector> <value|--json value>", "Append to a frontmatter sequence.", ClassNonIdempotent, true},
-		{"frontmatter add", "frontmatter add <path> <selector> <value|--json value>", "Ensure a frontmatter sequence contains a value.", ClassIdempotent, true},
-		{"frontmatter remove", "frontmatter remove <path> <selector> <value|--json value>", "Remove matching values from a frontmatter sequence.", ClassIdempotent, true},
-		{"md replace-section", "md replace-section <path> <heading> <content>", "Replace the body under one Markdown heading.", ClassIdempotent, true},
-		{"table set", "table set <path> [<scope> [<table>]] <range> <value>", "Set CSV or Markdown table cells.", ClassIdempotent, true},
-		{"table row append", "table row append <path> [<scope> [<table>]] <row-json>", "Append a CSV or Markdown table row.", ClassNonIdempotent, true},
-		{"table row insert", "table row insert <path> [<scope> [<table>]] (--before <row>|--after <row>) <row-json>", "Insert a table row.", ClassNonIdempotent, true},
-		{"table row delete", "table row delete <path> [<scope> [<table>]] <row>", "Delete table rows.", ClassIdempotent, true},
-		{"table column add", "table column add <path> [<scope> [<table>]] <column> [--after <column>] [--default <value>]", "Add a table column.", ClassIdempotent, true},
-		{"table column rename", "table column rename <path> [<scope> [<table>]] <old-column> <new-column>", "Rename a table column.", ClassIdempotent, true},
-		{"table column delete", "table column delete <path> [<scope> [<table>]] <column>", "Delete a table column.", ClassIdempotent, true},
-		{"csv set", "csv set <path> <range> <value>", "Set CSV cells.", ClassIdempotent, true},
-		{"csv row append", "csv row append <path> <row-json>", "Append a CSV row.", ClassNonIdempotent, true},
-		{"csv row insert", "csv row insert <path> (--before <row>|--after <row>) <row-json>", "Insert a CSV row.", ClassNonIdempotent, true},
-		{"csv row delete", "csv row delete <path> <row>", "Delete CSV rows.", ClassIdempotent, true},
-		{"csv column add", "csv column add <path> <column> [--after <column>] [--default <value>]", "Add a CSV column.", ClassIdempotent, true},
-		{"csv column rename", "csv column rename <path> <old-column> <new-column>", "Rename a CSV column.", ClassIdempotent, true},
-		{"csv column delete", "csv column delete <path> <column>", "Delete a CSV column.", ClassIdempotent, true},
-		{"md table set", "md table set <path> <scope> [<table>] <range> <value>", "Set Markdown table cells.", ClassIdempotent, true},
-		{"md table row append", "md table row append <path> <scope> [<table>] <row-json>", "Append a Markdown table row.", ClassNonIdempotent, true},
-		{"md table row insert", "md table row insert <path> <scope> [<table>] (--before <row>|--after <row>) <row-json>", "Insert a Markdown table row.", ClassNonIdempotent, true},
-		{"md table row delete", "md table row delete <path> <scope> [<table>] <row>", "Delete Markdown table rows.", ClassIdempotent, true},
-		{"md table column add", "md table column add <path> <scope> [<table>] <column> [--after <column>] [--default <value>]", "Add a Markdown table column.", ClassIdempotent, true},
-		{"md table column rename", "md table column rename <path> <scope> [<table>] <old-column> <new-column>", "Rename a Markdown table column.", ClassIdempotent, true},
-		{"md table column delete", "md table column delete <path> <scope> [<table>] <column>", "Delete a Markdown table column.", ClassIdempotent, true},
+type commandParser func(commandInvocation) ([]Operation, error)
+
+type commandSpec struct {
+	Path        []string
+	Signature   string
+	Description string
+	Class       CommandClass
+	Canonical   bool
+	LocalFlags  []string
+	Parse       commandParser
+}
+
+type commandInvocation struct {
+	Spec commandSpec
+	Args []string
+	Op   Operation
+}
+
+type commandMatch struct {
+	Spec commandSpec
+	Args []string
+}
+
+type structuredValueArgs struct {
+	Path     string
+	Selector string
+	Value    string
+	Mode     ValueMode
+}
+
+type assignmentItem struct {
+	Selector string
+	Value    string
+	Mode     ValueMode
+	Present  bool
+}
+
+func (s commandSpec) name() string {
+	return strings.Join(s.Path, " ")
+}
+
+func (s commandSpec) verbInfo() VerbInfo {
+	return VerbInfo{
+		Name:        s.name(),
+		Signature:   s.Signature,
+		Description: s.Description,
+		Class:       s.Class,
+		Canonical:   s.Canonical,
 	}
 }
 
+func command(path, signature, description string, class CommandClass, canonical bool, parse commandParser, flags ...string) commandSpec {
+	return commandSpec{
+		Path:        strings.Fields(path),
+		Signature:   signature,
+		Description: description,
+		Class:       class,
+		Canonical:   canonical,
+		LocalFlags:  append([]string(nil), flags...),
+		Parse:       parse,
+	}
+}
+
+func commandSpecs() []commandSpec {
+	return []commandSpec{
+		command("set", "set <path> <selector> <value>|<selector=value>...", "Set JSON/YAML/frontmatter values.", ClassIdempotent, true, parsePorcelainStructured("set"), "--json"),
+		command("delete", "delete <path> [<selector>]", "Delete a file or selected JSON/YAML/frontmatter value.", ClassIdempotent, true, parseDelete),
+		command("append", "append <path> <selector> <value|--json value>", "Append a value to an array.", ClassNonIdempotent, true, parsePorcelainStructured("append"), "--json"),
+		command("add", "add <path> <selector> <value|--json value>", "Ensure an array contains a value.", ClassIdempotent, true, parsePorcelainStructured("add"), "--json"),
+		command("remove", "remove <path> <selector> <value|--json value>", "Ensure an array does not contain a value.", ClassIdempotent, true, parsePorcelainStructured("remove"), "--json"),
+		command("replace-section", "replace-section <path> <heading> <content>", "Replace the body under one Markdown heading.", ClassIdempotent, true, parseReplaceSection),
+		command("create", "create <path> [<content>]", "Create a new file; omitted content uses an extension-aware default.", ClassIdempotent, true, parseCreate),
+		command("move", "move <src> <dst>", "Move a file path.", ClassIdempotent, true, parseFileVerb("move")),
+		command("copy", "copy <src> <dst>", "Copy a file path.", ClassIdempotent, true, parseFileVerb("copy")),
+		command("exists", "exists <path>", "Guard that a path exists in the admitted input view.", ClassGuard, true, parsePathGuard("exists")),
+		command("missing", "missing <path>", "Guard that a path is missing in the admitted input view.", ClassGuard, true, parsePathGuard("missing")),
+		command("contains", "contains <path> <literal>", "Guard that admitted file bytes contain a literal.", ClassGuard, true, parseContains),
+
+		command("json set", "json set <path> <selector> <value>|<selector=value>...", "Set JSON values.", ClassIdempotent, true, parseStructured("json", "set"), "--json"),
+		command("json delete", "json delete <path> <selector>", "Delete a JSON value.", ClassIdempotent, true, parseStructured("json", "delete")),
+		command("json append", "json append <path> <selector> <value|--json value>", "Append to a JSON array.", ClassNonIdempotent, true, parseStructured("json", "append"), "--json"),
+		command("json add", "json add <path> <selector> <value|--json value>", "Ensure a JSON array contains a value.", ClassIdempotent, true, parseStructured("json", "add"), "--json"),
+		command("json remove", "json remove <path> <selector> <value|--json value>", "Remove matching values from a JSON array.", ClassIdempotent, true, parseStructured("json", "remove"), "--json"),
+		command("yaml set", "yaml set <path> <selector> <value>|<selector=value>...", "Set YAML values.", ClassIdempotent, true, parseStructured("yaml", "set"), "--json"),
+		command("yaml delete", "yaml delete <path> <selector>", "Delete a YAML value.", ClassIdempotent, true, parseStructured("yaml", "delete")),
+		command("yaml append", "yaml append <path> <selector> <value|--json value>", "Append to a YAML sequence.", ClassNonIdempotent, true, parseStructured("yaml", "append"), "--json"),
+		command("yaml add", "yaml add <path> <selector> <value|--json value>", "Ensure a YAML sequence contains a value.", ClassIdempotent, true, parseStructured("yaml", "add"), "--json"),
+		command("yaml remove", "yaml remove <path> <selector> <value|--json value>", "Remove matching values from a YAML sequence.", ClassIdempotent, true, parseStructured("yaml", "remove"), "--json"),
+		command("frontmatter set", "frontmatter set <path> <selector> <value>|<selector=value>...", "Set Markdown YAML frontmatter.", ClassIdempotent, true, parseStructured("frontmatter", "set"), "--json"),
+		command("frontmatter delete", "frontmatter delete <path> <selector>", "Delete Markdown YAML frontmatter.", ClassIdempotent, true, parseStructured("frontmatter", "delete")),
+		command("frontmatter append", "frontmatter append <path> <selector> <value|--json value>", "Append to a frontmatter sequence.", ClassNonIdempotent, true, parseStructured("frontmatter", "append"), "--json"),
+		command("frontmatter add", "frontmatter add <path> <selector> <value|--json value>", "Ensure a frontmatter sequence contains a value.", ClassIdempotent, true, parseStructured("frontmatter", "add"), "--json"),
+		command("frontmatter remove", "frontmatter remove <path> <selector> <value|--json value>", "Remove matching values from a frontmatter sequence.", ClassIdempotent, true, parseStructured("frontmatter", "remove"), "--json"),
+
+		command("md replace-section", "md replace-section <path> <heading> <content>", "Replace the body under one Markdown heading.", ClassIdempotent, true, parseReplaceSection),
+		command("table set", "table set <path> [<scope> [<table>]] <range> <value>", "Set CSV or Markdown table cells.", ClassIdempotent, true, parseTable("infer", "set")),
+		command("table row append", "table row append <path> [<scope> [<table>]] <row-json>", "Append a CSV or Markdown table row.", ClassNonIdempotent, true, parseTable("infer", "row", "append")),
+		command("table row insert", "table row insert <path> [<scope> [<table>]] (--before <row>|--after <row>) <row-json>", "Insert a table row.", ClassNonIdempotent, true, parseTable("infer", "row", "insert"), "--before", "--after"),
+		command("table row delete", "table row delete <path> [<scope> [<table>]] <row>", "Delete table rows.", ClassIdempotent, true, parseTable("infer", "row", "delete")),
+		command("table column add", "table column add <path> [<scope> [<table>]] <column> [--after <column>] [--default <value>]", "Add a table column.", ClassIdempotent, true, parseTable("infer", "column", "add"), "--after", "--default"),
+		command("table column rename", "table column rename <path> [<scope> [<table>]] <old-column> <new-column>", "Rename a table column.", ClassIdempotent, true, parseTable("infer", "column", "rename")),
+		command("table column delete", "table column delete <path> [<scope> [<table>]] <column>", "Delete a table column.", ClassIdempotent, true, parseTable("infer", "column", "delete")),
+		command("csv set", "csv set <path> <range> <value>", "Set CSV cells.", ClassIdempotent, true, parseTable("csv", "set")),
+		command("csv row append", "csv row append <path> <row-json>", "Append a CSV row.", ClassNonIdempotent, true, parseTable("csv", "row", "append")),
+		command("csv row insert", "csv row insert <path> (--before <row>|--after <row>) <row-json>", "Insert a CSV row.", ClassNonIdempotent, true, parseTable("csv", "row", "insert"), "--before", "--after"),
+		command("csv row delete", "csv row delete <path> <row>", "Delete CSV rows.", ClassIdempotent, true, parseTable("csv", "row", "delete")),
+		command("csv column add", "csv column add <path> <column> [--after <column>] [--default <value>]", "Add a CSV column.", ClassIdempotent, true, parseTable("csv", "column", "add"), "--after", "--default"),
+		command("csv column rename", "csv column rename <path> <old-column> <new-column>", "Rename a CSV column.", ClassIdempotent, true, parseTable("csv", "column", "rename")),
+		command("csv column delete", "csv column delete <path> <column>", "Delete a CSV column.", ClassIdempotent, true, parseTable("csv", "column", "delete")),
+		command("md table set", "md table set <path> <scope> [<table>] <range> <value>", "Set Markdown table cells.", ClassIdempotent, true, parseTable("md", "set")),
+		command("md table row append", "md table row append <path> <scope> [<table>] <row-json>", "Append a Markdown table row.", ClassNonIdempotent, true, parseTable("md", "row", "append")),
+		command("md table row insert", "md table row insert <path> <scope> [<table>] (--before <row>|--after <row>) <row-json>", "Insert a Markdown table row.", ClassNonIdempotent, true, parseTable("md", "row", "insert"), "--before", "--after"),
+		command("md table row delete", "md table row delete <path> <scope> [<table>] <row>", "Delete Markdown table rows.", ClassIdempotent, true, parseTable("md", "row", "delete")),
+		command("md table column add", "md table column add <path> <scope> [<table>] <column> [--after <column>] [--default <value>]", "Add a Markdown table column.", ClassIdempotent, true, parseTable("md", "column", "add"), "--after", "--default"),
+		command("md table column rename", "md table column rename <path> <scope> [<table>] <old-column> <new-column>", "Rename a Markdown table column.", ClassIdempotent, true, parseTable("md", "column", "rename")),
+		command("md table column delete", "md table column delete <path> <scope> [<table>] <column>", "Delete a Markdown table column.", ClassIdempotent, true, parseTable("md", "column", "delete")),
+	}
+}
+
+func verbCatalog() []VerbInfo {
+	specs := commandSpecs()
+	verbs := make([]VerbInfo, 0, len(specs))
+	for _, spec := range specs {
+		verbs = append(verbs, spec.verbInfo())
+	}
+	return verbs
+}
+
 func DecodeOperations(stmt Statement) ([]Operation, error) {
-	t := stmt.Tokens
-	if len(t) == 0 {
-		return nil, usagef("empty statement")
+	invocation, err := parseCommandInvocation(stmt)
+	if err != nil {
+		return nil, err
 	}
-	op := Operation{Raw: append([]string(nil), t...), Loc: stmt.Loc}
-	switch t[0] {
-	case "exists", "missing":
-		if len(t) != 2 {
-			return nil, usagef("usage: etch %s <path>", t[0])
-		}
-		op.Verb, op.Kind, op.Class, op.Path = t[0], "guard", ClassGuard, t[1]
-	case "contains":
-		if len(t) != 3 {
-			return nil, usagef("usage: etch contains <path> <literal>")
-		}
-		op.Verb, op.Kind, op.Class, op.Path, op.Value = "contains", "guard", ClassGuard, t[1], t[2]
-	case "create":
-		if len(t) != 2 && len(t) != 3 {
-			return nil, usagef("usage: etch create <path> [<content>]")
-		}
-		value := defaultCreateContent(t[1])
-		if len(t) == 3 {
-			value = t[2]
-		}
-		op.Verb, op.Kind, op.Class, op.Path, op.Value = "create", "file", ClassIdempotent, t[1], value
-		op.Target = PlanTarget{Path: t[1]}
-	case "copy", "move":
-		if len(t) != 3 {
-			return nil, usagef("usage: etch %s <src> <dst>", t[0])
-		}
-		op.Verb, op.Kind, op.Class, op.Path, op.Value = t[0], "file", ClassIdempotent, t[1], t[2]
-		op.Target = PlanTarget{Path: t[1]}
-	case "delete":
-		if len(t) == 2 {
-			op.Verb, op.Kind, op.Class, op.Path = "delete", "file", ClassIdempotent, t[1]
-			op.Target = PlanTarget{Path: t[1]}
-		} else if len(t) == 3 {
-			return oneOperation(decodeStructured(op, "infer", "delete", t[1], t[2], "", ""))
-		} else {
-			return nil, usagef("usage: etch delete <path> [<selector>]")
-		}
-	case "set", "append", "add", "remove":
-		if t[0] == "set" {
-			if ops, ok, err := decodeAssignmentSet(op, "infer", t[1:]); err != nil || ok {
-				return ops, err
-			}
-		} else if len(t) >= 3 {
-			if _, _, _, ok, _ := splitAssignmentItem(t[2]); ok {
-				return nil, usagef("assignment items are only accepted by set")
-			}
-		}
-		path, selector, value, mode, err := parseStructuredValueArgs(t[0], t[1:])
-		if err != nil {
-			return nil, err
-		}
-		return oneOperation(decodeStructured(op, "infer", t[0], path, selector, value, mode))
-	case "replace-section":
-		if len(t) != 4 {
-			return nil, usagef("usage: etch replace-section <path> <heading> <content>")
-		}
-		op.Verb, op.Kind, op.Class, op.Path, op.Value = "replace-section", "md-section", ClassIdempotent, t[1], t[3]
-		op.Target = PlanTarget{Path: t[1], Part: "body", Section: t[2]}
-	case "json", "yaml", "frontmatter":
-		if len(t) < 4 {
-			return nil, usagef("usage: etch %s <verb> <path> <selector> [<value>]", t[0])
-		}
-		verb := t[1]
-		needValue := verb == "set" || verb == "append" || verb == "add" || verb == "remove"
-		if verb != "delete" && !needValue {
-			return nil, usagef("unknown %s verb %s", t[0], verb)
-		}
-		if verb == "set" {
-			if ops, ok, err := decodeAssignmentSet(op, t[0], t[2:]); err != nil || ok {
-				return ops, err
-			}
-		} else if needValue && len(t) >= 4 {
-			if _, _, _, ok, _ := splitAssignmentItem(t[3]); ok {
-				return nil, usagef("assignment items are only accepted by set")
-			}
-		}
-		if !needValue {
-			if len(t) != 4 {
-				return nil, usagef("usage: etch %s %s <path> <selector>", t[0], verb)
-			}
-			return oneOperation(decodeStructured(op, t[0], verb, t[2], t[3], "", ""))
-		}
-		path, selector, value, mode, err := parseStructuredValueArgs(t[0]+" "+verb, t[2:])
-		if err != nil {
-			return nil, err
-		}
-		return oneOperation(decodeStructured(op, t[0], verb, path, selector, value, mode))
-	case "md":
-		return oneOperation(decodeMD(op, t))
-	case "csv":
-		return oneOperation(decodeCSV(op, t))
-	case "table":
-		return oneOperation(decodeTable(op, "infer", t))
-	default:
-		return nil, usagef("unknown command %s", t[0])
-	}
-	fillDescriptor(&op)
-	return []Operation{op}, nil
+	return invocation.Spec.Parse(invocation)
 }
 
 func DecodeOperation(stmt Statement) (Operation, error) {
@@ -194,17 +171,197 @@ func oneOperation(op Operation, err error) ([]Operation, error) {
 	return []Operation{op}, nil
 }
 
-func parseStructuredValueArgs(command string, args []string) (path, selector, value string, mode ValueMode, err error) {
+func parsedOperation(op Operation) ([]Operation, error) {
+	fillDescriptor(&op)
+	return []Operation{op}, nil
+}
+
+func parseCommandInvocation(stmt Statement) (commandInvocation, error) {
+	tokens := stmt.Tokens
+	if len(tokens) == 0 {
+		return commandInvocation{}, usagef("empty statement")
+	}
+	match, ok := matchCommandSpec(tokens)
+	if !ok {
+		return commandInvocation{}, usagef("unknown command %s", tokens[0])
+	}
+	return commandInvocation{
+		Spec: match.Spec,
+		Args: match.Args,
+		Op:   Operation{Raw: append([]string(nil), tokens...), Loc: stmt.Loc},
+	}, nil
+}
+
+func matchCommandSpec(tokens []string) (commandMatch, bool) {
+	match := commandMatch{}
+	bestLen := 0
+	for _, spec := range commandSpecs() {
+		if !commandPathMatches(tokens, spec.Path) {
+			continue
+		}
+		if len(spec.Path) > bestLen {
+			match = commandMatch{Spec: spec, Args: tokens[len(spec.Path):]}
+			bestLen = len(spec.Path)
+		}
+	}
+	if bestLen == 0 {
+		return commandMatch{}, false
+	}
+	return match, true
+}
+
+func commandPathMatches(tokens, path []string) bool {
+	if len(tokens) < len(path) {
+		return false
+	}
+	for i, part := range path {
+		if tokens[i] != part {
+			return false
+		}
+	}
+	return true
+}
+
+func parsePathGuard(verb string) commandParser {
+	return func(inv commandInvocation) ([]Operation, error) {
+		spec, op, args := inv.Spec, inv.Op, inv.Args
+		if len(args) != 1 {
+			return nil, usagef("usage: etch %s", spec.Signature)
+		}
+		op.Verb, op.Kind, op.Class, op.Path = verb, "guard", spec.Class, args[0]
+		return parsedOperation(op)
+	}
+}
+
+func parseContains(inv commandInvocation) ([]Operation, error) {
+	spec, op, args := inv.Spec, inv.Op, inv.Args
+	if len(args) != 2 {
+		return nil, usagef("usage: etch %s", spec.Signature)
+	}
+	op.Verb, op.Kind, op.Class, op.Path, op.Value = "contains", "guard", spec.Class, args[0], args[1]
+	return parsedOperation(op)
+}
+
+func parseCreate(inv commandInvocation) ([]Operation, error) {
+	spec, op, args := inv.Spec, inv.Op, inv.Args
+	if len(args) != 1 && len(args) != 2 {
+		return nil, usagef("usage: etch %s", spec.Signature)
+	}
+	value := defaultCreateContent(args[0])
+	if len(args) == 2 {
+		value = args[1]
+	}
+	op.Verb, op.Kind, op.Class, op.Path, op.Value = "create", "file", spec.Class, args[0], value
+	op.Target = PlanTarget{Path: args[0]}
+	return parsedOperation(op)
+}
+
+func parseFileVerb(verb string) commandParser {
+	return func(inv commandInvocation) ([]Operation, error) {
+		spec, op, args := inv.Spec, inv.Op, inv.Args
+		if len(args) != 2 {
+			return nil, usagef("usage: etch %s", spec.Signature)
+		}
+		op.Verb, op.Kind, op.Class, op.Path, op.Value = verb, "file", spec.Class, args[0], args[1]
+		op.Target = PlanTarget{Path: args[0]}
+		return parsedOperation(op)
+	}
+}
+
+func parseDelete(inv commandInvocation) ([]Operation, error) {
+	spec, op, args := inv.Spec, inv.Op, inv.Args
+	switch len(args) {
+	case 1:
+		op.Verb, op.Kind, op.Class, op.Path = "delete", "file", spec.Class, args[0]
+		op.Target = PlanTarget{Path: args[0]}
+		return parsedOperation(op)
+	case 2:
+		return oneOperation(decodeStructured(op, "infer", "delete", structuredValueArgs{Path: args[0], Selector: args[1]}))
+	default:
+		return nil, usagef("usage: etch %s", spec.Signature)
+	}
+}
+
+func parsePorcelainStructured(verb string) commandParser {
+	return func(inv commandInvocation) ([]Operation, error) {
+		op, args := inv.Op, inv.Args
+		if verb == "set" {
+			if ops, ok, err := decodeAssignmentSet(op, "infer", args); err != nil || ok {
+				return ops, err
+			}
+		} else if len(args) >= 2 {
+			item, _ := splitAssignmentItem(args[1])
+			if item.Present {
+				return nil, usagef("assignment items are only accepted by set")
+			}
+		}
+		valueArgs, err := parseStructuredValueArgs(verb, args)
+		if err != nil {
+			return nil, err
+		}
+		return oneOperation(decodeStructured(op, "infer", verb, valueArgs))
+	}
+}
+
+func parseStructured(format, verb string) commandParser {
+	return func(inv commandInvocation) ([]Operation, error) {
+		spec, op, args := inv.Spec, inv.Op, inv.Args
+		if verb == "delete" {
+			if len(args) != 2 {
+				return nil, usagef("usage: etch %s", spec.Signature)
+			}
+			return oneOperation(decodeStructured(op, format, verb, structuredValueArgs{Path: args[0], Selector: args[1]}))
+		}
+		if verb == "set" {
+			if ops, ok, err := decodeAssignmentSet(op, format, args); err != nil || ok {
+				return ops, err
+			}
+		} else if len(args) >= 2 {
+			item, _ := splitAssignmentItem(args[1])
+			if item.Present {
+				return nil, usagef("assignment items are only accepted by set")
+			}
+		}
+		valueArgs, err := parseStructuredValueArgs(spec.name(), args)
+		if err != nil {
+			return nil, err
+		}
+		return oneOperation(decodeStructured(op, format, verb, valueArgs))
+	}
+}
+
+func parseReplaceSection(inv commandInvocation) ([]Operation, error) {
+	spec, op, args := inv.Spec, inv.Op, inv.Args
+	if len(args) != 3 {
+		return nil, usagef("usage: etch %s", spec.Signature)
+	}
+	op.Verb, op.Kind, op.Class, op.Path, op.Value = "replace-section", "md-section", spec.Class, args[0], args[2]
+	op.Target = PlanTarget{Path: args[0], Part: "body", Section: args[1]}
+	return parsedOperation(op)
+}
+
+func parseTable(format string, tablePath ...string) commandParser {
+	return func(inv commandInvocation) ([]Operation, error) {
+		op, args := inv.Op, inv.Args
+		tokens := make([]string, 0, 1+len(tablePath)+len(args))
+		tokens = append(tokens, "table")
+		tokens = append(tokens, tablePath...)
+		tokens = append(tokens, args...)
+		return oneOperation(decodeTable(op, format, tokens))
+	}
+}
+
+func parseStructuredValueArgs(command string, args []string) (structuredValueArgs, error) {
 	switch {
 	case len(args) == 3:
 		if args[2] == "--json" {
-			return "", "", "", "", usagef("--json requires a value")
+			return structuredValueArgs{}, usagef("--json requires a value")
 		}
-		return args[0], args[1], args[2], ValueModeString, nil
+		return structuredValueArgs{Path: args[0], Selector: args[1], Value: args[2], Mode: ValueModeString}, nil
 	case len(args) == 4 && args[2] == "--json":
-		return args[0], args[1], args[3], ValueModeJSON, nil
+		return structuredValueArgs{Path: args[0], Selector: args[1], Value: args[3], Mode: ValueModeJSON}, nil
 	default:
-		return "", "", "", "", usagef("usage: etch %s <path> <selector> <value>", command)
+		return structuredValueArgs{}, usagef("usage: etch %s <path> <selector> <value>", command)
 	}
 }
 
@@ -217,18 +374,23 @@ func decodeAssignmentSet(base Operation, format string, args []string) ([]Operat
 	ops := make([]Operation, 0, len(items))
 	seen := map[string]bool{}
 	for i, item := range items {
-		selector, value, mode, ok, err := splitAssignmentItem(item)
+		assignment, err := splitAssignmentItem(item)
 		if err != nil {
 			return nil, true, err
 		}
-		if !ok {
+		if !assignment.Present {
 			if i == 0 {
 				return nil, false, nil
 			}
 			return nil, true, usagef("cannot mix assignment items with positional set operands")
 		}
 		op := base
-		decoded, err := decodeStructured(op, format, "set", path, selector, value, mode)
+		decoded, err := decodeStructured(op, format, "set", structuredValueArgs{
+			Path:     path,
+			Selector: assignment.Selector,
+			Value:    assignment.Value,
+			Mode:     assignment.Mode,
+		})
 		if err != nil {
 			return nil, true, err
 		}
@@ -242,7 +404,7 @@ func decodeAssignmentSet(base Operation, format string, args []string) ([]Operat
 	return ops, true, nil
 }
 
-func splitAssignmentItem(item string) (selector, value string, mode ValueMode, ok bool, err error) {
+func splitAssignmentItem(item string) (assignmentItem, error) {
 	var quote byte
 	escape := false
 	for i := 0; i < len(item); i++ {
@@ -266,36 +428,36 @@ func splitAssignmentItem(item string) (selector, value string, mode ValueMode, o
 			continue
 		}
 		if c == ':' && i+1 < len(item) && item[i+1] == '=' {
-			return item[:i], item[i+2:], ValueModeJSON, true, nil
+			return assignmentItem{Selector: item[:i], Value: item[i+2:], Mode: ValueModeJSON, Present: true}, nil
 		}
 		if c == '=' {
-			return item[:i], item[i+1:], ValueModeString, true, nil
+			return assignmentItem{Selector: item[:i], Value: item[i+1:], Mode: ValueModeString, Present: true}, nil
 		}
 	}
 	if quote != 0 {
-		return "", "", "", false, usagef("unterminated quoted selector in assignment item")
+		return assignmentItem{}, usagef("unterminated quoted selector in assignment item")
 	}
-	return "", "", "", false, nil
+	return assignmentItem{}, nil
 }
 
-func decodeStructured(op Operation, format, verb, path, selector, value string, mode ValueMode) (Operation, error) {
-	op.Verb, op.Kind, op.Path, op.Value, op.ValueMode = verb, "structured", path, value, mode
+func decodeStructured(op Operation, format, verb string, args structuredValueArgs) (Operation, error) {
+	op.Verb, op.Kind, op.Path, op.Value, op.ValueMode = verb, "structured", args.Path, args.Value, args.Mode
 	if verb == "append" {
 		op.Class = ClassNonIdempotent
 	} else {
 		op.Class = ClassIdempotent
 	}
 	part := ""
-	actualSelector := selector
+	actualSelector := args.Selector
 	if format == "frontmatter" {
 		part = "frontmatter"
-	} else if format == "infer" && isMarkdownPath(path) {
-		if selector == "frontmatter" {
+	} else if format == "infer" && isMarkdownPath(args.Path) {
+		if args.Selector == "frontmatter" {
 			part = "frontmatter"
 			actualSelector = "$"
-		} else if strings.HasPrefix(selector, "frontmatter.") {
+		} else if strings.HasPrefix(args.Selector, "frontmatter.") {
 			part = "frontmatter"
-			actualSelector = strings.TrimPrefix(selector, "frontmatter.")
+			actualSelector = strings.TrimPrefix(args.Selector, "frontmatter.")
 		} else {
 			return op, usagef("markdown structured selectors must use frontmatter.*")
 		}
@@ -304,38 +466,13 @@ func decodeStructured(op Operation, format, verb, path, selector, value string, 
 	if err != nil {
 		return op, err
 	}
-	target := PlanTarget{Path: path, Selector: norm}
+	target := PlanTarget{Path: args.Path, Selector: norm}
 	if part != "" {
 		target.Part = part
 	}
 	op.Target = target
 	fillDescriptor(&op)
 	return op, nil
-}
-
-func decodeMD(op Operation, t []string) (Operation, error) {
-	if len(t) >= 2 && t[1] == "replace-section" {
-		if len(t) != 5 {
-			return op, usagef("usage: etch md replace-section <path> <heading> <content>")
-		}
-		op.Verb, op.Kind, op.Class, op.Path, op.Value = "replace-section", "md-section", ClassIdempotent, t[2], t[4]
-		op.Target = PlanTarget{Path: t[2], Part: "body", Section: t[3]}
-		fillDescriptor(&op)
-		return op, nil
-	}
-	if len(t) >= 3 && t[1] == "table" {
-		nt := append([]string{"table"}, t[2:]...)
-		return decodeTable(op, "md", nt)
-	}
-	return op, usagef("unknown md command")
-}
-
-func decodeCSV(op Operation, t []string) (Operation, error) {
-	if len(t) < 2 {
-		return op, usagef("unknown csv command")
-	}
-	nt := append([]string{"table"}, t[1:]...)
-	return decodeTable(op, "csv", nt)
 }
 
 func decodeTable(op Operation, format string, t []string) (Operation, error) {

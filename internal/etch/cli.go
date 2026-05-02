@@ -179,16 +179,14 @@ func executeStatements(opts GlobalOptions, stmts []Statement, stdout, stderr io.
 func completeShell(_ context.Context, cmd *cli.Command) {
 	args := cmd.Args().Slice()
 	if len(args) > 0 && strings.HasPrefix(args[len(args)-1], "-") {
-		printCompletions(cmd.Root().Writer, args[len(args)-1], globalFlagCompletions())
+		values := commandLocalFlagCompletions(args[:len(args)-1])
+		if len(args) == 1 {
+			values = append(globalFlagCompletions(), values...)
+		}
+		printCompletions(cmd.Root().Writer, args[len(args)-1], values)
 		return
 	}
-	if len(args) <= 1 {
-		prefix := ""
-		if len(args) == 1 {
-			prefix = args[0]
-		}
-		printCompletions(cmd.Root().Writer, prefix, commandCompletions())
-	}
+	printCompletions(cmd.Root().Writer, "", commandCompletions(args))
 }
 
 func printCompletions(w io.Writer, prefix string, values []string) {
@@ -218,21 +216,60 @@ func globalFlagCompletions() []string {
 	}
 }
 
-func commandCompletions() []string {
-	seen := map[string]bool{
-		"help":    true,
-		"run":     true,
-		"verbs":   true,
-		"version": true,
-	}
-	values := []string{"help", "run", "verbs", "version"}
-	for _, v := range verbCatalog() {
-		first, _, _ := strings.Cut(v.Name, " ")
-		if seen[first] {
+func commandCompletions(args []string) []string {
+	prior, prefix := completionPriorAndPrefix(args)
+	seen := map[string]bool{}
+	values := []string{}
+	for _, path := range commandCompletionPaths() {
+		if len(path) <= len(prior) || !completionPathHasPrefix(path, prior) {
 			continue
 		}
-		seen[first] = true
-		values = append(values, first)
+		next := path[len(prior)]
+		if !strings.HasPrefix(next, prefix) || seen[next] {
+			continue
+		}
+		seen[next] = true
+		values = append(values, next)
 	}
 	return values
+}
+
+func commandCompletionPaths() [][]string {
+	paths := [][]string{
+		{"help"},
+		{"run"},
+		{"verbs"},
+		{"version"},
+	}
+	for _, spec := range commandSpecs() {
+		paths = append(paths, spec.Path)
+	}
+	return paths
+}
+
+func completionPriorAndPrefix(args []string) ([]string, string) {
+	if len(args) == 0 {
+		return nil, ""
+	}
+	return args[:len(args)-1], args[len(args)-1]
+}
+
+func completionPathHasPrefix(path, prefix []string) bool {
+	if len(prefix) > len(path) {
+		return false
+	}
+	for i, part := range prefix {
+		if path[i] != part {
+			return false
+		}
+	}
+	return true
+}
+
+func commandLocalFlagCompletions(args []string) []string {
+	match, ok := matchCommandSpec(args)
+	if !ok {
+		return nil
+	}
+	return match.Spec.LocalFlags
 }
