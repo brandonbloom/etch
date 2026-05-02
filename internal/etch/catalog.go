@@ -54,6 +54,23 @@ type assignmentItem struct {
 	Present  bool
 }
 
+type structuredCommandFamily struct {
+	Format            string
+	ValueDescription  string
+	DeleteDescription string
+	Sequence          string
+}
+
+type tableCommandFamily struct {
+	Prefix    string
+	Format    string
+	ScopeArgs string
+	Cells     string
+	Row       string
+	Rows      string
+	Column    string
+}
+
 func (s commandSpec) name() string {
 	return strings.Join(s.Path, " ")
 }
@@ -80,8 +97,52 @@ func command(path, signature, description string, class CommandClass, canonical 
 	}
 }
 
-func commandSpecs() []commandSpec {
+func structuredCommands(f structuredCommandFamily) []commandSpec {
 	return []commandSpec{
+		command(f.Format+" set", f.Format+" set <path> <selector> <value>|<selector=value>...", "Set "+f.ValueDescription+".", ClassIdempotent, true, parseStructured(f.Format, "set"), "--json"),
+		command(f.Format+" delete", f.Format+" delete <path> <selector>", f.DeleteDescription, ClassIdempotent, true, parseStructured(f.Format, "delete")),
+		command(f.Format+" append", f.Format+" append <path> <selector> <value|--json value>", "Append to a "+f.Sequence+".", ClassNonIdempotent, true, parseStructured(f.Format, "append"), "--json"),
+		command(f.Format+" add", f.Format+" add <path> <selector> <value|--json value>", "Ensure a "+f.Sequence+" contains a value.", ClassIdempotent, true, parseStructured(f.Format, "add"), "--json"),
+		command(f.Format+" remove", f.Format+" remove <path> <selector> <value|--json value>", "Remove matching values from a "+f.Sequence+".", ClassIdempotent, true, parseStructured(f.Format, "remove"), "--json"),
+	}
+}
+
+func tableCommands(f tableCommandFamily) []commandSpec {
+	return []commandSpec{
+		tableCommand(f, "set", "<range> <value>", "Set "+f.Cells+".", ClassIdempotent, parseTable(f.Format, "set")),
+		tableCommand(f, "row append", "<row-json>", "Append a "+f.Row+".", ClassNonIdempotent, parseTable(f.Format, "row", "append")),
+		tableCommand(f, "row insert", "(--before <row>|--after <row>) <row-json>", "Insert a "+f.Row+".", ClassNonIdempotent, parseTable(f.Format, "row", "insert"), "--before", "--after"),
+		tableCommand(f, "row delete", "<row>", "Delete "+f.Rows+".", ClassIdempotent, parseTable(f.Format, "row", "delete")),
+		tableCommand(f, "column add", "<column> [--after <column>] [--default <value>]", "Add a "+f.Column+".", ClassIdempotent, parseTable(f.Format, "column", "add"), "--after", "--default"),
+		tableCommand(f, "column rename", "<old-column> <new-column>", "Rename a "+f.Column+".", ClassIdempotent, parseTable(f.Format, "column", "rename")),
+		tableCommand(f, "column delete", "<column>", "Delete a "+f.Column+".", ClassIdempotent, parseTable(f.Format, "column", "delete")),
+	}
+}
+
+func tableCommand(f tableCommandFamily, action, tail, description string, class CommandClass, parse commandParser, flags ...string) commandSpec {
+	path := commandPhrase(f.Prefix, action)
+	signature := commandPhrase(path, "<path>", f.ScopeArgs, tail)
+	return command(path, signature, description, class, true, parse, flags...)
+}
+
+func commandPhrase(parts ...string) string {
+	kept := make([]string, 0, len(parts))
+	for _, part := range parts {
+		if part != "" {
+			kept = append(kept, part)
+		}
+	}
+	return strings.Join(kept, " ")
+}
+
+var allCommandSpecs = buildCommandSpecs()
+
+func commandSpecs() []commandSpec {
+	return allCommandSpecs
+}
+
+func buildCommandSpecs() []commandSpec {
+	specs := []commandSpec{
 		command("set", "set <path> <selector> <value>|<selector=value>...", "Set JSON/YAML/frontmatter values.", ClassIdempotent, true, parsePorcelainStructured("set"), "--json"),
 		command("delete", "delete <path> [<selector>]", "Delete a file or selected JSON/YAML/frontmatter value.", ClassIdempotent, true, parseDelete),
 		command("append", "append <path> <selector> <value|--json value>", "Append a value to an array.", ClassNonIdempotent, true, parsePorcelainStructured("append"), "--json"),
@@ -95,45 +156,46 @@ func commandSpecs() []commandSpec {
 		command("missing", "missing <path>", "Guard that a path is missing in the admitted input view.", ClassGuard, true, parsePathGuard("missing")),
 		command("contains", "contains <path> <literal>", "Guard that admitted file bytes contain a literal.", ClassGuard, true, parseContains),
 
-		command("json set", "json set <path> <selector> <value>|<selector=value>...", "Set JSON values.", ClassIdempotent, true, parseStructured("json", "set"), "--json"),
-		command("json delete", "json delete <path> <selector>", "Delete a JSON value.", ClassIdempotent, true, parseStructured("json", "delete")),
-		command("json append", "json append <path> <selector> <value|--json value>", "Append to a JSON array.", ClassNonIdempotent, true, parseStructured("json", "append"), "--json"),
-		command("json add", "json add <path> <selector> <value|--json value>", "Ensure a JSON array contains a value.", ClassIdempotent, true, parseStructured("json", "add"), "--json"),
-		command("json remove", "json remove <path> <selector> <value|--json value>", "Remove matching values from a JSON array.", ClassIdempotent, true, parseStructured("json", "remove"), "--json"),
-		command("yaml set", "yaml set <path> <selector> <value>|<selector=value>...", "Set YAML values.", ClassIdempotent, true, parseStructured("yaml", "set"), "--json"),
-		command("yaml delete", "yaml delete <path> <selector>", "Delete a YAML value.", ClassIdempotent, true, parseStructured("yaml", "delete")),
-		command("yaml append", "yaml append <path> <selector> <value|--json value>", "Append to a YAML sequence.", ClassNonIdempotent, true, parseStructured("yaml", "append"), "--json"),
-		command("yaml add", "yaml add <path> <selector> <value|--json value>", "Ensure a YAML sequence contains a value.", ClassIdempotent, true, parseStructured("yaml", "add"), "--json"),
-		command("yaml remove", "yaml remove <path> <selector> <value|--json value>", "Remove matching values from a YAML sequence.", ClassIdempotent, true, parseStructured("yaml", "remove"), "--json"),
-		command("frontmatter set", "frontmatter set <path> <selector> <value>|<selector=value>...", "Set Markdown YAML frontmatter.", ClassIdempotent, true, parseStructured("frontmatter", "set"), "--json"),
-		command("frontmatter delete", "frontmatter delete <path> <selector>", "Delete Markdown YAML frontmatter.", ClassIdempotent, true, parseStructured("frontmatter", "delete")),
-		command("frontmatter append", "frontmatter append <path> <selector> <value|--json value>", "Append to a frontmatter sequence.", ClassNonIdempotent, true, parseStructured("frontmatter", "append"), "--json"),
-		command("frontmatter add", "frontmatter add <path> <selector> <value|--json value>", "Ensure a frontmatter sequence contains a value.", ClassIdempotent, true, parseStructured("frontmatter", "add"), "--json"),
-		command("frontmatter remove", "frontmatter remove <path> <selector> <value|--json value>", "Remove matching values from a frontmatter sequence.", ClassIdempotent, true, parseStructured("frontmatter", "remove"), "--json"),
-
 		command("md replace-section", "md replace-section <path> <heading> <content>", "Replace the body under one Markdown heading.", ClassIdempotent, true, parseReplaceSection),
-		command("table set", "table set <path> [<scope> [<table>]] <range> <value>", "Set CSV or Markdown table cells.", ClassIdempotent, true, parseTable("infer", "set")),
-		command("table row append", "table row append <path> [<scope> [<table>]] <row-json>", "Append a CSV or Markdown table row.", ClassNonIdempotent, true, parseTable("infer", "row", "append")),
-		command("table row insert", "table row insert <path> [<scope> [<table>]] (--before <row>|--after <row>) <row-json>", "Insert a table row.", ClassNonIdempotent, true, parseTable("infer", "row", "insert"), "--before", "--after"),
-		command("table row delete", "table row delete <path> [<scope> [<table>]] <row>", "Delete table rows.", ClassIdempotent, true, parseTable("infer", "row", "delete")),
-		command("table column add", "table column add <path> [<scope> [<table>]] <column> [--after <column>] [--default <value>]", "Add a table column.", ClassIdempotent, true, parseTable("infer", "column", "add"), "--after", "--default"),
-		command("table column rename", "table column rename <path> [<scope> [<table>]] <old-column> <new-column>", "Rename a table column.", ClassIdempotent, true, parseTable("infer", "column", "rename")),
-		command("table column delete", "table column delete <path> [<scope> [<table>]] <column>", "Delete a table column.", ClassIdempotent, true, parseTable("infer", "column", "delete")),
-		command("csv set", "csv set <path> <range> <value>", "Set CSV cells.", ClassIdempotent, true, parseTable("csv", "set")),
-		command("csv row append", "csv row append <path> <row-json>", "Append a CSV row.", ClassNonIdempotent, true, parseTable("csv", "row", "append")),
-		command("csv row insert", "csv row insert <path> (--before <row>|--after <row>) <row-json>", "Insert a CSV row.", ClassNonIdempotent, true, parseTable("csv", "row", "insert"), "--before", "--after"),
-		command("csv row delete", "csv row delete <path> <row>", "Delete CSV rows.", ClassIdempotent, true, parseTable("csv", "row", "delete")),
-		command("csv column add", "csv column add <path> <column> [--after <column>] [--default <value>]", "Add a CSV column.", ClassIdempotent, true, parseTable("csv", "column", "add"), "--after", "--default"),
-		command("csv column rename", "csv column rename <path> <old-column> <new-column>", "Rename a CSV column.", ClassIdempotent, true, parseTable("csv", "column", "rename")),
-		command("csv column delete", "csv column delete <path> <column>", "Delete a CSV column.", ClassIdempotent, true, parseTable("csv", "column", "delete")),
-		command("md table set", "md table set <path> <scope> [<table>] <range> <value>", "Set Markdown table cells.", ClassIdempotent, true, parseTable("md", "set")),
-		command("md table row append", "md table row append <path> <scope> [<table>] <row-json>", "Append a Markdown table row.", ClassNonIdempotent, true, parseTable("md", "row", "append")),
-		command("md table row insert", "md table row insert <path> <scope> [<table>] (--before <row>|--after <row>) <row-json>", "Insert a Markdown table row.", ClassNonIdempotent, true, parseTable("md", "row", "insert"), "--before", "--after"),
-		command("md table row delete", "md table row delete <path> <scope> [<table>] <row>", "Delete Markdown table rows.", ClassIdempotent, true, parseTable("md", "row", "delete")),
-		command("md table column add", "md table column add <path> <scope> [<table>] <column> [--after <column>] [--default <value>]", "Add a Markdown table column.", ClassIdempotent, true, parseTable("md", "column", "add"), "--after", "--default"),
-		command("md table column rename", "md table column rename <path> <scope> [<table>] <old-column> <new-column>", "Rename a Markdown table column.", ClassIdempotent, true, parseTable("md", "column", "rename")),
-		command("md table column delete", "md table column delete <path> <scope> [<table>] <column>", "Delete a Markdown table column.", ClassIdempotent, true, parseTable("md", "column", "delete")),
 	}
+	for _, family := range []structuredCommandFamily{
+		{Format: "json", ValueDescription: "JSON values", DeleteDescription: "Delete a JSON value.", Sequence: "JSON array"},
+		{Format: "yaml", ValueDescription: "YAML values", DeleteDescription: "Delete a YAML value.", Sequence: "YAML sequence"},
+		{Format: "frontmatter", ValueDescription: "Markdown YAML frontmatter", DeleteDescription: "Delete Markdown YAML frontmatter.", Sequence: "frontmatter sequence"},
+	} {
+		specs = append(specs, structuredCommands(family)...)
+	}
+	for _, family := range []tableCommandFamily{
+		{
+			Prefix:    "table",
+			Format:    "infer",
+			ScopeArgs: "[<scope> [<table>]]",
+			Cells:     "CSV or Markdown table cells",
+			Row:       "CSV or Markdown table row",
+			Rows:      "table rows",
+			Column:    "table column",
+		},
+		{
+			Prefix: "csv",
+			Format: "csv",
+			Cells:  "CSV cells",
+			Row:    "CSV row",
+			Rows:   "CSV rows",
+			Column: "CSV column",
+		},
+		{
+			Prefix:    "md table",
+			Format:    "md",
+			ScopeArgs: "<scope> [<table>]",
+			Cells:     "Markdown table cells",
+			Row:       "Markdown table row",
+			Rows:      "Markdown table rows",
+			Column:    "Markdown table column",
+		},
+	} {
+		specs = append(specs, tableCommands(family)...)
+	}
+	return specs
 }
 
 func verbCatalog() []VerbInfo {
