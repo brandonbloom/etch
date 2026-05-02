@@ -1,5 +1,5 @@
 ---
-status: draft
+status: implemented
 depends_on:
   - markdown-addressing
   - value-syntax-and-assignment-items
@@ -67,7 +67,7 @@ Address flags are the optional Markdown addressing flags defined in
 Examples:
 
 ```sh
-etch set memory/programs/spender-agent.md attention '"Driving"'
+etch set memory/programs/spender-agent.md attention "Driving"
 etch set memory/tasks/follow-up.md last "2026-05-01" --body
 etch set memory/tasks/follow-up.md snooze "2026-05-06" --section Status
 etch set memory/tasks/follow-up.md done "2026-05-01" --task "Send follow-up"
@@ -109,7 +109,7 @@ etch set memory/tasks/follow-up.md trace-id "abc123" --task "Send follow-up" --h
   field name.
 - Creating a page-level or section-level inline field uses full-line syntax.
   Placement uses the shared Markdown addressing rules. If no placement flag is
-  supplied, the command should use an operation-specific default.
+  supplied, the command appends at the tail of the addressed body or section.
 - Creating an item-local inline field through `--item` or `--task` uses
   bracketed syntax.
 - `--hidden` applies only when creating an inline field. It uses parenthesized
@@ -139,7 +139,6 @@ frontmatter, and body-local inline fields require address flags.
 
 - Repeated-key list editing, likely as `append` or `add` with address
   flags.
-- Page-level and section-level inline field creation placement defaults.
 - Task/list date shorthand mutation.
 - Typed inline value rendering.
 - `--near <literal>`, unless it is deterministic and ambiguity-safe.
@@ -178,5 +177,4 @@ Code:
 
 ## Open Questions
 
-- Should `--body` be the flag for page-level inline fields, or should that spell
-  as `--inline`?
+- None for the implemented first version.

@@ -10,7 +10,7 @@ import (
 func TestScriptParserQuotingAndHeredoc(t *testing.T) {
 	stmts, err := ParseScriptBytes("ops.etch", []byte(`
 # comment
-set posts/hello.md frontmatter.title "Hello, world"
+set posts/hello.md title "Hello, world"
 section replace posts/hello.md "## Summary" <<EOF
 $FOO is literal
 EOF
@@ -21,7 +21,7 @@ EOF
 	if len(stmts) != 2 {
 		t.Fatalf("got %d statements, want 2", len(stmts))
 	}
-	if got := strings.Join(stmts[0].Tokens, "|"); got != "set|posts/hello.md|frontmatter.title|Hello, world" {
+	if got := strings.Join(stmts[0].Tokens, "|"); got != "set|posts/hello.md|title|Hello, world" {
 		t.Fatalf("statement 0 tokens = %q", got)
 	}
 	if got := stmts[1].Tokens[4]; got != "$FOO is literal\n" {
@@ -43,11 +43,11 @@ func TestScriptParserMissingHeredocLocation(t *testing.T) {
 }
 
 func TestDecodeDirectAndScriptEquivalence(t *testing.T) {
-	direct, err := DecodeOperation(Statement{Tokens: []string{"set", "task.md", "frontmatter.status", "complete"}})
+	direct, err := DecodeOperation(Statement{Tokens: []string{"set", "task.md", "status", "complete"}})
 	if err != nil {
 		t.Fatalf("DecodeOperation direct: %v", err)
 	}
-	stmts, err := ParseScriptBytes("ops.etch", []byte(`set task.md frontmatter.status complete`))
+	stmts, err := ParseScriptBytes("ops.etch", []byte(`set task.md status complete`))
 	if err != nil {
 		t.Fatalf("ParseScriptBytes: %v", err)
 	}
@@ -105,6 +105,18 @@ func TestDecodeAssignmentItemsAreSetOnlyWithoutBlockingLiteralValues(t *testing.
 	}
 	if _, err := DecodeOperations(Statement{Tokens: []string{"json", "append", "state.json", "items:=1"}}); err == nil {
 		t.Fatal("append accepted assignment item")
+	}
+}
+
+func TestDecodeMarkdownFieldAddressValidation(t *testing.T) {
+	if _, err := DecodeOperation(Statement{Tokens: []string{"set", "note.md", "file.name", "Bad"}}); err == nil || !strings.Contains(err.Error(), "implicit field") {
+		t.Fatalf("file.* err = %v", err)
+	}
+	if _, err := DecodeOperation(Statement{Tokens: []string{"set", "note.md", "done", "yes", "--item-type", "task"}}); err == nil || !strings.Contains(err.Error(), "--item-type requires") {
+		t.Fatalf("item-type err = %v", err)
+	}
+	if _, err := DecodeOperation(Statement{Tokens: []string{"set", "note.md", "status", "done", "--task", "Send"}}); err == nil || !strings.Contains(err.Error(), "task/list implicit field") {
+		t.Fatalf("task implicit err = %v", err)
 	}
 }
 

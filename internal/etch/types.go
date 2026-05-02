@@ -87,19 +87,20 @@ const (
 )
 
 type Operation struct {
-	Verb       string       `json:"verb"`
-	Kind       string       `json:"-"`
-	Class      CommandClass `json:"-"`
-	Raw        []string     `json:"-"`
-	Loc        SourceLoc    `json:"-"`
-	Path       string       `json:"-"`
-	RepoPath   string       `json:"-"`
-	Target     PlanTarget   `json:"target,omitempty"`
-	Value      string       `json:"-"`
-	ValueMode  ValueMode    `json:"value_type,omitempty"`
-	ValueHash  string       `json:"value_sha256,omitempty"`
-	Noop       bool         `json:"-"`
-	Descriptor string       `json:"-"`
+	Verb       string          `json:"verb"`
+	Kind       string          `json:"-"`
+	Class      CommandClass    `json:"-"`
+	Raw        []string        `json:"-"`
+	Loc        SourceLoc       `json:"-"`
+	Path       string          `json:"-"`
+	RepoPath   string          `json:"-"`
+	Target     PlanTarget      `json:"target,omitempty"`
+	Value      string          `json:"-"`
+	ValueMode  ValueMode       `json:"value_type,omitempty"`
+	ValueHash  string          `json:"value_sha256,omitempty"`
+	Noop       bool            `json:"-"`
+	Descriptor string          `json:"-"`
+	Markdown   markdownAddress `json:"-"`
 }
 
 type ValueMode string

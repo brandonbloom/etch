@@ -135,6 +135,10 @@ func commandPhrase(parts ...string) string {
 	return strings.Join(kept, " ")
 }
 
+var markdownAddressFlags = []string{"--body", "--section", "--item", "--item-type", "--task", "--after", "--before", "--head", "--tail"}
+var markdownSetFlags = append(append([]string{"--json"}, markdownAddressFlags...), "--hidden")
+var markdownDeleteFlags = markdownAddressFlags
+
 var allCommandSpecs = buildCommandSpecs()
 
 func commandSpecs() []commandSpec {
@@ -143,8 +147,8 @@ func commandSpecs() []commandSpec {
 
 func buildCommandSpecs() []commandSpec {
 	specs := []commandSpec{
-		command("set", "set <path> <selector> <value>|<selector=value>...", "Set JSON/YAML/frontmatter values.", ClassIdempotent, true, parsePorcelainStructured("set"), "--json"),
-		command("delete", "delete <path> [<selector>]", "Delete a file or selected JSON/YAML/frontmatter value.", ClassIdempotent, true, parseDelete),
+		command("set", "set <path> <selector> <value>|<selector=value>...", "Set JSON/YAML/frontmatter or Markdown inline fields.", ClassIdempotent, true, parsePorcelainStructured("set"), markdownSetFlags...),
+		command("delete", "delete <path> [<selector>]", "Delete a file or selected JSON/YAML/frontmatter/inline-field value.", ClassIdempotent, true, parseDelete, markdownDeleteFlags...),
 		command("append", "append <path> <selector> <value|--json value>|<path.jsonl> <json-value>", "Append a value to an array, or a JSONL record to .jsonl/.ndjson.", ClassNonIdempotent, true, parsePorcelainAppend, "--json"),
 		command("add", "add <path> <selector> <value|--json value>", "Ensure an array contains a value.", ClassIdempotent, true, parsePorcelainStructured("add"), "--json"),
 		command("remove", "remove <path> <selector> <value|--json value>", "Ensure an array does not contain a value.", ClassIdempotent, true, parsePorcelainStructured("remove"), "--json"),
@@ -337,11 +341,17 @@ func parseFileVerb(verb string) commandParser {
 
 func parseDelete(inv commandInvocation) ([]Operation, error) {
 	spec, op, args := inv.Spec, inv.Op, inv.Args
-	switch len(args) {
-	case 1:
+	if len(args) == 1 {
 		op.Verb, op.Kind, op.Class, op.Path = "delete", "file", spec.Class, args[0]
 		op.Target = PlanTarget{Path: args[0]}
 		return parsedOperation(op)
+	}
+	if len(args) >= 2 && isMarkdownPath(args[0]) {
+		if hasMarkdownAddressArgs(args[2:]) {
+			return oneOperation(decodeMarkdownFieldDelete(op, args))
+		}
+	}
+	switch len(args) {
 	case 2:
 		return oneOperation(decodeStructured(op, "infer", "delete", structuredValueArgs{Path: args[0], Selector: args[1]}))
 	default:
@@ -352,6 +362,11 @@ func parseDelete(inv commandInvocation) ([]Operation, error) {
 func parsePorcelainStructured(verb string) commandParser {
 	return func(inv commandInvocation) ([]Operation, error) {
 		op, args := inv.Op, inv.Args
+		if verb == "set" && len(args) > 0 && isMarkdownPath(args[0]) {
+			if ops, ok, err := decodeMarkdownSet(op, args); err != nil || ok {
+				return ops, err
+			}
+		}
 		if verb == "set" {
 			if ops, ok, err := decodeAssignmentSet(op, "infer", args); err != nil || ok {
 				return ops, err
@@ -543,14 +558,15 @@ func decodeStructured(op Operation, format, verb string, args structuredValueArg
 		part = "frontmatter"
 	} else if format == "infer" && isMarkdownPath(args.Path) {
 		if args.Selector == "frontmatter" {
-			part = "frontmatter"
-			actualSelector = "$"
-		} else if strings.HasPrefix(args.Selector, "frontmatter.") {
-			part = "frontmatter"
-			actualSelector = strings.TrimPrefix(args.Selector, "frontmatter.")
-		} else {
-			return op, usagef("markdown structured selectors must use frontmatter.*")
+			return op, usagef("markdown frontmatter selectors are bare in porcelain; use frontmatter plumbing for the whole frontmatter document")
 		}
+		if strings.HasPrefix(args.Selector, "frontmatter.") {
+			return op, usagef("markdown frontmatter selectors are bare in porcelain; use %q instead", strings.TrimPrefix(args.Selector, "frontmatter."))
+		}
+		if isReservedDataviewImplicitField(args.Selector) {
+			return op, usagef("Dataview implicit field %q is not writable", args.Selector)
+		}
+		part = "frontmatter"
 	}
 	norm, err := NormalizeSelector(actualSelector)
 	if err != nil {
@@ -809,13 +825,16 @@ func fillDescriptor(op *Operation) {
 		if op.Target.Selector == "$" {
 			parts = append(parts, "frontmatter")
 		} else {
-			parts = append(parts, "frontmatter."+strings.TrimPrefix(op.Target.Selector, "$."))
+			parts = append(parts, strings.TrimPrefix(op.Target.Selector, "$."))
 		}
 	} else if op.Target.Selector != "" {
 		parts = append(parts, op.Target.Selector)
 	}
-	if op.Target.Section != "" {
+	if op.Target.Section != "" && op.Kind != "md-field" {
 		parts = append(parts, shellQuote(op.Target.Section))
+	}
+	if op.Kind == "md-field" {
+		parts = appendMarkdownAddressDescriptor(parts, op.Markdown)
 	}
 	if op.Target.Range != "" {
 		parts = append(parts, op.Target.Range)
@@ -841,6 +860,40 @@ func fillDescriptor(op *Operation) {
 	if (op.Kind == "structured" && op.Verb != "delete") || op.Value != "" {
 		op.ValueHash = valueHash(*op)
 	}
+}
+
+func appendMarkdownAddressDescriptor(parts []string, address markdownAddress) []string {
+	if address.Body {
+		parts = append(parts, "--body")
+	}
+	if address.Section != "" {
+		parts = append(parts, "--section", shellQuote(address.Section))
+	}
+	if address.Item != "" {
+		parts = append(parts, "--item", shellQuote(address.Item))
+	}
+	if address.Task != "" {
+		parts = append(parts, "--task", shellQuote(address.Task))
+	}
+	for _, typ := range address.ItemTypes {
+		parts = append(parts, "--item-type", typ)
+	}
+	if address.After != "" {
+		parts = append(parts, "--after", shellQuote(address.After))
+	}
+	if address.Before != "" {
+		parts = append(parts, "--before", shellQuote(address.Before))
+	}
+	if address.Head {
+		parts = append(parts, "--head")
+	}
+	if address.Tail {
+		parts = append(parts, "--tail")
+	}
+	if address.Hidden {
+		parts = append(parts, "--hidden")
+	}
+	return parts
 }
 
 func isJSONPath(path string) bool {
@@ -989,7 +1042,8 @@ Frontmatter fits whole-note schema fields such as owner, source, status, and sta
 Inline fields fit metadata attached to a paragraph, list item, task, or local note context.
 
 Examples:
-  etch set note.md status '"Driving"'
+  etch set note.md status Driving
+  etch set note.md last "2026-05-02" --body
   etch set note.md done "2026-05-01" --task "Send follow-up"
 `
 

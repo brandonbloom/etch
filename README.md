@@ -151,9 +151,17 @@ etch jsonl append events.log '{"kind":"heartbeat"}'
 Mutate Markdown frontmatter:
 
 ```sh
-etch set posts/hello.md frontmatter.title "Hello, world"
-etch add posts/hello.md frontmatter.tags draft
-etch delete posts/hello.md frontmatter.draft
+etch set posts/hello.md title "Hello, world"
+etch add posts/hello.md tags draft
+etch delete posts/hello.md draft
+```
+
+Mutate Dataview-style Markdown inline fields:
+
+```sh
+etch set tasks/follow-up.md done "2026-05-02" --task "Send follow-up"
+etch set journal/today.md heartbeat "ok" --section "## Status" --tail
+etch delete tasks/follow-up.md snooze --task "Send follow-up"
 ```
 
 Mutate a Markdown section:
@@ -212,7 +220,7 @@ quotes, double quotes, and backslash escaping. There are no shell expansions:
 Multi-line values use heredocs:
 
 ```text
-set posts/hello.md frontmatter.title "Hello, world"
+set posts/hello.md title "Hello, world"
 section replace posts/hello.md "## Summary" <<EOF
 This is literal text.
 $FOO is not expanded.
@@ -251,6 +259,10 @@ etch append events.jsonl '{"status":"done"}'
 
 JSONL and NDJSON append values are always strict JSON and do not use `--json`;
 missing JSONL targets are created as empty logs before appending.
+
+For Markdown paths, structured selectors target YAML frontmatter by default.
+Markdown address flags such as `--body`, `--section`, and `--task` switch
+`set` and `delete` to Dataview-style inline fields in the Markdown body.
 
 ## Transaction Model
 

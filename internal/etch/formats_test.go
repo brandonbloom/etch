@@ -282,8 +282,8 @@ func TestYAMLAndFrontmatterVerbs(t *testing.T) {
 	commitAll(t, dir, "initial")
 
 	runOK(t, dir, "yaml", "append", "config.yaml", "tags", "--json", `"b"`)
-	runOK(t, dir, "set", "note.md", "frontmatter.status", "draft")
-	runOK(t, dir, "add", "note.md", "frontmatter.tags", "--json", `"x"`)
+	runOK(t, dir, "set", "note.md", "status", "draft")
+	runOK(t, dir, "add", "note.md", "tags", "--json", `"x"`)
 	yamlOut := testGit(t, dir, "show", "HEAD:config.yaml")
 	if !strings.Contains(yamlOut, "b") {
 		t.Fatalf("YAML output:\n%s", yamlOut)
@@ -300,8 +300,8 @@ func TestYAMLAndFrontmatterVerbsCreateMissingFiles(t *testing.T) {
 	commitAll(t, dir, "initial")
 
 	runOK(t, dir, "append", "config.yaml", "tags", "--json", `"b"`)
-	runOK(t, dir, "set", "note.md", "frontmatter.status", "draft")
-	runOK(t, dir, "add", "other.md", "frontmatter.tags", "--json", `"x"`)
+	runOK(t, dir, "set", "note.md", "status", "draft")
+	runOK(t, dir, "add", "other.md", "tags", "--json", `"x"`)
 
 	yamlOut := testGit(t, dir, "show", "HEAD:config.yaml")
 	if !strings.Contains(yamlOut, "tags:") || !strings.Contains(yamlOut, "- b") {
@@ -325,7 +325,7 @@ func TestYAMLAndFrontmatterPreserveLargeNumbers(t *testing.T) {
 
 	runOK(t, dir, "add", "config.yaml", "ids", "--json", "9007199254740993")
 	runOK(t, dir, "set", "config.yaml", "id", "--json", "9007199254740993")
-	runOK(t, dir, "set", "note.md", "frontmatter.id", "--json", "9007199254740993")
+	runOK(t, dir, "set", "note.md", "id", "--json", "9007199254740993")
 
 	yamlOut := testGit(t, dir, "show", "HEAD:config.yaml")
 	for _, want := range []string{"9007199254740992", "9007199254740993", "id: 9007199254740993"} {
@@ -425,7 +425,7 @@ func TestFrontmatterRoundTripPreservesRepresentation(t *testing.T) {
 	writeFile(t, dir, "note.md", "---\n# metadata\ntitle: Old\ntags: &tags\n  - a\ncopy: *tags\n---\n# Note\n")
 	commitAll(t, dir, "initial")
 
-	runOK(t, dir, "set", "note.md", "frontmatter.status", "draft")
+	runOK(t, dir, "set", "note.md", "status", "draft")
 
 	got := testGit(t, dir, "show", "HEAD:note.md")
 	for _, want := range []string{"# metadata", "title: Old", "tags: &tags", "copy: *tags", "status: draft", "# Note"} {
@@ -640,9 +640,9 @@ func TestFrontmatterVerbMatrixPreservesRepresentation(t *testing.T) {
 	writeFile(t, dir, "note.md", "---\n# metadata\ntitle: Old\ntags:\n  - a\nremove:\n  - x\n  - y\n---\n# Note\n")
 	commitAll(t, dir, "initial")
 
-	runOK(t, dir, "delete", "note.md", "frontmatter.title")
-	runOK(t, dir, "append", "note.md", "frontmatter.tags", "--json", `"b"`)
-	runOK(t, dir, "remove", "note.md", "frontmatter.remove", "--json", `"x"`)
+	runOK(t, dir, "delete", "note.md", "title")
+	runOK(t, dir, "append", "note.md", "tags", "--json", `"b"`)
+	runOK(t, dir, "remove", "note.md", "remove", "--json", `"x"`)
 
 	got := testGit(t, dir, "show", "HEAD:note.md")
 	for _, want := range []string{"# metadata", "tags:", "- a", "- b", "remove:", "- y", "# Note"} {
@@ -662,7 +662,7 @@ func TestFrontmatterMultilineStringUsesLiteralBlock(t *testing.T) {
 	writeFile(t, dir, "note.md", "# Note\n")
 	commitAll(t, dir, "initial")
 
-	runOK(t, dir, "set", "note.md", "frontmatter.body", "line one\nline two\n")
+	runOK(t, dir, "set", "note.md", "body", "line one\nline two\n")
 
 	mdOut := testGit(t, dir, "show", "HEAD:note.md")
 	if !strings.Contains(mdOut, "body: |") || !strings.Contains(mdOut, "  line one\n  line two\n") {
@@ -670,6 +670,55 @@ func TestFrontmatterMultilineStringUsesLiteralBlock(t *testing.T) {
 	}
 	if strings.Contains(mdOut, `line one\nline two`) {
 		t.Fatalf("frontmatter escaped newlines instead of using block content:\n%s", mdOut)
+	}
+}
+
+func TestMarkdownPorcelainRejectsOldFrontmatterSelector(t *testing.T) {
+	dir := initRepo(t)
+	writeFile(t, dir, "note.md", "# Note\n")
+	head := commitAll(t, dir, "initial")
+
+	var out, errb bytes.Buffer
+	code, err := runCLIAt(dir, []string{"set", "note.md", "frontmatter.status", "draft"}, &out, &errb)
+	if err == nil || code != exitUsage {
+		t.Fatalf("old frontmatter selector succeeded code=%d err=%v stdout=%s stderr=%s", code, err, out.String(), errb.String())
+	}
+	if !strings.Contains(err.Error(), "frontmatter selectors are bare") {
+		t.Fatalf("error = %v", err)
+	}
+	if got := stringsTrim(testGit(t, dir, "rev-parse", "HEAD")); got != head {
+		t.Fatalf("failed frontmatter selector moved HEAD to %s", got)
+	}
+}
+
+func TestMarkdownInlineFieldCommandsCommitAndMaterialize(t *testing.T) {
+	dir := initRepo(t)
+	writeFile(t, dir, "note.md", "# Note\n\n- [ ] Send follow-up\n")
+	commitAll(t, dir, "initial")
+
+	runOK(t, dir, "set", "note.md", "done", "2026-05-02", "--task", "Send follow-up")
+
+	got := testGit(t, dir, "show", "HEAD:note.md")
+	want := "# Note\n\n- [ ] Send follow-up [done:: 2026-05-02]\n"
+	if got != want {
+		t.Fatalf("markdown inline field output = %q, want %q", got, want)
+	}
+	wt, err := os.ReadFile(filepath.Join(dir, "note.md"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if string(wt) != got {
+		t.Fatalf("worktree not materialized:\nwt=%s\nhead=%s", wt, got)
+	}
+	subject := stringsTrim(testGit(t, dir, "log", "-1", "--format=%s"))
+	if subject != `etch set note.md done --task 'Send follow-up' "2026-05-02"` {
+		t.Fatalf("subject = %q", subject)
+	}
+
+	runOK(t, dir, "delete", "note.md", "done", "--task", "Send follow-up")
+	got = testGit(t, dir, "show", "HEAD:note.md")
+	if got != "# Note\n\n- [ ] Send follow-up\n" {
+		t.Fatalf("markdown inline field delete = %q", got)
 	}
 }
 

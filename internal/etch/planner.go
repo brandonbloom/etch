@@ -249,6 +249,8 @@ func planOne(w *Workspace, files map[string]fileChange, op Operation) (Operation
 		return planJSONLAppend(w, files, op)
 	case "md-section":
 		return planSection(w, files, op)
+	case "md-field":
+		return planMarkdownField(w, files, op)
 	case "table":
 		return planTable(w, files, op)
 	default:
@@ -465,6 +467,24 @@ func planSection(w *Workspace, files map[string]fileChange, op Operation) (Opera
 		return op, false, err
 	}
 	out, changed, err := evalMarkdownSection(res.Clean, op.Verb, op.Target.Section, op.Value, ch.After)
+	if err != nil {
+		return op, false, err
+	}
+	c, _ := setFileState(files, ch, out, false)
+	op.Path = res.Clean
+	op.Target.Path = res.Clean
+	op.RepoPath = res.Repo
+	op.Noop = !changed && !c
+	fillDescriptor(&op)
+	return op, changed || c, nil
+}
+
+func planMarkdownField(w *Workspace, files map[string]fileChange, op Operation) (Operation, bool, error) {
+	ch, res, err := ensureFileState(w, files, op.Path, true, true)
+	if err != nil {
+		return op, false, err
+	}
+	out, changed, err := evalMarkdownField(res.Clean, op, ch.After)
 	if err != nil {
 		return op, false, err
 	}

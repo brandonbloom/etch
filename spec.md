@@ -81,11 +81,11 @@ A script is a sequence of lines. Each line is either blank, a comment (starts wi
 Multi-line values use `<<DELIM` heredocs shaped like shell heredocs, but heredocs are an etch-level construct (not delegated to a shell parser) and are the only multi-line affordance:
 
 ```
-# Set a scalar
-set posts/hello.md frontmatter.title "Hello, world"
+# Set a frontmatter scalar
+set posts/hello.md title "Hello, world"
 
 # JSON value as a single argument
-set posts/hello.md frontmatter.tags --json '["draft","intro"]'
+set posts/hello.md tags --json '["draft","intro"]'
 
 # Multiple field assignments in one file
 set cache/state.json last_ingestion=2026-05-02 count:=12
@@ -96,7 +96,7 @@ This post introduces the project and its goals.
 EOF
 
 # Delete a key
-delete posts/hello.md frontmatter.draft
+delete posts/hello.md draft
 ```
 
 Heredoc values begin with an opener token written as `<<DELIM`, where `DELIM` is a nonempty caller-chosen delimiter. The delimiter may use the normal statement tokenizer's quote and backslash rules inside the opener; after quote removal, `<<EOF` and `<<"EOF"` are equivalent. The value continues until a physical line whose contents exactly equal the delimiter; that terminator line is not part of the value. If the content needs to contain `EOF` or any other delimiter on a line by itself, the caller chooses a different delimiter. Heredoc bodies are literal text: no variable expansion, command substitution, backslash processing, or indentation trimming occurs. A missing terminator is a usage error.
@@ -142,15 +142,19 @@ JSON Pointer was considered because it is standardized and unambiguous, but `/ag
 
 ### Markdown parts
 
-Markdown files have several addressable parts: YAML frontmatter, section bodies, task list items, pipe tables, and Obsidian Dataview-style fields. In porcelain Markdown commands, `frontmatter` is a selector namespace, not a variable. `set task.md frontmatter.status complete` means "within this Markdown file, mutate the YAML frontmatter field `status`." The structured selector inside that part is still normalized as JSONPath (`$.status`) in plans. `set task.md frontmatter <value>` addresses the whole frontmatter document and normalizes the part selector to `$`. `set task.md $.frontmatter.title <value>` is rejected; rooted selectors address structured data inside a selected format or part, not Markdown part namespaces.
+Markdown files have several addressable parts: YAML frontmatter, section bodies, task/list items, pipe tables, and Obsidian Dataview-style inline fields. For porcelain structured commands on Markdown paths, a bare selector targets YAML frontmatter by default. `set task.md status complete` means "within this Markdown file, mutate the YAML frontmatter field `status`." The structured selector inside that part is still normalized as JSONPath (`$.status`) in plans.
+
+The MVP `frontmatter.*` porcelain selector namespace has been removed. `set task.md frontmatter.status complete` is a usage error; callers should write `set task.md status complete` or use the format-explicit plumbing command `frontmatter set task.md status complete`. The Dataview implicit namespace `file.*` is reserved and is not writable through porcelain Markdown field mutation.
+
+Markdown address flags switch `set` and `delete` from frontmatter to body-local Dataview inline fields. `set task.md done 2026-05-02 --task "Send follow-up"` creates or updates `[done:: 2026-05-02]` on the uniquely addressed task. `set note.md last 2026-05-02 --body` creates or updates a page-level body field. Full-line fields, bracketed fields, and parenthesized fields are recognized outside code and HTML blocks; updates preserve the existing source form, field spelling, whitespace around `::`, and surrounding Markdown.
 
 Alternatives considered:
 
-- **Implicit frontmatter for Markdown paths.** Shorter, but blocks body-level fields with the same names and makes `set task.md status complete` ambiguous.
+- **Explicit frontmatter namespace.** `set task.md frontmatter.status complete` is clear but too noisy for the common case and made frontmatter feel unlike other structured files.
 - **Separate porcelain verbs only.** `frontmatter set task.md status complete` is explicit but loses the convenient format-inferred `set path selector value` shape.
 - **Virtual YAML file model.** Treat frontmatter as a hidden YAML document adjacent to the Markdown body. Accurate internally, but awkward to explain at the CLI.
 
-The resulting rule: porcelain Markdown selectors may use explicit part prefixes such as `frontmatter.*` for CLI ergonomics; canonical plans store the Markdown part and normalized structured selector separately. Plumbing commands can use namespaces instead (`frontmatter set <path> <selector> <value>`), where `<selector>` is already relative to that part and may still be written with or without the leading `$`.
+The resulting rule: frontmatter is the default structured location for Markdown paths, while body-local fields require Markdown address flags. Canonical plans store the Markdown part and normalized structured selector separately. Plumbing commands can use namespaces instead (`frontmatter set <path> <selector> <value>`), where `<selector>` is already relative to that part and may still be written with or without the leading `$`.
 
 Markdown body operations share one addressing model. Section selectors accept either a title such as `Status` or an ATX heading such as `## Status`; title-only selectors search all ATX heading levels, ATX selectors include the level, closing `#` markers are ignored, and repeated matches are ambiguity errors. List-item selectors normalize away the list marker, task checkbox, surrounding whitespace, and Dataview inline field annotations while preserving inline Markdown source. Item filters are `task`, `plain`, `numbered`, and `bullet`; repeated filters combine across independent axes, while contradictions such as `task` with `plain` fail before planning. Placement selectors use `head`, `tail`, `before`, or `after` as one mutually exclusive insertion point when a command accepts caller-selected placement.
 
@@ -161,7 +165,8 @@ Markdown body operations share one addressing model. Section selectors accept ei
 | JSON | `set`, `delete`, `append`, `add`, `remove` | Selectors use the JSONPath subset above. Values are strings by default. `--json <value>` parses one following token as a strict JSON value; JavaScript object-literal shorthand is intentionally not accepted. `set` also accepts field assignment items, where `selector=value` writes a string and `selector:=json` writes strict JSON. Assignment items are not accepted by `append`, `add`, `remove`, or `delete`. `set` creates missing object containers, creates missing final object members, updates existing array elements, and appends to an array only when the selected index equals the array length. `delete` removes an existing member or array element and is a no-op when the final target is absent. `append` appends the value to an array, creating a missing final array under object-container rules. `add` ensures an array contains the value, appending only if no structurally equal value is present. `remove` ensures an array does not contain the value, removing all structurally equal occurrences and doing nothing when the final target is absent. |
 | JSONL/NDJSON | `append` | JSONL append has no selector. The value operand is always strict JSON and is rendered as one compact JSON value followed by `\n`. `.jsonl` and `.ndjson` paths infer this adapter for porcelain `append`; `jsonl append <path> <json-value>` is the format-explicit plumbing form. Missing JSONL targets are treated as empty logs and created. Non-empty targets must end with a newline, and the tail record boundary must not be blank. Existing records are not parsed during append. The operation is non-idempotent; retries after failed ref-CAS replan against the new `HEAD`, but successful repeated invocations append repeated records. |
 | YAML | `set`, `delete`, `append`, `add`, `remove` | Same selector and value semantics as JSON, but using a round-tripping YAML representation so comments, key order, indentation style, anchors, aliases, and scalar spelling are preserved where the parser can preserve them. |
-| Markdown frontmatter | `set`, `delete`, `append`, `add`, `remove` | Selectors under `frontmatter.*` operate on YAML frontmatter using the YAML rules above. If a Markdown file has no frontmatter, `set frontmatter.*`, `append frontmatter.*`, and `add frontmatter.*` can create a frontmatter block; `delete` and `remove` are no-ops when the final target is absent. |
+| Markdown frontmatter | `set`, `delete`, `append`, `add`, `remove` | For Markdown paths, bare structured selectors operate on YAML frontmatter using the YAML rules above. If a Markdown file has no frontmatter, `set`, `append`, and `add` can create a frontmatter block; `delete` and `remove` are no-ops when the final target is absent. The old porcelain `frontmatter.*` namespace is rejected; use bare selectors or `frontmatter ...` plumbing. |
+| Markdown inline fields | `set`, `delete` | Markdown address flags such as `--body`, `--section`, `--item`, and `--task` switch `set` and `delete` from frontmatter to Dataview-style inline fields in the Markdown body. Existing fields match first by exact raw source field name, then by Dataview-normalized field name if the normalized match is unique. Creating page-level or section-level fields uses full-line syntax; creating item-local fields uses bracketed syntax, or parenthesized syntax with `--hidden`. Dataview implicit fields such as `file.name`, task `status`, and task `text` are not writable through this surface. |
 | Markdown body | `section replace`, `section append`, `section prepend` | The selector is a heading title such as `Notes` or heading line such as `## Notes`. Matching covers the content under that heading up to the next heading of equal or higher level. Missing or ambiguous headings are errors. `section replace` replaces the body. `section append` and `section prepend` insert block fragments with deterministic one-blank-line boundaries for non-empty sections. |
 | Tables | `table set`, `table row append`, `table row insert`, `table row delete`, `table column add`, `table column rename`, `table column delete` | Table commands infer Markdown pipe tables or CSV tables from the path. Markdown operands include a scope and optional table ordinal; CSV operands omit them because a CSV file is one table. Format-explicit plumbing commands are available as `md table ...` and `csv ...`. |
 | Files | `create`, `delete`, `move`, `copy` | File-level verbs use explicit etch names rather than shell primitive names. Signatures are `create <path> <content>`, `delete <path>`, `move <src> <dst>`, and `copy <src> <dst>`. `create` and `copy` fail if the destination exists in the transaction base. `delete` is idempotent when the path is absent from the transaction base. `move` fails if the source is absent or destination exists in the transaction base. |
@@ -308,7 +313,7 @@ Human preview is a separate surface. `--dry-run` lowers the semantic JSON plan t
   },
   "tree": "7f4e8d...",
   "commit": {
-    "message": "etch: 2 changes in posts/hello.md\n\nChanges:\n- set posts/hello.md frontmatter.title \"Hello, world\"\n- section replace posts/hello.md \"## Summary\" \"A tighter summary.\""
+    "message": "etch: 2 changes in posts/hello.md\n\nChanges:\n- set posts/hello.md title \"Hello, world\"\n- section replace posts/hello.md \"## Summary\" \"A tighter summary.\""
   }
 }
 ```
@@ -335,7 +340,7 @@ When a planned change can be represented as a Git patch, `--dry-run` output shou
 From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
 From: <author-name> <author-email>
 Date: <author-date>
-Subject: etch set posts/hello.md frontmatter.title "Hello, world"
+Subject: etch set posts/hello.md title "Hello, world"
 Etch-Plan-Hash: sha256:<hex>
 Etch-Base-Commit: a1b2c3...
 Etch-Tree: 7f4e8d...
@@ -362,7 +367,7 @@ Etch-Base-Commit: a1b2c3...
 Etch-Tree: 7f4e8d...
 
 Changes:
-- set posts/hello.md frontmatter.title "Hello, world"
+- set posts/hello.md title "Hello, world"
 - section replace posts/hello.md "## Summary" "A tighter summary."
 
 ---
@@ -540,7 +545,7 @@ Value previews are deterministic:
 - Single-op subjects include an exact value preview only if the full subject, including subject modifiers, fits on one line within 72 characters. Otherwise the subject omits the value and the body contains `Value: <value-preview>`.
 - Commit messages do not include value hashes. Hashes are plan metadata; commit-message values are human previews.
 
-- Single op with a short value: subject only, `etch <verb> <path> <selector> <value-preview>` (e.g., `etch set posts/hello.md frontmatter.title "Hello, world"`).
+- Single op with a short value: subject only, `etch <verb> <path> <selector> <value-preview>` (e.g., `etch set posts/hello.md title "Hello, world"`).
 - Single op without a value preview in the subject: subject `etch <verb> <path> <selector>`, with a body containing `Value: <value-preview>` when the operation has a value.
 - Multi-op in one file: subject `etch: N changes in <path>`, with a body headed `Changes:` and one descriptor per operation.
 - Multi-op across files: subject `etch: N changes across M files`, with the same `Changes:` body.
@@ -551,14 +556,14 @@ Example multi-op message:
 etch: 2 changes in posts/hello.md
 
 Changes:
-- set posts/hello.md frontmatter.title "Hello, world"
+- set posts/hello.md title "Hello, world"
 - section replace posts/hello.md "## Summary" "A tighter summary."
 ```
 
 Example long-value message:
 
 ```text
-etch set posts/hello.md frontmatter.summary
+etch set posts/hello.md summary
 
 Value: "This summary is long enough that it needs a bounded preview..."
 ```

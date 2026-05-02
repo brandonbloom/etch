@@ -12,6 +12,28 @@ type markdownRange struct {
 	End   int
 }
 
+type markdownAddress struct {
+	Body      bool
+	Section   string
+	Item      string
+	Task      string
+	ItemTypes []string
+	Before    string
+	After     string
+	Head      bool
+	Tail      bool
+	Hidden    bool
+}
+
+func (a markdownAddress) hasBodyLocation() bool {
+	return a.Body || a.Section != "" || a.Item != "" || a.Task != "" ||
+		a.Before != "" || a.After != "" || a.Head || a.Tail
+}
+
+func (a markdownAddress) hasItemLocation() bool {
+	return a.Item != "" || a.Task != ""
+}
+
 func markdownBodyRange(raw []byte) (markdownRange, error) {
 	_, body, _, err := splitFrontmatter(raw)
 	if err != nil {
@@ -183,10 +205,26 @@ type markdownListItem struct {
 }
 
 func resolveMarkdownTask(raw []byte, path, literal string, types []string) (markdownListItem, error) {
-	return resolveMarkdownItem(raw, path, literal, append([]string{"task"}, types...))
+	scope, err := markdownBodyRange(raw)
+	if err != nil {
+		return markdownListItem{}, err
+	}
+	return resolveMarkdownTaskInRange(raw, path, scope, literal, types)
 }
 
 func resolveMarkdownItem(raw []byte, path, literal string, types []string) (markdownListItem, error) {
+	scope, err := markdownBodyRange(raw)
+	if err != nil {
+		return markdownListItem{}, err
+	}
+	return resolveMarkdownItemInRange(raw, path, scope, literal, types)
+}
+
+func resolveMarkdownTaskInRange(raw []byte, path string, scope markdownRange, literal string, types []string) (markdownListItem, error) {
+	return resolveMarkdownItemInRange(raw, path, scope, literal, append([]string{"task"}, types...))
+}
+
+func resolveMarkdownItemInRange(raw []byte, path string, scope markdownRange, literal string, types []string) (markdownListItem, error) {
 	constraints, err := markdownItemTypeConstraintsFromArgs(types)
 	if err != nil {
 		return markdownListItem{}, err
@@ -194,6 +232,9 @@ func resolveMarkdownItem(raw []byte, path, literal string, types []string) (mark
 	want := normalizeMarkdownItemText(literal)
 	var matches []markdownListItem
 	for _, item := range markdownListItems(raw) {
+		if item.LineStart < scope.Start || item.LineEnd > scope.End {
+			continue
+		}
 		if constraints.matches(item) && item.Normalized == want {
 			if item.Complex {
 				return markdownListItem{}, failf("item %q is structurally complex in %s", literal, path)
