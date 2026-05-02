@@ -130,7 +130,11 @@ func mutateYAMLDesc(nodep *ast.Node, parts []selectorPart, verb string, value an
 			child := newYAMLContainerNode(parts[1])
 			mv = appendYAMLMapValue(m, p.Key, child)
 		}
-		return mutateYAMLDesc(&mv.Value, parts[1:], verb, value)
+		changed, err := mutateYAMLDesc(&mv.Value, parts[1:], verb, value)
+		if changed && yamlNodeIsEmptyCollection(mv.Value) {
+			setYAMLMapValueFlowStyle(mv, true)
+		}
+		return changed, err
 	}
 
 	seq, err := yamlSequenceNode(*nodep)
@@ -291,6 +295,10 @@ func mutateYAMLSequenceSelected(seq *ast.SequenceNode, verb string, value any) (
 func deleteYAMLMapValue(m *ast.MappingNode, idx int) {
 	deleted := m.Values[idx]
 	m.Values = append(m.Values[:idx], m.Values[idx+1:]...)
+	if len(m.Values) == 0 {
+		m.SetIsFlowStyle(true)
+		return
+	}
 	// A leading document/comment block may be attached to the deleted key; keep
 	// it with the following key when one exists.
 	if deleted.GetComment() == nil || idx >= len(m.Values) || m.Values[idx].GetComment() != nil {
@@ -357,6 +365,26 @@ func yamlNodeFlowParent(root, child ast.Node) bool {
 	default:
 		return false
 	}
+}
+
+func yamlNodeIsEmptyCollection(node ast.Node) bool {
+	switch n := node.(type) {
+	case *ast.MappingNode:
+		return len(n.Values) == 0
+	case *ast.SequenceNode:
+		return len(n.Values) == 0
+	case *ast.AnchorNode:
+		return yamlNodeIsEmptyCollection(n.Value)
+	case *ast.TagNode:
+		return yamlNodeIsEmptyCollection(n.Value)
+	default:
+		return false
+	}
+}
+
+func setYAMLMapValueFlowStyle(mv *ast.MappingValueNode, flow bool) {
+	mv.IsFlowStyle = flow
+	setYAMLFlowStyle(mv.Value, flow)
 }
 
 func findYAMLMapValue(m *ast.MappingNode, key string) (*ast.MappingValueNode, int, error) {

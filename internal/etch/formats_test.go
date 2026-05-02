@@ -635,6 +635,23 @@ func TestYAMLErrorMatrixDoesNotCommit(t *testing.T) {
 	}
 }
 
+func TestYAMLDeleteLastNestedMapKeyLeavesParseableEmptyMap(t *testing.T) {
+	dir := initRepo(t)
+	writeFile(t, dir, "config.yaml", "title: Nested Key Bug\nmeta:\n  author: Brandon\n")
+	commitAll(t, dir, "initial")
+
+	runOK(t, dir, "delete", "config.yaml", "meta.author")
+
+	got := testGit(t, dir, "show", "HEAD:config.yaml")
+	want := "title: Nested Key Bug\nmeta: {}\n"
+	if got != want {
+		t.Fatalf("YAML output:\n%s\nwant:\n%s", got, want)
+	}
+	if _, err := parseYAMLFile([]byte(got)); err != nil {
+		t.Fatalf("YAML output is not parseable: %v\n%s", err, got)
+	}
+}
+
 func TestFrontmatterVerbMatrixPreservesRepresentation(t *testing.T) {
 	dir := initRepo(t)
 	writeFile(t, dir, "note.md", "---\n# metadata\ntitle: Old\ntags:\n  - a\nremove:\n  - x\n  - y\n---\n# Note\n")
@@ -654,6 +671,30 @@ func TestFrontmatterVerbMatrixPreservesRepresentation(t *testing.T) {
 		if strings.Contains(got, absent) {
 			t.Fatalf("frontmatter output still contains %q:\n%s", absent, got)
 		}
+	}
+}
+
+func TestFrontmatterDeleteLastNestedMapKeyLeavesParseableEmptyMap(t *testing.T) {
+	dir := initRepo(t)
+	writeFile(t, dir, "note.md", "---\ntitle: Nested Key Bug\nmeta:\n  author: Brandon\n---\n# Note\n")
+	commitAll(t, dir, "initial")
+
+	runOK(t, dir, "delete", "note.md", "meta.author")
+
+	got := testGit(t, dir, "show", "HEAD:note.md")
+	want := "---\ntitle: Nested Key Bug\nmeta: {}\n---\n# Note\n"
+	if got != want {
+		t.Fatalf("frontmatter output:\n%s\nwant:\n%s", got, want)
+	}
+	fm, _, had, err := splitFrontmatter([]byte(got))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !had {
+		t.Fatal("frontmatter output lost frontmatter block")
+	}
+	if _, err := parseYAMLFile(fm); err != nil {
+		t.Fatalf("frontmatter YAML is not parseable: %v\n%s", err, got)
 	}
 }
 
