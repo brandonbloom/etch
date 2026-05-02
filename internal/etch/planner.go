@@ -414,7 +414,7 @@ func planStructured(w *Workspace, files map[string]fileChange, op Operation) (Op
 			}
 		}
 	}
-	out, changed, err := evalStructuredBytes(res.Clean, op.Target.Part, op.Target.Selector, op.Verb, op.Value, ch.After)
+	out, changed, err := evalStructuredBytes(res.Clean, op.Target.Part, op.Target.Selector, op.Verb, op.Value, op.ValueMode, ch.After)
 	if err != nil {
 		return op, false, err
 	}
@@ -423,9 +423,16 @@ func planStructured(w *Workspace, files map[string]fileChange, op Operation) (Op
 	op.Target.Path = res.Clean
 	op.RepoPath = res.Repo
 	op.Noop = !changed && !c
-	op.ValueHash = shaHex([]byte(op.Value))
+	op.ValueHash = valueHash(op)
 	fillDescriptor(&op)
 	return op, changed || c || !bytes.Equal(updated.Before, updated.After), nil
+}
+
+func valueHash(op Operation) string {
+	if op.ValueMode == "" {
+		return shaHex([]byte(op.Value))
+	}
+	return shaHex([]byte(string(op.ValueMode) + "\x00" + op.Value))
 }
 
 func planSection(w *Workspace, files map[string]fileChange, op Operation) (Operation, bool, error) {
@@ -510,8 +517,8 @@ func buildCommitMessage(opts GlobalOptions, ops []Operation) string {
 			msg = subj
 		} else {
 			msg = "etch " + descriptorWithoutValue(mut[0])
-			if mut[0].Value != "" {
-				msg += "\n\nValue: " + valuePreview(mut[0].Value, 80)
+			if operationHasValue(mut[0]) {
+				msg += "\n\nValue: " + valuePreview(mut[0].Value, mut[0].ValueMode, 80)
 			}
 		}
 	} else if len(mut) > 1 {
@@ -573,9 +580,13 @@ func joinCommitBodyBlocks(blocks ...string) string {
 }
 
 func descriptorWithoutValue(op Operation) string {
-	if op.Value == "" {
+	if !operationHasValue(op) {
 		return op.Descriptor
 	}
-	pv := valuePreview(op.Value, 80)
+	pv := valuePreview(op.Value, op.ValueMode, 80)
 	return strings.TrimSpace(strings.TrimSuffix(op.Descriptor, pv))
+}
+
+func operationHasValue(op Operation) bool {
+	return (op.Kind == "structured" && op.Verb != "delete") || op.Value != ""
 }

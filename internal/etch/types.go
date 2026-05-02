@@ -96,10 +96,18 @@ type Operation struct {
 	RepoPath   string       `json:"-"`
 	Target     PlanTarget   `json:"target,omitempty"`
 	Value      string       `json:"-"`
+	ValueMode  ValueMode    `json:"value_type,omitempty"`
 	ValueHash  string       `json:"value_sha256,omitempty"`
 	Noop       bool         `json:"-"`
 	Descriptor string       `json:"-"`
 }
+
+type ValueMode string
+
+const (
+	ValueModeString ValueMode = "string"
+	ValueModeJSON   ValueMode = "json"
+)
 
 type PlanTarget struct {
 	Path     string `json:"path,omitempty"`

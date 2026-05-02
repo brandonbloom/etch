@@ -19,11 +19,11 @@ type VerbInfo struct {
 
 func verbCatalog() []VerbInfo {
 	return []VerbInfo{
-		{"set", "set <path> <selector> <value>", "Set a JSON/YAML/frontmatter value.", ClassIdempotent, true},
+		{"set", "set <path> <selector> <value>|<selector=value>...", "Set JSON/YAML/frontmatter values.", ClassIdempotent, true},
 		{"delete", "delete <path> [<selector>]", "Delete a file or selected JSON/YAML/frontmatter value.", ClassIdempotent, true},
-		{"append", "append <path> <selector> <value>", "Append a value to an array.", ClassNonIdempotent, true},
-		{"add", "add <path> <selector> <value>", "Ensure an array contains a value.", ClassIdempotent, true},
-		{"remove", "remove <path> <selector> <value>", "Ensure an array does not contain a value.", ClassIdempotent, true},
+		{"append", "append <path> <selector> <value|--json value>", "Append a value to an array.", ClassNonIdempotent, true},
+		{"add", "add <path> <selector> <value|--json value>", "Ensure an array contains a value.", ClassIdempotent, true},
+		{"remove", "remove <path> <selector> <value|--json value>", "Ensure an array does not contain a value.", ClassIdempotent, true},
 		{"replace-section", "replace-section <path> <heading> <content>", "Replace the body under one Markdown heading.", ClassIdempotent, true},
 		{"create", "create <path> [<content>]", "Create a new file; omitted content uses an extension-aware default.", ClassIdempotent, true},
 		{"move", "move <src> <dst>", "Move a file path.", ClassIdempotent, true},
@@ -31,21 +31,21 @@ func verbCatalog() []VerbInfo {
 		{"exists", "exists <path>", "Guard that a path exists in the admitted input view.", ClassGuard, true},
 		{"missing", "missing <path>", "Guard that a path is missing in the admitted input view.", ClassGuard, true},
 		{"contains", "contains <path> <literal>", "Guard that admitted file bytes contain a literal.", ClassGuard, true},
-		{"json set", "json set <path> <selector> <value>", "Set a JSON value.", ClassIdempotent, true},
+		{"json set", "json set <path> <selector> <value>|<selector=value>...", "Set JSON values.", ClassIdempotent, true},
 		{"json delete", "json delete <path> <selector>", "Delete a JSON value.", ClassIdempotent, true},
-		{"json append", "json append <path> <selector> <value>", "Append to a JSON array.", ClassNonIdempotent, true},
-		{"json add", "json add <path> <selector> <value>", "Ensure a JSON array contains a value.", ClassIdempotent, true},
-		{"json remove", "json remove <path> <selector> <value>", "Remove matching values from a JSON array.", ClassIdempotent, true},
-		{"yaml set", "yaml set <path> <selector> <value>", "Set a YAML value.", ClassIdempotent, true},
+		{"json append", "json append <path> <selector> <value|--json value>", "Append to a JSON array.", ClassNonIdempotent, true},
+		{"json add", "json add <path> <selector> <value|--json value>", "Ensure a JSON array contains a value.", ClassIdempotent, true},
+		{"json remove", "json remove <path> <selector> <value|--json value>", "Remove matching values from a JSON array.", ClassIdempotent, true},
+		{"yaml set", "yaml set <path> <selector> <value>|<selector=value>...", "Set YAML values.", ClassIdempotent, true},
 		{"yaml delete", "yaml delete <path> <selector>", "Delete a YAML value.", ClassIdempotent, true},
-		{"yaml append", "yaml append <path> <selector> <value>", "Append to a YAML sequence.", ClassNonIdempotent, true},
-		{"yaml add", "yaml add <path> <selector> <value>", "Ensure a YAML sequence contains a value.", ClassIdempotent, true},
-		{"yaml remove", "yaml remove <path> <selector> <value>", "Remove matching values from a YAML sequence.", ClassIdempotent, true},
-		{"frontmatter set", "frontmatter set <path> <selector> <value>", "Set Markdown YAML frontmatter.", ClassIdempotent, true},
+		{"yaml append", "yaml append <path> <selector> <value|--json value>", "Append to a YAML sequence.", ClassNonIdempotent, true},
+		{"yaml add", "yaml add <path> <selector> <value|--json value>", "Ensure a YAML sequence contains a value.", ClassIdempotent, true},
+		{"yaml remove", "yaml remove <path> <selector> <value|--json value>", "Remove matching values from a YAML sequence.", ClassIdempotent, true},
+		{"frontmatter set", "frontmatter set <path> <selector> <value>|<selector=value>...", "Set Markdown YAML frontmatter.", ClassIdempotent, true},
 		{"frontmatter delete", "frontmatter delete <path> <selector>", "Delete Markdown YAML frontmatter.", ClassIdempotent, true},
-		{"frontmatter append", "frontmatter append <path> <selector> <value>", "Append to a frontmatter sequence.", ClassNonIdempotent, true},
-		{"frontmatter add", "frontmatter add <path> <selector> <value>", "Ensure a frontmatter sequence contains a value.", ClassIdempotent, true},
-		{"frontmatter remove", "frontmatter remove <path> <selector> <value>", "Remove matching values from a frontmatter sequence.", ClassIdempotent, true},
+		{"frontmatter append", "frontmatter append <path> <selector> <value|--json value>", "Append to a frontmatter sequence.", ClassNonIdempotent, true},
+		{"frontmatter add", "frontmatter add <path> <selector> <value|--json value>", "Ensure a frontmatter sequence contains a value.", ClassIdempotent, true},
+		{"frontmatter remove", "frontmatter remove <path> <selector> <value|--json value>", "Remove matching values from a frontmatter sequence.", ClassIdempotent, true},
 		{"md replace-section", "md replace-section <path> <heading> <content>", "Replace the body under one Markdown heading.", ClassIdempotent, true},
 		{"table set", "table set <path> [<scope> [<table>]] <range> <value>", "Set CSV or Markdown table cells.", ClassIdempotent, true},
 		{"table row append", "table row append <path> [<scope> [<table>]] <row-json>", "Append a CSV or Markdown table row.", ClassNonIdempotent, true},
@@ -71,26 +71,26 @@ func verbCatalog() []VerbInfo {
 	}
 }
 
-func DecodeOperation(stmt Statement) (Operation, error) {
+func DecodeOperations(stmt Statement) ([]Operation, error) {
 	t := stmt.Tokens
 	if len(t) == 0 {
-		return Operation{}, usagef("empty statement")
+		return nil, usagef("empty statement")
 	}
 	op := Operation{Raw: append([]string(nil), t...), Loc: stmt.Loc}
 	switch t[0] {
 	case "exists", "missing":
 		if len(t) != 2 {
-			return op, usagef("usage: etch %s <path>", t[0])
+			return nil, usagef("usage: etch %s <path>", t[0])
 		}
 		op.Verb, op.Kind, op.Class, op.Path = t[0], "guard", ClassGuard, t[1]
 	case "contains":
 		if len(t) != 3 {
-			return op, usagef("usage: etch contains <path> <literal>")
+			return nil, usagef("usage: etch contains <path> <literal>")
 		}
 		op.Verb, op.Kind, op.Class, op.Path, op.Value = "contains", "guard", ClassGuard, t[1], t[2]
 	case "create":
 		if len(t) != 2 && len(t) != 3 {
-			return op, usagef("usage: etch create <path> [<content>]")
+			return nil, usagef("usage: etch create <path> [<content>]")
 		}
 		value := defaultCreateContent(t[1])
 		if len(t) == 3 {
@@ -100,7 +100,7 @@ func DecodeOperation(stmt Statement) (Operation, error) {
 		op.Target = PlanTarget{Path: t[1]}
 	case "copy", "move":
 		if len(t) != 3 {
-			return op, usagef("usage: etch %s <src> <dst>", t[0])
+			return nil, usagef("usage: etch %s <src> <dst>", t[0])
 		}
 		op.Verb, op.Kind, op.Class, op.Path, op.Value = t[0], "file", ClassIdempotent, t[1], t[2]
 		op.Target = PlanTarget{Path: t[1]}
@@ -109,64 +109,177 @@ func DecodeOperation(stmt Statement) (Operation, error) {
 			op.Verb, op.Kind, op.Class, op.Path = "delete", "file", ClassIdempotent, t[1]
 			op.Target = PlanTarget{Path: t[1]}
 		} else if len(t) == 3 {
-			return decodeStructured(op, "infer", "delete", t[1], t[2], "")
+			return oneOperation(decodeStructured(op, "infer", "delete", t[1], t[2], "", ""))
 		} else {
-			return op, usagef("usage: etch delete <path> [<selector>]")
+			return nil, usagef("usage: etch delete <path> [<selector>]")
 		}
 	case "set", "append", "add", "remove":
-		if len(t) != 4 {
-			return op, usagef("usage: etch %s <path> <selector> <value>", t[0])
+		if t[0] == "set" {
+			if ops, ok, err := decodeAssignmentSet(op, "infer", t[1:]); err != nil || ok {
+				return ops, err
+			}
+		} else if len(t) >= 3 {
+			if _, _, _, ok, _ := splitAssignmentItem(t[2]); ok {
+				return nil, usagef("assignment items are only accepted by set")
+			}
 		}
-		return decodeStructured(op, "infer", t[0], t[1], t[2], t[3])
+		path, selector, value, mode, err := parseStructuredValueArgs(t[0], t[1:])
+		if err != nil {
+			return nil, err
+		}
+		return oneOperation(decodeStructured(op, "infer", t[0], path, selector, value, mode))
 	case "replace-section":
 		if len(t) != 4 {
-			return op, usagef("usage: etch replace-section <path> <heading> <content>")
+			return nil, usagef("usage: etch replace-section <path> <heading> <content>")
 		}
 		op.Verb, op.Kind, op.Class, op.Path, op.Value = "replace-section", "md-section", ClassIdempotent, t[1], t[3]
 		op.Target = PlanTarget{Path: t[1], Part: "body", Section: t[2]}
 	case "json", "yaml", "frontmatter":
 		if len(t) < 4 {
-			return op, usagef("usage: etch %s <verb> <path> <selector> [<value>]", t[0])
+			return nil, usagef("usage: etch %s <verb> <path> <selector> [<value>]", t[0])
 		}
 		verb := t[1]
 		needValue := verb == "set" || verb == "append" || verb == "add" || verb == "remove"
 		if verb != "delete" && !needValue {
-			return op, usagef("unknown %s verb %s", t[0], verb)
+			return nil, usagef("unknown %s verb %s", t[0], verb)
 		}
-		want := 4
-		if needValue {
-			want = 5
+		if verb == "set" {
+			if ops, ok, err := decodeAssignmentSet(op, t[0], t[2:]); err != nil || ok {
+				return ops, err
+			}
+		} else if needValue && len(t) >= 4 {
+			if _, _, _, ok, _ := splitAssignmentItem(t[3]); ok {
+				return nil, usagef("assignment items are only accepted by set")
+			}
 		}
-		if len(t) != want {
-			return op, usagef("usage: etch %s %s <path> <selector>%s", t[0], verb, valueUsage(needValue))
+		if !needValue {
+			if len(t) != 4 {
+				return nil, usagef("usage: etch %s %s <path> <selector>", t[0], verb)
+			}
+			return oneOperation(decodeStructured(op, t[0], verb, t[2], t[3], "", ""))
 		}
-		value := ""
-		if needValue {
-			value = t[4]
+		path, selector, value, mode, err := parseStructuredValueArgs(t[0]+" "+verb, t[2:])
+		if err != nil {
+			return nil, err
 		}
-		return decodeStructured(op, t[0], verb, t[2], t[3], value)
+		return oneOperation(decodeStructured(op, t[0], verb, path, selector, value, mode))
 	case "md":
-		return decodeMD(op, t)
+		return oneOperation(decodeMD(op, t))
 	case "csv":
-		return decodeCSV(op, t)
+		return oneOperation(decodeCSV(op, t))
 	case "table":
-		return decodeTable(op, "infer", t)
+		return oneOperation(decodeTable(op, "infer", t))
 	default:
-		return op, usagef("unknown command %s", t[0])
+		return nil, usagef("unknown command %s", t[0])
 	}
 	fillDescriptor(&op)
-	return op, nil
+	return []Operation{op}, nil
 }
 
-func valueUsage(need bool) string {
-	if need {
-		return " <value>"
+func DecodeOperation(stmt Statement) (Operation, error) {
+	ops, err := DecodeOperations(stmt)
+	if err != nil {
+		return Operation{}, err
 	}
-	return ""
+	if len(ops) != 1 {
+		return Operation{}, usagef("statement expands to multiple operations")
+	}
+	return ops[0], nil
 }
 
-func decodeStructured(op Operation, format, verb, path, selector, value string) (Operation, error) {
-	op.Verb, op.Kind, op.Path, op.Value = verb, "structured", path, value
+func oneOperation(op Operation, err error) ([]Operation, error) {
+	if err != nil {
+		return nil, err
+	}
+	return []Operation{op}, nil
+}
+
+func parseStructuredValueArgs(command string, args []string) (path, selector, value string, mode ValueMode, err error) {
+	switch {
+	case len(args) == 3:
+		if args[2] == "--json" {
+			return "", "", "", "", usagef("--json requires a value")
+		}
+		return args[0], args[1], args[2], ValueModeString, nil
+	case len(args) == 4 && args[2] == "--json":
+		return args[0], args[1], args[3], ValueModeJSON, nil
+	default:
+		return "", "", "", "", usagef("usage: etch %s <path> <selector> <value>", command)
+	}
+}
+
+func decodeAssignmentSet(base Operation, format string, args []string) ([]Operation, bool, error) {
+	if len(args) < 2 {
+		return nil, false, nil
+	}
+	path := args[0]
+	items := args[1:]
+	ops := make([]Operation, 0, len(items))
+	seen := map[string]bool{}
+	for i, item := range items {
+		selector, value, mode, ok, err := splitAssignmentItem(item)
+		if err != nil {
+			return nil, true, err
+		}
+		if !ok {
+			if i == 0 {
+				return nil, false, nil
+			}
+			return nil, true, usagef("cannot mix assignment items with positional set operands")
+		}
+		op := base
+		decoded, err := decodeStructured(op, format, "set", path, selector, value, mode)
+		if err != nil {
+			return nil, true, err
+		}
+		key := decoded.Target.Part + "\x00" + decoded.Target.Selector
+		if seen[key] {
+			return nil, true, usagef("duplicate assignment target %s", decoded.Target.Selector)
+		}
+		seen[key] = true
+		ops = append(ops, decoded)
+	}
+	return ops, true, nil
+}
+
+func splitAssignmentItem(item string) (selector, value string, mode ValueMode, ok bool, err error) {
+	var quote byte
+	escape := false
+	for i := 0; i < len(item); i++ {
+		c := item[i]
+		if quote != 0 {
+			if escape {
+				escape = false
+				continue
+			}
+			if c == '\\' {
+				escape = true
+				continue
+			}
+			if c == quote {
+				quote = 0
+			}
+			continue
+		}
+		if c == '"' || c == '\'' {
+			quote = c
+			continue
+		}
+		if c == ':' && i+1 < len(item) && item[i+1] == '=' {
+			return item[:i], item[i+2:], ValueModeJSON, true, nil
+		}
+		if c == '=' {
+			return item[:i], item[i+1:], ValueModeString, true, nil
+		}
+	}
+	if quote != 0 {
+		return "", "", "", false, usagef("unterminated quoted selector in assignment item")
+	}
+	return "", "", "", false, nil
+}
+
+func decodeStructured(op Operation, format, verb, path, selector, value string, mode ValueMode) (Operation, error) {
+	op.Verb, op.Kind, op.Path, op.Value, op.ValueMode = verb, "structured", path, value, mode
 	if verb == "append" {
 		op.Class = ClassNonIdempotent
 	} else {
@@ -486,18 +599,20 @@ func fillDescriptor(op *Operation) {
 	if op.Target.Column != "" {
 		parts = append(parts, op.Target.Column)
 	}
-	if op.Value != "" && op.Kind != "file" {
-		parts = append(parts, valuePreview(op.Value, 80))
+	if op.Kind == "structured" && op.Verb != "delete" {
+		parts = append(parts, valuePreview(op.Value, op.ValueMode, 80))
+	} else if op.Value != "" && op.Kind != "file" {
+		parts = append(parts, valuePreview(op.Value, op.ValueMode, 80))
 	} else if op.Kind == "file" && (op.Verb == "create" || op.Verb == "copy" || op.Verb == "move") {
 		if op.Verb == "create" {
-			parts = append(parts, valuePreview(op.Value, 80))
+			parts = append(parts, valuePreview(op.Value, op.ValueMode, 80))
 		} else {
 			parts = append(parts, op.Value)
 		}
 	}
 	op.Descriptor = strings.Join(parts, " ")
-	if op.Value != "" {
-		op.ValueHash = shaHex([]byte(op.Value))
+	if (op.Kind == "structured" && op.Verb != "delete") || op.Value != "" {
+		op.ValueHash = valueHash(*op)
 	}
 }
 
@@ -619,14 +734,15 @@ Accepted:
 Rejected: wildcards, recursive descent, slices, filters, unions, functions, negative indexes.
 `
 
-const valuesHelp = `Values are parsed as strict JSON when they are valid JSON literals; otherwise they are strings.
+const valuesHelp = `Structured values are strings by default. Use --json for a strict JSON value.
 
 Examples:
-  true
-  12
-  "literal string"
-  ["draft","intro"]
-  {"status":"done"}
+  etch set state.json status complete          # string "complete"
+  etch set state.json count --json 12          # number 12
+  etch append state.json events --json '{"kind":"prompt"}'
+  etch set state.json status=complete count:=12
+
+Assignment items are accepted by set only. NAME=value writes a string; NAME:=json writes JSON.
 `
 
 const fieldsHelp = `Markdown fields: use frontmatter for note-global metadata; use inline fields for body-local metadata.

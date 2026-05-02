@@ -57,11 +57,54 @@ func TestDecodeDirectAndScriptEquivalence(t *testing.T) {
 	}
 	direct.Loc = SourceLoc{}
 	fromScript.Loc = SourceLoc{}
-	if direct.Verb != fromScript.Verb || direct.Kind != fromScript.Kind || direct.Target != fromScript.Target || direct.Value != fromScript.Value {
+	if direct.Verb != fromScript.Verb || direct.Kind != fromScript.Kind || direct.Target != fromScript.Target || direct.Value != fromScript.Value || direct.ValueMode != fromScript.ValueMode {
 		t.Fatalf("direct %#v != script %#v", direct, fromScript)
 	}
 	if direct.Target.Part != "frontmatter" || direct.Target.Selector != "$.status" {
 		t.Fatalf("target = %#v", direct.Target)
+	}
+}
+
+func TestDecodeAssignmentSetExpandsOperations(t *testing.T) {
+	ops, err := DecodeOperations(Statement{Tokens: []string{"json", "set", "state.json", "a=1", "b:=2", `$["a=b"]=value`}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(ops) != 3 {
+		t.Fatalf("ops = %#v", ops)
+	}
+	wants := []struct {
+		selector string
+		value    string
+		mode     ValueMode
+	}{
+		{"$.a", "1", ValueModeString},
+		{"$.b", "2", ValueModeJSON},
+		{`$["a=b"]`, "value", ValueModeString},
+	}
+	for i, want := range wants {
+		if ops[i].Target.Selector != want.selector || ops[i].Value != want.value || ops[i].ValueMode != want.mode {
+			t.Fatalf("op %d = %#v, want selector=%s value=%s mode=%s", i, ops[i], want.selector, want.value, want.mode)
+		}
+	}
+}
+
+func TestDecodeAssignmentSetRejectsDuplicateTargets(t *testing.T) {
+	if _, err := DecodeOperations(Statement{Tokens: []string{"set", "state.json", "a=1", "$.a=2"}}); err == nil {
+		t.Fatal("duplicate assignment targets succeeded")
+	}
+}
+
+func TestDecodeAssignmentItemsAreSetOnlyWithoutBlockingLiteralValues(t *testing.T) {
+	op, err := DecodeOperation(Statement{Tokens: []string{"json", "append", "state.json", "items", "a=b"}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if op.Value != "a=b" || op.ValueMode != ValueModeString {
+		t.Fatalf("append op = %#v", op)
+	}
+	if _, err := DecodeOperations(Statement{Tokens: []string{"json", "append", "state.json", "items:=1"}}); err == nil {
+		t.Fatal("append accepted assignment item")
 	}
 }
 
@@ -164,7 +207,7 @@ func TestIntrospectionDoesNotRequireGit(t *testing.T) {
 func TestRunWithoutScriptPathParsesStdin(t *testing.T) {
 	oldReadStdin := readStdin
 	readStdin = func() ([]byte, error) {
-		return []byte("set a.json x 1\n"), nil
+		return []byte("set a.json x --json 1\n"), nil
 	}
 	t.Cleanup(func() { readStdin = oldReadStdin })
 

@@ -159,14 +159,14 @@ func executeStatements(opts GlobalOptions, stmts []Statement, stdout, stderr io.
 		if len(stmt.Tokens) == 0 {
 			continue
 		}
-		op, err := DecodeOperation(stmt)
+		decoded, err := DecodeOperations(stmt)
 		if err != nil {
 			if stmt.Loc.Name != "" {
 				return exitUsage, errWithCode{code: exitUsage, err: fmt.Errorf("%s%s", stmt.Loc.Prefix(), err)}
 			}
 			return exitUsage, err
 		}
-		ops = append(ops, op)
+		ops = append(ops, decoded...)
 	}
 	if len(ops) == 0 {
 		fmt.Fprintln(stderr, "etch: nothing to do")

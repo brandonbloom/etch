@@ -249,7 +249,7 @@ func TestE2EJSONSetCreatesMissingFile(t *testing.T) {
 		t.Fatalf("runCLI code=%d err=%v stderr=%s", code, err, errb.String())
 	}
 	headBytes := testGit(t, dir, "show", "HEAD:a.json")
-	if !strings.Contains(headBytes, `"x": 1`) {
+	if !strings.Contains(headBytes, `"x": "1"`) {
 		t.Fatalf("HEAD a.json = %s", headBytes)
 	}
 	wt, readErr := os.ReadFile(filepath.Join(dir, "a.json"))
@@ -267,11 +267,11 @@ func TestE2EJSONAppendAndAddCreateMissingFile(t *testing.T) {
 	commitAll(t, dir, "initial")
 
 	var out, errb bytes.Buffer
-	code, err := runCLIAt(dir, []string{"append", "a.json", "items", "1"}, &out, &errb)
+	code, err := runCLIAt(dir, []string{"append", "a.json", "items", "--json", "1"}, &out, &errb)
 	if err != nil || code != exitOK {
 		t.Fatalf("append code=%d err=%v stderr=%s", code, err, errb.String())
 	}
-	code, err = runCLIAt(dir, []string{"add", "b.json", "items", "1"}, &out, &errb)
+	code, err = runCLIAt(dir, []string{"add", "b.json", "items", "--json", "1"}, &out, &errb)
 	if err != nil || code != exitOK {
 		t.Fatalf("add code=%d err=%v stderr=%s", code, err, errb.String())
 	}
@@ -279,6 +279,64 @@ func TestE2EJSONAppendAndAddCreateMissingFile(t *testing.T) {
 		headBytes := testGit(t, dir, "show", "HEAD:"+path)
 		if !strings.Contains(headBytes, `"items": [`) || !strings.Contains(headBytes, "1") {
 			t.Fatalf("HEAD %s = %s", path, headBytes)
+		}
+	}
+}
+
+func TestE2EValueSyntaxAndAssignmentItems(t *testing.T) {
+	dir := initRepo(t)
+	writeFile(t, dir, "state.json", `{"events":[]}`+"\n")
+	writeFile(t, dir, "config.yaml", "{}\n")
+	commitAll(t, dir, "initial")
+
+	runOK(t, dir, "set", "state.json", "positional", "12")
+	runOK(t, dir, "set", "state.json", "typed", "--json", "12")
+	runOK(t, dir, "append", "state.json", "events", "--json", `{"kind":"prompt"}`)
+	runOK(t, dir, "set", "state.json", "literal=12", "multi:=12", "empty=", "nil:=null", `$["a=b"]=value`)
+	runOK(t, dir, "set", "config.yaml", "enabled=true", "native:=true")
+
+	jsonOut := testGit(t, dir, "show", "HEAD:state.json")
+	for _, want := range []string{
+		`"positional":"12"`,
+		`"typed":12`,
+		`"kind":"prompt"`,
+		`"literal":"12"`,
+		`"multi":12`,
+		`"empty":""`,
+		`"nil":null`,
+		`"a=b":"value"`,
+	} {
+		if !strings.Contains(jsonOut, want) {
+			t.Fatalf("JSON output missing %q:\n%s", want, jsonOut)
+		}
+	}
+
+	yamlOut := testGit(t, dir, "show", "HEAD:config.yaml")
+	for _, want := range []string{`enabled: "true"`, "native: true"} {
+		if !strings.Contains(yamlOut, want) {
+			t.Fatalf("YAML output missing %q:\n%s", want, yamlOut)
+		}
+	}
+}
+
+func TestE2EAssignmentItemErrorsDoNotCommit(t *testing.T) {
+	dir := initRepo(t)
+	writeFile(t, dir, "state.json", `{"events":[]}`+"\n")
+	head := commitAll(t, dir, "initial")
+
+	cases := [][]string{
+		{"set", "state.json", "a=1", "$.a=2"},
+		{"set", "state.json", "a", "1", "b=2"},
+		{"append", "state.json", "events:={\"kind\":\"prompt\"}"},
+	}
+	for _, args := range cases {
+		var out, errb bytes.Buffer
+		code, err := runCLIAt(dir, args, &out, &errb)
+		if err == nil || code == exitOK {
+			t.Fatalf("etch %v unexpectedly succeeded stdout=%s stderr=%s", args, out.String(), errb.String())
+		}
+		if got := stringsTrim(testGit(t, dir, "rev-parse", "HEAD")); got != head {
+			t.Fatalf("failed %v moved HEAD to %s", args, got)
 		}
 	}
 }
@@ -426,7 +484,7 @@ func TestE2ERunDefaultsToStdin(t *testing.T) {
 
 	oldReadStdin := readStdin
 	readStdin = func() ([]byte, error) {
-		return []byte("set stdin.json x 1\nset stdin.json y 2\n"), nil
+		return []byte("set stdin.json x 1\nset stdin.json y --json 2\n"), nil
 	}
 	t.Cleanup(func() { readStdin = oldReadStdin })
 
@@ -436,7 +494,7 @@ func TestE2ERunDefaultsToStdin(t *testing.T) {
 		t.Fatalf("runCLI code=%d err=%v stderr=%s", code, err, errb.String())
 	}
 	headBytes := testGit(t, dir, "show", "HEAD:stdin.json")
-	if !strings.Contains(headBytes, `"x": 1`) || !strings.Contains(headBytes, `"y": 2`) {
+	if !strings.Contains(headBytes, `"x": "1"`) || !strings.Contains(headBytes, `"y": 2`) {
 		t.Fatalf("HEAD stdin.json = %s", headBytes)
 	}
 }

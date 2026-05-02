@@ -6,6 +6,8 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+
+	"github.com/brandonbloom/etch/internal/jsonx"
 )
 
 func runOK(t *testing.T, dir string, args ...string) {
@@ -22,9 +24,9 @@ func TestJSONVerbs(t *testing.T) {
 	writeFile(t, dir, "state.json", `{"tags":["a"],"remove":["x","y","x"]}`+"\n")
 	commitAll(t, dir, "initial")
 
-	runOK(t, dir, "append", "state.json", "tags", `"b"`)
-	runOK(t, dir, "add", "state.json", "tags", `"b"`)
-	runOK(t, dir, "remove", "state.json", "remove", `"x"`)
+	runOK(t, dir, "append", "state.json", "tags", "--json", `"b"`)
+	runOK(t, dir, "add", "state.json", "tags", "--json", `"b"`)
+	runOK(t, dir, "remove", "state.json", "remove", "--json", `"x"`)
 	runOK(t, dir, "delete", "state.json", "missing")
 	got := testGit(t, dir, "show", "HEAD:state.json")
 	if strings.Count(got, `"b"`) != 1 || strings.Contains(got, `"x"`) {
@@ -37,13 +39,13 @@ func TestJSONAddAndRemoveDistinguishLargeNumbers(t *testing.T) {
 	writeFile(t, dir, "state.json", `{"ids":[9007199254740992]}`+"\n")
 	commitAll(t, dir, "initial")
 
-	runOK(t, dir, "add", "state.json", "ids", "9007199254740993")
+	runOK(t, dir, "add", "state.json", "ids", "--json", "9007199254740993")
 	got := testGit(t, dir, "show", "HEAD:state.json")
 	if !strings.Contains(got, "9007199254740992") || !strings.Contains(got, "9007199254740993") {
 		t.Fatalf("JSON add result:\n%s", got)
 	}
 
-	runOK(t, dir, "remove", "state.json", "ids", "9007199254740993")
+	runOK(t, dir, "remove", "state.json", "ids", "--json", "9007199254740993")
 	got = testGit(t, dir, "show", "HEAD:state.json")
 	if !strings.Contains(got, "9007199254740992") || strings.Contains(got, "9007199254740993") {
 		t.Fatalf("JSON remove result:\n%s", got)
@@ -84,7 +86,7 @@ func TestJSONRemoveAdjacentArrayElements(t *testing.T) {
 	}
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
-			got, changed, err := evalJSON("items", "remove", `"x"`, []byte(tc.before))
+			got, changed, err := evalJSON("items", "remove", `"x"`, ValueModeJSON, []byte(tc.before))
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -101,7 +103,7 @@ func TestJSONRemoveAdjacentArrayElements(t *testing.T) {
 func TestJSONSetPreservesSurroundingSource(t *testing.T) {
 	before := []byte("{\n  \"z\": 0,\n  \"status\" : \"open\",\n  \"nested\": {\"keep\":true}\n}\n")
 
-	got, changed, err := evalJSON("status", "set", "complete", before)
+	got, changed, err := evalJSON("status", "set", "complete", ValueModeString, before)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -117,7 +119,7 @@ func TestJSONSetPreservesSurroundingSource(t *testing.T) {
 func TestJSONSetTargetsFirstDuplicateMember(t *testing.T) {
 	before := []byte(`{"status":"first","status":"second"}` + "\n")
 
-	got, changed, err := evalJSON("status", "set", "complete", before)
+	got, changed, err := evalJSON("status", "set", "complete", ValueModeString, before)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -133,7 +135,7 @@ func TestJSONSetTargetsFirstDuplicateMember(t *testing.T) {
 func TestJSONSetMissingMemberUsesExistingSeparatorStyle(t *testing.T) {
 	before := []byte("{\n  \"z\" : 0\n}\n")
 
-	got, changed, err := evalJSON("status", "set", "complete", before)
+	got, changed, err := evalJSON("status", "set", "complete", ValueModeString, before)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -149,7 +151,7 @@ func TestJSONSetMissingMemberUsesExistingSeparatorStyle(t *testing.T) {
 func TestJSONDeeplyNestedEdits(t *testing.T) {
 	before := []byte(`{"outer":{"items":[{"name":"a","tags":["x","y"]},{"name":"b","tags":["z"]}],"keep":true}}` + "\n")
 
-	got, changed, err := evalJSON("outer.items[1].tags[0]", "set", "done", before)
+	got, changed, err := evalJSON("outer.items[1].tags[0]", "set", "done", ValueModeString, before)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -161,7 +163,7 @@ func TestJSONDeeplyNestedEdits(t *testing.T) {
 		t.Fatalf("JSON output = %s, want %s", got, want)
 	}
 
-	got, changed, err = evalJSON("outer.items[0].tags", "remove", `"y"`, got)
+	got, changed, err = evalJSON("outer.items[0].tags", "remove", `"y"`, ValueModeJSON, got)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -177,7 +179,7 @@ func TestJSONDeeplyNestedEdits(t *testing.T) {
 func TestJSONDeleteLastArrayElementWhitespace(t *testing.T) {
 	before := []byte("{\n  \"items\": [\n    \"a\",\n    \"b\"\n  ]\n}\n")
 
-	got, changed, err := evalJSON("items[1]", "delete", "", before)
+	got, changed, err := evalJSON("items[1]", "delete", "", "", before)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -196,9 +198,9 @@ func TestYAMLAndFrontmatterVerbs(t *testing.T) {
 	writeFile(t, dir, "note.md", "# Note\n")
 	commitAll(t, dir, "initial")
 
-	runOK(t, dir, "yaml", "append", "config.yaml", "tags", `"b"`)
+	runOK(t, dir, "yaml", "append", "config.yaml", "tags", "--json", `"b"`)
 	runOK(t, dir, "set", "note.md", "frontmatter.status", "draft")
-	runOK(t, dir, "add", "note.md", "frontmatter.tags", `"x"`)
+	runOK(t, dir, "add", "note.md", "frontmatter.tags", "--json", `"x"`)
 	yamlOut := testGit(t, dir, "show", "HEAD:config.yaml")
 	if !strings.Contains(yamlOut, "b") {
 		t.Fatalf("YAML output:\n%s", yamlOut)
@@ -214,9 +216,9 @@ func TestYAMLAndFrontmatterVerbsCreateMissingFiles(t *testing.T) {
 	writeFile(t, dir, "README.md", "# hi\n")
 	commitAll(t, dir, "initial")
 
-	runOK(t, dir, "append", "config.yaml", "tags", `"b"`)
+	runOK(t, dir, "append", "config.yaml", "tags", "--json", `"b"`)
 	runOK(t, dir, "set", "note.md", "frontmatter.status", "draft")
-	runOK(t, dir, "add", "other.md", "frontmatter.tags", `"x"`)
+	runOK(t, dir, "add", "other.md", "frontmatter.tags", "--json", `"x"`)
 
 	yamlOut := testGit(t, dir, "show", "HEAD:config.yaml")
 	if !strings.Contains(yamlOut, "tags:") || !strings.Contains(yamlOut, "- b") {
@@ -238,9 +240,9 @@ func TestYAMLAndFrontmatterPreserveLargeNumbers(t *testing.T) {
 	writeFile(t, dir, "note.md", "# Note\n")
 	commitAll(t, dir, "initial")
 
-	runOK(t, dir, "add", "config.yaml", "ids", "9007199254740993")
-	runOK(t, dir, "set", "config.yaml", "id", "9007199254740993")
-	runOK(t, dir, "set", "note.md", "frontmatter.id", "9007199254740993")
+	runOK(t, dir, "add", "config.yaml", "ids", "--json", "9007199254740993")
+	runOK(t, dir, "set", "config.yaml", "id", "--json", "9007199254740993")
+	runOK(t, dir, "set", "note.md", "frontmatter.id", "--json", "9007199254740993")
 
 	yamlOut := testGit(t, dir, "show", "HEAD:config.yaml")
 	for _, want := range []string{"9007199254740992", "9007199254740993", "id: 9007199254740993"} {
@@ -372,20 +374,20 @@ func TestYAMLVerbMatrixPreservesRepresentation(t *testing.T) {
 		{
 			name:   "append array",
 			before: "items:\n  # keep\n  - a\n",
-			args:   []string{"append", "config.yaml", "items", `"b"`},
+			args:   []string{"append", "config.yaml", "items", "--json", `"b"`},
 			want:   []string{"items:", "# keep", "- a", "- b"},
 		},
 		{
 			name:      "add semantic object no-op",
 			before:    "items:\n  - b: 2\n    a: 1\n",
-			args:      []string{"add", "config.yaml", "items", `{"a":1,"b":2}`},
+			args:      []string{"add", "config.yaml", "items", "--json", `{"a":1,"b":2}`},
 			want:      []string{"items:", "b: 2", "a: 1"},
 			unchanged: true,
 		},
 		{
 			name:   "remove all semantic matches",
 			before: "items:\n  - x\n  - y\n  - x\n",
-			args:   []string{"remove", "config.yaml", "items", `"x"`},
+			args:   []string{"remove", "config.yaml", "items", "--json", `"x"`},
 			want:   []string{"items:", "- y"},
 			absent: []string{"- x"},
 		},
@@ -412,39 +414,39 @@ func TestYAMLVerbMatrixPreservesRepresentation(t *testing.T) {
 		{
 			name:   "append nested array selected by index",
 			before: "matrix:\n  - - a\n",
-			args:   []string{"append", "config.yaml", "matrix[0]", `"b"`},
+			args:   []string{"append", "config.yaml", "matrix[0]", "--json", `"b"`},
 			want:   []string{"matrix:", "- - a", "  - b"},
 		},
 		{
 			name:   "remove nested array selected by index",
 			before: "matrix:\n  - - x\n    - y\n    - x\n",
-			args:   []string{"remove", "config.yaml", "matrix[0]", `"x"`},
+			args:   []string{"remove", "config.yaml", "matrix[0]", "--json", `"x"`},
 			want:   []string{"matrix:", "- - y"},
 			absent: []string{"- x"},
 		},
 		{
 			name:   "create nested containers",
 			before: "# top\n",
-			args:   []string{"set", "config.yaml", "parent.child.value", "1"},
+			args:   []string{"set", "config.yaml", "parent.child.value", "--json", "1"},
 			want:   []string{"# top", "parent:", "  child:", "    value: 1"},
 		},
 		{
 			name:   "root set",
 			before: "old: value\n",
-			args:   []string{"yaml", "set", "config.yaml", "$", `{"next":true}`},
+			args:   []string{"yaml", "set", "config.yaml", "$", "--json", `{"next":true}`},
 			want:   []string{"next: true"},
 			absent: []string{"old: value"},
 		},
 		{
 			name:   "root append",
 			before: "- a\n",
-			args:   []string{"yaml", "append", "config.yaml", "$", `"b"`},
+			args:   []string{"yaml", "append", "config.yaml", "$", "--json", `"b"`},
 			want:   []string{"- a", "- b"},
 		},
 		{
 			name:   "flow style replacement",
 			before: "flow: [old]\n",
-			args:   []string{"set", "config.yaml", "flow[0]", `{"a":"one"}`},
+			args:   []string{"set", "config.yaml", "flow[0]", "--json", `{"a":"one"}`},
 			want:   []string{"flow: [{a: one}]"},
 		},
 		{
@@ -470,7 +472,7 @@ func TestYAMLVerbMatrixPreservesRepresentation(t *testing.T) {
 		{
 			name:   "append tagged sequence",
 			before: "items: !custom\n  - a\n",
-			args:   []string{"append", "config.yaml", "items", `"b"`},
+			args:   []string{"append", "config.yaml", "items", "--json", `"b"`},
 			want:   []string{"items: !custom", "- a", "- b"},
 		},
 		{
@@ -529,7 +531,7 @@ func TestYAMLErrorMatrixDoesNotCommit(t *testing.T) {
 		{
 			name:   "append through scalar array item",
 			before: "items:\n  - a\n",
-			args:   []string{"append", "config.yaml", "items[0]", `"b"`},
+			args:   []string{"append", "config.yaml", "items[0]", "--json", `"b"`},
 		},
 	}
 	for _, tc := range cases {
@@ -556,8 +558,8 @@ func TestFrontmatterVerbMatrixPreservesRepresentation(t *testing.T) {
 	commitAll(t, dir, "initial")
 
 	runOK(t, dir, "delete", "note.md", "frontmatter.title")
-	runOK(t, dir, "append", "note.md", "frontmatter.tags", `"b"`)
-	runOK(t, dir, "remove", "note.md", "frontmatter.remove", `"x"`)
+	runOK(t, dir, "append", "note.md", "frontmatter.tags", "--json", `"b"`)
+	runOK(t, dir, "remove", "note.md", "frontmatter.remove", "--json", `"x"`)
 
 	got := testGit(t, dir, "show", "HEAD:note.md")
 	for _, want := range []string{"# metadata", "tags:", "- a", "- b", "remove:", "- y", "# Note"} {
@@ -797,7 +799,7 @@ func TestInvalidUTF8RefusedForStructuredFormats(t *testing.T) {
 		{
 			name: "json",
 			run: func() error {
-				_, _, err := evalJSON("a", "set", "1", invalid)
+				_, _, err := evalJSON("a", "set", "1", ValueModeJSON, invalid)
 				return err
 			},
 			want: "invalid UTF-8 in JSON input",
@@ -805,7 +807,7 @@ func TestInvalidUTF8RefusedForStructuredFormats(t *testing.T) {
 		{
 			name: "yaml",
 			run: func() error {
-				_, _, err := evalYAML("a", "set", parseValue("1"), invalid)
+				_, _, err := evalYAML("a", "set", jsonx.Number("1"), invalid)
 				return err
 			},
 			want: "invalid UTF-8 in YAML input",
@@ -813,7 +815,7 @@ func TestInvalidUTF8RefusedForStructuredFormats(t *testing.T) {
 		{
 			name: "frontmatter",
 			run: func() error {
-				_, _, err := evalFrontmatter("note.md", "status", "set", parseValue("complete"), invalid)
+				_, _, err := evalFrontmatter("note.md", "status", "set", "complete", invalid)
 				return err
 			},
 			want: "invalid UTF-8 in Markdown input",

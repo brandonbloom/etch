@@ -6,16 +6,19 @@ import (
 	"github.com/brandonbloom/etch/internal/jsonx"
 )
 
-func TestParseValueRequiresWholeJSONLiteral(t *testing.T) {
-	if got := parseValue("0 abc"); got != "0 abc" {
-		t.Fatalf("parseValue accepted JSON prefix: %#v", got)
+func TestParseStructuredValueModes(t *testing.T) {
+	if got, err := parseStructuredValue("1", ValueModeString); err != nil || got != "1" {
+		t.Fatalf("string value = %#v err=%v", got, err)
+	}
+	if got, err := parseStructuredValue("1", ValueModeJSON); err != nil || got != jsonx.Number("1") {
+		t.Fatalf("JSON number value = %#v err=%v", got, err)
+	}
+	if _, err := parseStructuredValue("0 abc", ValueModeJSON); err == nil {
+		t.Fatal("JSON value accepted trailing junk")
 	}
 	hexdump := "00000000  aa bb cc dd  |....|\n00000010\n"
-	if got := parseValue(hexdump); got != hexdump {
-		t.Fatalf("parseValue accepted hexdump prefix: %#v", got)
-	}
-	if got := parseValue("1"); got != jsonx.Number("1") {
-		t.Fatalf("parseValue valid JSON number = %#v", got)
+	if got, err := parseStructuredValue(hexdump, ValueModeString); err != nil || got != hexdump {
+		t.Fatalf("string hexdump value = %#v err=%v", got, err)
 	}
 }
 

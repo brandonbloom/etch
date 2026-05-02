@@ -16,7 +16,22 @@ import (
 // normalizing JSON and YAML numeric scalars without lossy float64 coercion.
 type semanticNumber string
 
-func parseValue(raw string) any {
+func parseStructuredValue(raw string, mode ValueMode) (any, error) {
+	switch mode {
+	case "", ValueModeString:
+		return raw, nil
+	case ValueModeJSON:
+		v, err := jsonx.DecodeValue([]byte(raw))
+		if err != nil {
+			return nil, usagef("invalid JSON value: %v", err)
+		}
+		return normalizeJSONValue(v), nil
+	default:
+		return nil, usagef("unknown value mode %q", mode)
+	}
+}
+
+func parseLegacyPreviewValue(raw string) any {
 	if v, err := jsonx.DecodeValue([]byte(raw)); err == nil {
 		return normalizeJSONValue(v)
 	}
@@ -40,11 +55,28 @@ func normalizeJSONValue(v any) any {
 	}
 }
 
-func valuePreview(raw string, max int) string {
+func valuePreview(raw string, mode ValueMode, max int) string {
 	if !utf8.ValidString(raw) {
 		return fmt.Sprintf("<binary, %d bytes>", len(raw))
 	}
-	v := parseValue(raw)
+	var v any
+	if mode == "" {
+		v = parseLegacyPreviewValue(raw)
+	} else {
+		parsed, err := parseStructuredValue(raw, mode)
+		if err != nil {
+			b, _ := jsonx.Marshal(strings.ReplaceAll(raw, "\r\n", "\n"))
+			rendered := string(b)
+			if len(rendered) <= max {
+				return rendered
+			}
+			if max < 8 {
+				return "..."
+			}
+			return rendered[:max-4] + `..."`
+		}
+		v = parsed
+	}
 	var rendered string
 	if s, ok := v.(string); ok {
 		b, _ := jsonx.Marshal(strings.ReplaceAll(s, "\r\n", "\n"))

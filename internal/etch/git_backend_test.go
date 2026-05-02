@@ -194,7 +194,7 @@ func TestPlanDoesNotWriteRepositoryObjects(t *testing.T) {
 		t.Fatalf("plan operations = %#v", plan.Operations)
 	}
 	op := plan.Operations[0]
-	if op.Verb != "set" || op.Target.Path != "state.json" || op.Target.Selector != "$.status" || op.ValueHash != shaHex([]byte("complete")) {
+	if op.Verb != "set" || op.Target.Path != "state.json" || op.Target.Selector != "$.status" || op.ValueMode != ValueModeString || op.ValueHash != shaHex([]byte("string\x00complete")) {
 		t.Fatalf("plan operation = %#v", op)
 	}
 	wantFiles := map[string]PlanFile{

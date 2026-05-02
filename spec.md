@@ -84,8 +84,11 @@ Multi-line values use `<<DELIM` heredocs shaped like shell heredocs, but heredoc
 # Set a scalar
 set posts/hello.md frontmatter.title "Hello, world"
 
-# JSON literal as a single argument
-set posts/hello.md frontmatter.tags '["draft","intro"]'
+# JSON value as a single argument
+set posts/hello.md frontmatter.tags --json '["draft","intro"]'
+
+# Multiple field assignments in one file
+set cache/state.json last_ingestion=2026-05-02 count:=12
 
 # Multi-line content via heredoc
 replace-section posts/hello.md "## Summary" <<EOF
@@ -153,7 +156,7 @@ The resulting rule: porcelain Markdown selectors may use explicit part prefixes 
 
 | Format | Verbs | Selector/value behavior |
 |---|---|---|
-| JSON | `set`, `delete`, `append`, `add`, `remove` | Selectors use the JSONPath subset above. Values are parsed as strict JSON when they are valid JSON literals, otherwise treated as strings; JavaScript object-literal shorthand is intentionally not accepted. `set` creates missing object containers, creates missing final object members, updates existing array elements, and appends to an array only when the selected index equals the array length. `delete` removes an existing member or array element and is a no-op when the final target is absent. `append` appends the parsed value to an array, creating a missing final array under object-container rules. `add` ensures an array contains the parsed value, appending only if no structurally equal value is present. `remove` ensures an array does not contain the parsed value, removing all structurally equal occurrences and doing nothing when the final target is absent. |
+| JSON | `set`, `delete`, `append`, `add`, `remove` | Selectors use the JSONPath subset above. Values are strings by default. `--json <value>` parses one following token as a strict JSON value; JavaScript object-literal shorthand is intentionally not accepted. `set` also accepts field assignment items, where `selector=value` writes a string and `selector:=json` writes strict JSON. Assignment items are not accepted by `append`, `add`, `remove`, or `delete`. `set` creates missing object containers, creates missing final object members, updates existing array elements, and appends to an array only when the selected index equals the array length. `delete` removes an existing member or array element and is a no-op when the final target is absent. `append` appends the value to an array, creating a missing final array under object-container rules. `add` ensures an array contains the value, appending only if no structurally equal value is present. `remove` ensures an array does not contain the value, removing all structurally equal occurrences and doing nothing when the final target is absent. |
 | YAML | `set`, `delete`, `append`, `add`, `remove` | Same selector and value semantics as JSON, but using a round-tripping YAML representation so comments, key order, indentation style, anchors, aliases, and scalar spelling are preserved where the parser can preserve them. |
 | Markdown frontmatter | `set`, `delete`, `append`, `add`, `remove` | Selectors under `frontmatter.*` operate on YAML frontmatter using the YAML rules above. If a Markdown file has no frontmatter, `set frontmatter.*`, `append frontmatter.*`, and `add frontmatter.*` can create a frontmatter block; `delete` and `remove` are no-ops when the final target is absent. |
 | Markdown body | `replace-section` | The selector is a heading line such as `## Notes`. Replacement covers the content under that heading up to the next heading of equal or higher level. Missing or ambiguous headings are errors. |
@@ -163,7 +166,7 @@ The resulting rule: porcelain Markdown selectors may use explicit part prefixes 
 
 JSON operations edit the document representation, not just a decoded data value. Duplicate object member names are accepted as source syntax so localized edits can preserve the rest of the file. A member selector chooses the first matching member in source order; setting that selected member replaces that AST node only. JSON value operands that are materialized into data values collapse duplicate object member names with last-name-wins map semantics, so callers should avoid duplicate names in value operands.
 
-YAML and frontmatter operations edit the document representation, not the YAML graph after anchor and alias resolution. Anchors and aliases are concrete syntax. Mutating an anchored node edits that node's representation; aliases remain alias nodes and downstream YAML readers may observe the updated anchor value through normal YAML resolution. Selectors do not dereference aliases, so a selector segment below an alias is a type error. Setting an alias node replaces that alias occurrence only. MVP YAML and frontmatter selectors address the first YAML document; multi-document YAML selection is deferred. New and replaced YAML nodes are generated snippets, so touched nodes may use generated formatting while untouched surrounding representation is preserved where the parser can preserve it.
+YAML and frontmatter operations edit the document representation, not the YAML graph after anchor and alias resolution. Anchors and aliases are concrete syntax. Mutating an anchored node edits that node's representation; aliases remain alias nodes and downstream YAML readers may observe the updated anchor value through normal YAML resolution. Selectors do not dereference aliases, so a selector segment below an alias is a type error. Setting an alias node replaces that alias occurrence only. MVP YAML and frontmatter selectors address the first YAML document; multi-document YAML selection is deferred. New and replaced YAML nodes are generated snippets, so touched nodes may use generated formatting while untouched surrounding representation is preserved where the parser can preserve it. Generated YAML string scalars must render so they round-trip as strings; for example, setting a string value `true` writes a quoted scalar rather than a boolean-shaped scalar.
 
 For JSON, YAML, and frontmatter `add` and `remove`, structural equality is semantic rather than byte-spelling equality within the same document-representation model. Editing the representation means etch preserves and rewrites source structure; it does not make array membership depend on superficial source spelling. Object and mapping key order, whitespace, quoting style, and numeric spelling for numeric values do not affect equality; arrays remain ordered, strings compare after decoding, and numbers compare by parsed numeric value in the accepted format domain. YAML aliases compare as alias nodes by anchor name and are not equal to the values they would resolve to. For example, `{"a":1,"b":2}` and `{"b":2,"a":1}` are equal for `add` and `remove`.
 
@@ -262,7 +265,7 @@ A **plan** is etch's structured answer to "if I were to run this mutating invoca
 
 Plans are computed from the base commit, not from dirty checkout bytes. The planned tree is therefore a clean descendant of `HEAD` containing only etch's structural mutation. Staged and unstaged checkout edits are treated as concurrent local state during materialization, not as implicit inputs to the commit.
 
-The canonical plan format is JSON. It is the machine contract for hashing, authorization caches, tests, and host integrations. It should not be replaced by a prose or email-shaped format, because plan identity depends on stable parsing, canonicalization, and schema evolution.
+The canonical plan format is JSON. It is the machine contract for hashing, authorization caches, tests, and host integrations. It should not be replaced by a prose or email-shaped format, because plan identity depends on stable parsing, canonicalization, and schema evolution. Value-bearing structured operations include their value type in the plan, and value hashes include that type, so a string `12` and a JSON number `12` are distinct plans.
 
 Human preview is a separate surface. `--dry-run` lowers the semantic JSON plan to a base-locked mailbox patch compatible with `git am`, following `git format-patch` conventions: metadata headers, commit-message block, a three-dash separator, diffstat, and patch hunks. It is optimized for review and mechanical replay, not for canonical plan identity.
 
@@ -281,6 +284,7 @@ Human preview is a separate surface. `--dry-run` lowers the semantic JSON plan t
         "part": "frontmatter",
         "selector": "$.title"
       },
+      "value_type": "string",
       "value_sha256": "5d41402a..."
     },
     {

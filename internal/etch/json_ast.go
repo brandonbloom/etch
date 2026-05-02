@@ -34,7 +34,7 @@ type jsonSpanDecoder struct {
 	dec *jsontext.Decoder
 }
 
-func evalJSON(selector, verb, rawValue string, before []byte) ([]byte, bool, error) {
+func evalJSON(selector, verb, rawValue string, valueMode ValueMode, before []byte) ([]byte, bool, error) {
 	raw, bom := trimUTF8BOM(before)
 	if !utf8.Valid(raw) {
 		return nil, false, failf("invalid UTF-8 in JSON input")
@@ -47,7 +47,10 @@ func evalJSON(selector, verb, rawValue string, before []byte) ([]byte, bool, err
 	if err != nil {
 		return nil, false, err
 	}
-	value := jsonLiteralBytes(rawValue)
+	value, err := jsonLiteralBytes(rawValue, valueMode)
+	if err != nil {
+		return nil, false, err
+	}
 	out, err := editJSON(raw, root, parts, verb, value)
 	if err != nil {
 		return nil, false, err
@@ -370,14 +373,20 @@ func removeJSONElements(raw []byte, arr *jsonNode, value []byte) []byte {
 	return out
 }
 
-func jsonLiteralBytes(raw string) []byte {
-	b := []byte(raw)
-	v := jsontext.Value(b)
-	if v.IsValid(jsontext.AllowDuplicateNames(true)) {
-		return b
+func jsonLiteralBytes(raw string, mode ValueMode) ([]byte, error) {
+	switch mode {
+	case "", ValueModeString:
+		return jsonx.Marshal(raw)
+	case ValueModeJSON:
+		b := []byte(raw)
+		v := jsontext.Value(b)
+		if v.IsValid(jsontext.AllowDuplicateNames(true)) {
+			return b, nil
+		}
+		return nil, usagef("invalid JSON value")
+	default:
+		return nil, usagef("unknown value mode %q", mode)
 	}
-	quoted, _ := jsonx.Marshal(raw)
-	return quoted
 }
 
 func jsonSemanticEqual(a, b []byte) bool {

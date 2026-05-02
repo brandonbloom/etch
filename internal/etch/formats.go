@@ -17,15 +17,21 @@ import (
 
 var markdownEngine = goldmark.New(goldmark.WithExtensions(extension.GFM))
 
-func evalStructuredBytes(path, part, selector, verb, rawValue string, before []byte) ([]byte, bool, error) {
+func evalStructuredBytes(path, part, selector, verb, rawValue string, valueMode ValueMode, before []byte) ([]byte, bool, error) {
 	switch {
 	case part == "frontmatter":
-		value := parseValue(rawValue)
+		value, err := parseStructuredValue(rawValue, valueMode)
+		if err != nil {
+			return nil, false, err
+		}
 		return evalFrontmatter(path, selector, verb, value, before)
 	case isJSONPath(path):
-		return evalJSON(selector, verb, rawValue, before)
+		return evalJSON(selector, verb, rawValue, valueMode, before)
 	case isYAMLPath(path):
-		value := parseValue(rawValue)
+		value, err := parseStructuredValue(rawValue, valueMode)
+		if err != nil {
+			return nil, false, err
+		}
 		return evalYAML(selector, verb, value, before)
 	default:
 		return nil, false, failf("cannot infer structured format for %s", path)

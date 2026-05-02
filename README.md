@@ -91,7 +91,8 @@ Porcelain commands infer the format from the file extension:
 
 | Command | Description |
 | --- | --- |
-| `set <path> <selector> <value>` | Set a JSON, YAML, or Markdown frontmatter value. |
+| `set <path> <selector> <value>` | Set one JSON, YAML, or Markdown frontmatter value. |
+| `set <path> <selector=value>...` | Set multiple structured values in one file. |
 | `delete <path> [<selector>]` | Delete a file or selected structured value. |
 | `append <path> <selector> <value>` | Append a value to an array. |
 | `add <path> <selector> <value>` | Ensure an array contains a value. |
@@ -132,8 +133,9 @@ Set JSON:
 
 ```sh
 etch set state.json status complete
-etch set state.json priority 1
-etch set state.json labels '["agent","docs"]'
+etch set state.json priority --json 1
+etch set state.json labels --json '["agent","docs"]'
+etch set state.json status=complete priority:=1
 ```
 
 Mutate Markdown frontmatter:
@@ -219,16 +221,18 @@ $["key.with.dots"]
 Unsupported selector forms include wildcards, recursive descent, slices,
 filters, unions, functions, and negative indexes.
 
-Values are parsed as strict JSON when they are valid JSON literals. Otherwise,
-they are treated as strings.
+Structured values are strings by default. Use `--json` to parse one following
+token as a strict JSON value.
 
 ```text
-true
-12
-"literal string"
-["draft","intro"]
-{"status":"done"}
+etch set state.json status complete
+etch set state.json count --json 12
+etch append state.json events --json '{"status":"done"}'
 ```
+
+`set` also accepts assignment items: `selector=value` writes a string and
+`selector:=json` writes strict JSON. Assignment items are not accepted by
+`append`, `add`, `remove`, or `delete`.
 
 ## Transaction Model
 
