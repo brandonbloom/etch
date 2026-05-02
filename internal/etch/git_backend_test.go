@@ -90,6 +90,55 @@ func TestDryRunAppliesWithGitAm(t *testing.T) {
 	}
 }
 
+func TestDryRunAppliesMultiOperationPatchWithGitAm(t *testing.T) {
+	dir := initRepo(t)
+	writeFile(t, dir, "state.json", `{"status":"open"}`+"\n")
+	writeFile(t, dir, "old.txt", "old\n")
+	writeFile(t, dir, "src.txt", "source\n")
+	writeFile(t, dir, "move.txt", "move\n")
+	commitAll(t, dir, "initial")
+	writeFile(t, dir, "ops.etch", strings.Join([]string{
+		"set state.json status complete",
+		"delete old.txt",
+		"copy src.txt copied.txt",
+		"move move.txt moved.txt",
+		"",
+	}, "\n"))
+
+	var out, errb bytes.Buffer
+	code, err := runCLIAt(dir, []string{"--dry-run", "run", "ops.etch"}, &out, &errb)
+	if err != nil || code != exitOK {
+		t.Fatalf("dry-run code=%d err=%v stderr=%s", code, err, errb.String())
+	}
+	patch := out.String()
+	for _, want := range []string{"Etch-Plan-Hash:", "diff --git", "deleted file mode", "copied.txt", "moved.txt"} {
+		if !strings.Contains(patch, want) {
+			t.Fatalf("dry-run patch missing %q:\n%s", want, patch)
+		}
+	}
+	patchPath := filepath.Join(dir, "multi.patch")
+	if err := os.WriteFile(patchPath, []byte(patch), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	testGit(t, dir, "am", patchPath)
+
+	if got := testGit(t, dir, "show", "HEAD:state.json"); !strings.Contains(got, `"status":"complete"`) {
+		t.Fatalf("HEAD state.json = %s", got)
+	}
+	if err := testGitMayFail(t, dir, "show", "HEAD:old.txt"); err == nil {
+		t.Fatal("deleted file still exists after git am")
+	}
+	if got := testGit(t, dir, "show", "HEAD:copied.txt"); got != "source\n" {
+		t.Fatalf("HEAD copied.txt = %q", got)
+	}
+	if err := testGitMayFail(t, dir, "show", "HEAD:move.txt"); err == nil {
+		t.Fatal("moved source still exists after git am")
+	}
+	if got := testGit(t, dir, "show", "HEAD:moved.txt"); got != "move\n" {
+		t.Fatalf("HEAD moved.txt = %q", got)
+	}
+}
+
 func TestDryRunShorthandDoesNotCommit(t *testing.T) {
 	dir := initRepo(t)
 	writeFile(t, dir, "state.json", `{"status":"open"}`+"\n")

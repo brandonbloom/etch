@@ -1,6 +1,7 @@
 package etch
 
 import (
+	"bytes"
 	"os"
 	"path/filepath"
 	"reflect"
@@ -139,6 +140,57 @@ func TestPlanHashUsesJCSCanonicalBytes(t *testing.T) {
 	hash := planHash(plan)
 	if hash != "sha256:"+shaHex([]byte(want)) {
 		t.Fatalf("hash = %s, want sha256:%s", hash, shaHex([]byte(want)))
+	}
+}
+
+func TestPlanHashStableAcrossPlanningRuns(t *testing.T) {
+	dir := initRepo(t)
+	writeFile(t, dir, "a.json", `{"status":"open"}`+"\n")
+	writeFile(t, dir, "b.json", `{"status":"open"}`+"\n")
+	commitAll(t, dir, "initial")
+
+	planOnce := func(t *testing.T) (*Workspace, *Plan, []byte) {
+		t.Helper()
+		var ops []Operation
+		for _, tokens := range [][]string{
+			{"set", "b.json", "status", "complete"},
+			{"set", "a.json", "status", "complete"},
+		} {
+			op, err := DecodeOperation(Statement{Tokens: tokens})
+			if err != nil {
+				t.Fatal(err)
+			}
+			ops = append(ops, op)
+		}
+		w, err := OpenWorkspaceAt(dir, false)
+		if err != nil {
+			t.Fatal(err)
+		}
+		plan, err := PlanOperations(w, GlobalOptions{}, ops)
+		if err != nil {
+			t.Fatal(err)
+		}
+		return w, plan, canonicalPlanBytes(plan)
+	}
+
+	w, first, firstBytes := planOnce(t)
+	_, second, secondBytes := planOnce(t)
+	if first.Hash == "" || !strings.HasPrefix(first.Hash, "sha256:") {
+		t.Fatalf("plan hash missing: %#v", first)
+	}
+	if first.Hash != second.Hash {
+		t.Fatalf("plan hash changed across runs: %s != %s", first.Hash, second.Hash)
+	}
+	if !bytes.Equal(firstBytes, secondBytes) {
+		t.Fatalf("canonical plan bytes changed across runs:\n%s\n---\n%s", firstBytes, secondBytes)
+	}
+
+	patch, err := RenderDryRun(w, first)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(patch, "Etch-Plan-Hash: "+first.Hash+"\n") {
+		t.Fatalf("dry-run missing plan hash %s:\n%s", first.Hash, patch)
 	}
 }
 

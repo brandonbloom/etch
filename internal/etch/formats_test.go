@@ -708,3 +708,103 @@ func TestBOMPreservedForJSON(t *testing.T) {
 		t.Fatalf("BOM not preserved: %v", got[:min(3, len(got))])
 	}
 }
+
+func TestBOMPreservedForYAMLMarkdownAndCSV(t *testing.T) {
+	dir := initRepo(t)
+	bom := []byte{0xef, 0xbb, 0xbf}
+	for path, content := range map[string]string{
+		"config.yaml": "status: open\n",
+		"note.md":     "# Title\n\n## Notes\nold\n",
+		"data.csv":    "id,status\n1,open\n",
+	} {
+		if err := os.WriteFile(filepath.Join(dir, path), append(append([]byte{}, bom...), []byte(content)...), 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
+	commitAll(t, dir, "initial")
+
+	runOK(t, dir, "set", "config.yaml", "status", "complete")
+	runOK(t, dir, "replace-section", "note.md", "## Notes", "new\n")
+	runOK(t, dir, "table", "set", "data.csv", "all,status", "done")
+
+	for _, path := range []string{"config.yaml", "note.md", "data.csv"} {
+		got := []byte(testGit(t, dir, "show", "HEAD:"+path))
+		if len(got) < len(bom) || !bytes.Equal(got[:len(bom)], bom) {
+			t.Fatalf("%s BOM not preserved: %v", path, got[:min(len(bom), len(got))])
+		}
+	}
+}
+
+func TestInvalidUTF8RefusedForStructuredFormats(t *testing.T) {
+	invalid := []byte{0xff, '\n'}
+	tableOp, err := DecodeOperation(Statement{Tokens: []string{"table", "set", "data.csv", "all,status", "done"}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	mdTableOp, err := DecodeOperation(Statement{Tokens: []string{"table", "set", "note.md", "doc", "all,status", "done"}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	tests := []struct {
+		name string
+		run  func() error
+		want string
+	}{
+		{
+			name: "json",
+			run: func() error {
+				_, _, err := evalJSON("a", "set", "1", invalid)
+				return err
+			},
+			want: "invalid UTF-8 in JSON input",
+		},
+		{
+			name: "yaml",
+			run: func() error {
+				_, _, err := evalYAML("a", "set", parseValue("1"), invalid)
+				return err
+			},
+			want: "invalid UTF-8 in YAML input",
+		},
+		{
+			name: "frontmatter",
+			run: func() error {
+				_, _, err := evalFrontmatter("note.md", "status", "set", parseValue("complete"), invalid)
+				return err
+			},
+			want: "invalid UTF-8 in Markdown input",
+		},
+		{
+			name: "markdown section",
+			run: func() error {
+				_, _, err := evalReplaceSection("note.md", "## Notes", "new\n", invalid)
+				return err
+			},
+			want: "invalid UTF-8 in Markdown input",
+		},
+		{
+			name: "markdown table",
+			run: func() error {
+				_, _, err := evalTable("note.md", mdTableOp, invalid)
+				return err
+			},
+			want: "invalid UTF-8 in Markdown input",
+		},
+		{
+			name: "csv",
+			run: func() error {
+				_, _, err := evalTable("data.csv", tableOp, invalid)
+				return err
+			},
+			want: "invalid UTF-8 in CSV input",
+		},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			err := tc.run()
+			if err == nil || !strings.Contains(err.Error(), tc.want) {
+				t.Fatalf("err = %v, want %q", err, tc.want)
+			}
+		})
+	}
+}

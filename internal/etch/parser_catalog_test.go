@@ -113,6 +113,42 @@ func TestIntrospectionDoesNotRequireGit(t *testing.T) {
 	if len(verbs) < 20 {
 		t.Fatalf("got %d verbs, want catalog", len(verbs))
 	}
+	byName := map[string]VerbInfo{}
+	validClasses := map[CommandClass]bool{
+		ClassGuard:         true,
+		ClassIdempotent:    true,
+		ClassNonIdempotent: true,
+	}
+	for _, verb := range verbs {
+		if verb.Name == "" || verb.Signature == "" || verb.Description == "" {
+			t.Fatalf("verb has empty required field: %#v", verb)
+		}
+		if !validClasses[verb.Class] {
+			t.Fatalf("verb %s has invalid class %q", verb.Name, verb.Class)
+		}
+		if !verb.Canonical {
+			t.Fatalf("verb %s is not marked canonical", verb.Name)
+		}
+		if _, ok := byName[verb.Name]; ok {
+			t.Fatalf("duplicate verb %q", verb.Name)
+		}
+		byName[verb.Name] = verb
+	}
+	for name, class := range map[string]CommandClass{
+		"set":                 ClassIdempotent,
+		"append":              ClassNonIdempotent,
+		"exists":              ClassGuard,
+		"table row append":    ClassNonIdempotent,
+		"md table row delete": ClassIdempotent,
+	} {
+		verb, ok := byName[name]
+		if !ok {
+			t.Fatalf("verbs JSON missing %q", name)
+		}
+		if verb.Class != class {
+			t.Fatalf("verb %s class = %q, want %q", name, verb.Class, class)
+		}
+	}
 }
 
 func TestRunWithoutScriptPathParsesStdin(t *testing.T) {

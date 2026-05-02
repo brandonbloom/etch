@@ -66,6 +66,44 @@ func TestMaterializationDirtyPathUsesWorkspaceCWD(t *testing.T) {
 	}
 }
 
+func TestMaterializationStagedAndUnstagedConflict(t *testing.T) {
+	dir := initRepo(t)
+	base := "# Note\n\n## Status\nopen\n\n## Index\nbase\n\n## Worktree\nbase\n"
+	staged := "# Note\n\n## Status\nopen\n\n## Index\nstaged\n\n## Worktree\nbase\n"
+	local := "# Note\n\n## Status\nopen\n\n## Index\nstaged\n\n## Worktree\nlocal\n"
+	writeFile(t, dir, "note.md", base)
+	commitAll(t, dir, "initial")
+	writeFile(t, dir, "note.md", staged)
+	testGit(t, dir, "add", "note.md")
+	writeFile(t, dir, "note.md", local)
+
+	var out, errb bytes.Buffer
+	code, err := runCLIAt(dir, []string{"replace-section", "note.md", "## Status", "complete\n"}, &out, &errb)
+	if err == nil || code != exitFailure {
+		t.Fatalf("runCLI code=%d err=%v stderr=%s", code, err, errb.String())
+	}
+	head := testGit(t, dir, "show", "HEAD:note.md")
+	if !strings.Contains(head, "## Status\ncomplete\n") || strings.Contains(head, "staged") || strings.Contains(head, "local") {
+		t.Fatalf("HEAD note.md swept in local edits:\n%s", head)
+	}
+	index := testGit(t, dir, "show", ":note.md")
+	if index != head {
+		t.Fatalf("index note.md =\n%s\nwant HEAD:\n%s", index, head)
+	}
+	wt, err := os.ReadFile(filepath.Join(dir, "note.md"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, want := range []string{"<<<<<<< HEAD", "||||||| base", "=======", ">>>>>>> index"} {
+		if !bytes.Contains(wt, []byte(want)) {
+			t.Fatalf("worktree conflict missing %q:\n%s", want, wt)
+		}
+	}
+	if !strings.Contains(errb.String(), "note.md") {
+		t.Fatalf("stderr missing conflicted path:\n%s", errb.String())
+	}
+}
+
 func TestMaterializationAddAddConflict(t *testing.T) {
 	dir := initRepo(t)
 	writeFile(t, dir, "README.md", "# hi\n")
@@ -83,6 +121,38 @@ func TestMaterializationAddAddConflict(t *testing.T) {
 	wt, _ := os.ReadFile(filepath.Join(dir, "new.txt"))
 	if !bytes.Contains(wt, []byte("<<<<<<<")) || !bytes.Contains(wt, []byte("local")) || !bytes.Contains(wt, []byte("etch")) {
 		t.Fatalf("add/add conflict markers wrong:\n%s", wt)
+	}
+}
+
+func TestMaterializationMoveSourceAndDestinationConflicts(t *testing.T) {
+	dir := initRepo(t)
+	writeFile(t, dir, "old.txt", "base\n")
+	commitAll(t, dir, "initial")
+	writeFile(t, dir, "old.txt", "local source\n")
+	writeFile(t, dir, "new.txt", "local destination\n")
+
+	var out, errb bytes.Buffer
+	code, err := runCLIAt(dir, []string{"move", "old.txt", "new.txt"}, &out, &errb)
+	if err == nil || code != exitFailure {
+		t.Fatalf("runCLI code=%d err=%v stderr=%s", code, err, errb.String())
+	}
+	if err := testGitMayFail(t, dir, "show", "HEAD:old.txt"); err == nil {
+		t.Fatal("moved source still exists in HEAD")
+	}
+	if got := testGit(t, dir, "show", "HEAD:new.txt"); got != "base\n" {
+		t.Fatalf("HEAD new.txt = %q", got)
+	}
+	for _, path := range []string{"old.txt", "new.txt"} {
+		wt, err := os.ReadFile(filepath.Join(dir, path))
+		if err != nil {
+			t.Fatal(err)
+		}
+		if !bytes.Contains(wt, []byte("<<<<<<<")) {
+			t.Fatalf("%s lacks conflict markers:\n%s", path, wt)
+		}
+	}
+	if !strings.Contains(errb.String(), "old.txt") || !strings.Contains(errb.String(), "new.txt") {
+		t.Fatalf("stderr missing conflicted paths:\n%s", errb.String())
 	}
 }
 

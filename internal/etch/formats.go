@@ -272,7 +272,11 @@ func evalTable(path string, op Operation, before []byte) ([]byte, bool, error) {
 }
 
 func evalCSVTable(op Operation, before []byte) ([]byte, bool, error) {
-	r := csv.NewReader(bytes.NewReader(before))
+	raw, bom := trimUTF8BOM(before)
+	if !utf8.Valid(raw) {
+		return nil, false, failf("invalid UTF-8 in CSV input")
+	}
+	r := csv.NewReader(bytes.NewReader(raw))
 	r.FieldsPerRecord = -1
 	records, err := r.ReadAll()
 	if err != nil {
@@ -296,6 +300,7 @@ func evalCSVTable(op Operation, before []byte) ([]byte, bool, error) {
 	}
 	w.Flush()
 	out := b.Bytes()
+	out = withUTF8BOM(out, bom)
 	return out, !bytes.Equal(out, before), nil
 }
 
