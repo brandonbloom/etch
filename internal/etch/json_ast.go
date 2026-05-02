@@ -337,15 +337,35 @@ func appendJSONElement(raw []byte, arr *jsonNode, add bool, value []byte) ([]byt
 	return replaceBytes(raw, insertAt, insertAt, snippet), nil
 }
 
+type jsonByteRange struct {
+	Start int
+	End   int
+}
+
 func removeJSONElements(raw []byte, arr *jsonNode, value []byte) []byte {
-	out := raw
-	for i := len(arr.Elems) - 1; i >= 0; i-- {
-		elem := arr.Elems[i]
-		if !jsonSemanticEqual(raw[elem.Start:elem.End], value) {
+	remove := make([]bool, len(arr.Elems))
+	for i, elem := range arr.Elems {
+		remove[i] = jsonSemanticEqual(raw[elem.Start:elem.End], value)
+	}
+
+	var ranges []jsonByteRange
+	for i := 0; i < len(arr.Elems); i++ {
+		if !remove[i] {
 			continue
 		}
-		start, end := elementRemoveRange(raw, arr, i)
-		out = replaceBytes(out, start, end, nil)
+		startIdx := i
+		for i+1 < len(arr.Elems) && remove[i+1] {
+			i++
+		}
+		endIdx := i
+		start, end := elementRunRemoveRange(raw, arr, startIdx, endIdx)
+		ranges = append(ranges, jsonByteRange{Start: start, End: end})
+	}
+
+	out := raw
+	for i := len(ranges) - 1; i >= 0; i-- {
+		r := ranges[i]
+		out = replaceBytes(out, r.Start, r.End, nil)
 	}
 	return out
 }
@@ -474,6 +494,23 @@ func elementRemoveRange(raw []byte, arr *jsonNode, idx int) (int, int) {
 		return prev.End + comma, elem.End
 	}
 	return elem.Start, elem.End
+}
+
+func elementRunRemoveRange(raw []byte, arr *jsonNode, startIdx, endIdx int) (int, int) {
+	first := arr.Elems[startIdx]
+	last := arr.Elems[endIdx]
+	if endIdx < len(arr.Elems)-1 {
+		next := arr.Elems[endIdx+1]
+		return first.Start, next.Start
+	}
+	if startIdx > 0 {
+		prev := arr.Elems[startIdx-1]
+		comma := bytes.LastIndexByte(raw[prev.End:first.Start], ',')
+		if comma >= 0 {
+			return prev.End + comma, last.End
+		}
+	}
+	return first.Start, last.End
 }
 
 func jsonKindName(kind byte) string {

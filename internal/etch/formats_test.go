@@ -50,6 +50,54 @@ func TestJSONAddAndRemoveDistinguishLargeNumbers(t *testing.T) {
 	}
 }
 
+func TestJSONRemoveAdjacentArrayElements(t *testing.T) {
+	tests := []struct {
+		name   string
+		before string
+		want   string
+	}{
+		{
+			name:   "leading run",
+			before: `{"items":["x","x","y"]}` + "\n",
+			want:   `{"items":["y"]}` + "\n",
+		},
+		{
+			name:   "trailing run",
+			before: `{"items":["y","x","x"]}` + "\n",
+			want:   `{"items":["y"]}` + "\n",
+		},
+		{
+			name:   "entire array",
+			before: `{"items":["x","x"]}` + "\n",
+			want:   `{"items":[]}` + "\n",
+		},
+		{
+			name:   "separate runs",
+			before: `{"items":["x","y","x","x","z","x"]}` + "\n",
+			want:   `{"items":["y","z"]}` + "\n",
+		},
+		{
+			name:   "multiline leading run",
+			before: "{\n  \"items\": [\n    \"x\",\n    \"x\",\n    \"y\"\n  ]\n}\n",
+			want:   "{\n  \"items\": [\n    \"y\"\n  ]\n}\n",
+		},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			got, changed, err := evalJSON("items", "remove", `"x"`, []byte(tc.before))
+			if err != nil {
+				t.Fatal(err)
+			}
+			if !changed {
+				t.Fatal("evalJSON reported no change")
+			}
+			if string(got) != tc.want {
+				t.Fatalf("JSON output:\n%s\nwant:\n%s", got, tc.want)
+			}
+		})
+	}
+}
+
 func TestJSONSetPreservesSurroundingSource(t *testing.T) {
 	before := []byte("{\n  \"z\": 0,\n  \"status\" : \"open\",\n  \"nested\": {\"keep\":true}\n}\n")
 
