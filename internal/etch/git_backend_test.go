@@ -8,6 +8,8 @@ import (
 	"sort"
 	"strings"
 	"testing"
+
+	"github.com/brandonbloom/etch/internal/jsonx"
 )
 
 func TestGitBackendCommitAndRefCAS(t *testing.T) {
@@ -129,8 +131,50 @@ func TestPlanDoesNotWriteRepositoryObjects(t *testing.T) {
 		t.Fatalf("--plan wrote repository objects\nbefore=%v\nafter=%v", objectsBefore, objectsAfter)
 	}
 	planJSON := out.String()
-	if !strings.Contains(planJSON, `"tree":`) || !strings.Contains(planJSON, `"commit":`) {
-		t.Fatalf("--plan output missing tree or commit:\n%s", planJSON)
+	var plan Plan
+	if err := jsonx.Unmarshal(out.Bytes(), &plan); err != nil {
+		t.Fatalf("--plan output is not plan JSON: %v\n%s", err, planJSON)
+	}
+	if plan.Schema != planSchema {
+		t.Fatalf("plan schema = %q, want %q", plan.Schema, planSchema)
+	}
+	if plan.Ref != "refs/heads/main" || plan.BaseCommit != head {
+		t.Fatalf("plan ref/base = %q/%q, want refs/heads/main/%s", plan.Ref, plan.BaseCommit, head)
+	}
+	if len(plan.Operations) != 1 {
+		t.Fatalf("plan operations = %#v", plan.Operations)
+	}
+	op := plan.Operations[0]
+	if op.Verb != "set" || op.Target.Path != "state.json" || op.Target.Selector != "$.status" || op.ValueHash != shaHex([]byte("complete")) {
+		t.Fatalf("plan operation = %#v", op)
+	}
+	wantFiles := map[string]PlanFile{
+		"state.json": {
+			BeforeSHA256: shaHex([]byte(`{"status":"open"}` + "\n")),
+			AfterSHA256:  shaHex([]byte(`{"status":"complete"}` + "\n")),
+		},
+	}
+	if !reflect.DeepEqual(plan.Files, wantFiles) {
+		t.Fatalf("plan files = %#v, want %#v", plan.Files, wantFiles)
+	}
+	if plan.Tree == "" || plan.Tree == stringsTrim(testGit(t, dir, "rev-parse", "HEAD^{tree}")) {
+		t.Fatalf("plan tree = %q", plan.Tree)
+	}
+	if plan.Commit.Message != `etch set state.json $.status "complete"` {
+		t.Fatalf("plan commit message = %q", plan.Commit.Message)
+	}
+	if plan.Hash != "" || plan.Touched != nil || plan.Mutating || plan.Changed {
+		t.Fatalf("plan output populated internal fields: %#v", plan)
+	}
+
+	var raw map[string]any
+	if err := jsonx.Unmarshal(out.Bytes(), &raw); err != nil {
+		t.Fatal(err)
+	}
+	for _, key := range []string{"hash", "touched", "mutating", "changed"} {
+		if _, ok := raw[key]; ok {
+			t.Fatalf("--plan output includes internal field %q:\n%s", key, planJSON)
+		}
 	}
 }
 
