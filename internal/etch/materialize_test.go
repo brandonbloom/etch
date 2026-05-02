@@ -66,7 +66,7 @@ func TestMaterializationDirtyPathUsesWorkspaceCWD(t *testing.T) {
 	}
 }
 
-func TestMaterializationStagedAndUnstagedConflict(t *testing.T) {
+func TestMaterializationCleanlyMergesStagedAndUnstagedChanges(t *testing.T) {
 	dir := initRepo(t)
 	base := "# Note\n\n## Status\nopen\n\n## Index\nbase\n\n## Worktree\nbase\n"
 	staged := "# Note\n\n## Status\nopen\n\n## Index\nstaged\n\n## Worktree\nbase\n"
@@ -79,7 +79,7 @@ func TestMaterializationStagedAndUnstagedConflict(t *testing.T) {
 
 	var out, errb bytes.Buffer
 	code, err := runCLIAt(dir, []string{"replace-section", "note.md", "## Status", "complete\n"}, &out, &errb)
-	if err == nil || code != exitFailure {
+	if err != nil || code != exitOK {
 		t.Fatalf("runCLI code=%d err=%v stderr=%s", code, err, errb.String())
 	}
 	head := testGit(t, dir, "show", "HEAD:note.md")
@@ -87,20 +87,15 @@ func TestMaterializationStagedAndUnstagedConflict(t *testing.T) {
 		t.Fatalf("HEAD note.md swept in local edits:\n%s", head)
 	}
 	index := testGit(t, dir, "show", ":note.md")
-	if index != head {
-		t.Fatalf("index note.md =\n%s\nwant HEAD:\n%s", index, head)
+	if !strings.Contains(index, "## Status\ncomplete\n") || !strings.Contains(index, "## Index\nstaged\n") || strings.Contains(index, "## Worktree\nlocal\n") {
+		t.Fatalf("index note.md did not preserve staged state:\n%s", index)
 	}
 	wt, err := os.ReadFile(filepath.Join(dir, "note.md"))
 	if err != nil {
 		t.Fatal(err)
 	}
-	for _, want := range []string{"<<<<<<< HEAD", "||||||| base", "=======", ">>>>>>> index"} {
-		if !bytes.Contains(wt, []byte(want)) {
-			t.Fatalf("worktree conflict missing %q:\n%s", want, wt)
-		}
-	}
-	if !strings.Contains(errb.String(), "note.md") {
-		t.Fatalf("stderr missing conflicted path:\n%s", errb.String())
+	if !bytes.Contains(wt, []byte("## Status\ncomplete\n")) || !bytes.Contains(wt, []byte("## Index\nstaged\n")) || !bytes.Contains(wt, []byte("## Worktree\nlocal\n")) {
+		t.Fatalf("worktree note.md did not preserve staged/unstaged state:\n%s", wt)
 	}
 }
 

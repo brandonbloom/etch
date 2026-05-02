@@ -240,18 +240,11 @@ func simpleThreeWay(base, ours, theirs []byte) ([]byte, bool) {
 	baseLines := splitLines(string(base))
 	oursLines := splitLines(string(ours))
 	theirsLines := splitLines(string(theirs))
-	prefix := commonPrefix3(baseLines, oursLines, theirsLines)
-	suffix := commonSuffix3(baseLines[prefix:], oursLines[prefix:], theirsLines[prefix:])
-	baseMid := strings.Join(baseLines[prefix:len(baseLines)-suffix], "")
-	oursMid := strings.Join(oursLines[prefix:len(oursLines)-suffix], "")
-	theirsMid := strings.Join(theirsLines[prefix:len(theirsLines)-suffix], "")
-	if baseMid == theirsMid {
-		return []byte(strings.Join(append(append([]string{}, oursLines[:len(oursLines)-suffix]...), oursLines[len(oursLines)-suffix:]...), "")), true
+	merged, ok := mergeLineEdits(baseLines, lineEdits(baseLines, oursLines), lineEdits(baseLines, theirsLines))
+	if !ok {
+		return nil, false
 	}
-	if baseMid == oursMid {
-		return theirs, true
-	}
-	return nil, false
+	return []byte(strings.Join(merged, "")), true
 }
 
 func splitLines(s string) []string {
@@ -265,20 +258,118 @@ func splitLines(s string) []string {
 	return parts
 }
 
-func commonPrefix3(a, b, c []string) int {
-	n := 0
-	for n < len(a) && n < len(b) && n < len(c) && a[n] == b[n] && a[n] == c[n] {
-		n++
-	}
-	return n
+type lineEdit struct {
+	start int
+	end   int
+	repl  []string
 }
 
-func commonSuffix3(a, b, c []string) int {
-	n := 0
-	for n < len(a) && n < len(b) && n < len(c) && a[len(a)-1-n] == b[len(b)-1-n] && a[len(a)-1-n] == c[len(c)-1-n] {
-		n++
+func lineEdits(base, changed []string) []lineEdit {
+	lcs := lcsLengths(base, changed)
+	var edits []lineEdit
+	i, j := 0, 0
+	for i < len(base) || j < len(changed) {
+		if i < len(base) && j < len(changed) && base[i] == changed[j] {
+			i++
+			j++
+			continue
+		}
+		startI, startJ := i, j
+		for i < len(base) || j < len(changed) {
+			if i < len(base) && j < len(changed) && base[i] == changed[j] {
+				break
+			}
+			if j < len(changed) && (i == len(base) || lcs[i][j+1] >= lcs[i+1][j]) {
+				j++
+			} else {
+				i++
+			}
+		}
+		edits = append(edits, lineEdit{start: startI, end: i, repl: append([]string(nil), changed[startJ:j]...)})
 	}
-	return n
+	return edits
+}
+
+func lcsLengths(a, b []string) [][]int {
+	lcs := make([][]int, len(a)+1)
+	for i := range lcs {
+		lcs[i] = make([]int, len(b)+1)
+	}
+	for i := len(a) - 1; i >= 0; i-- {
+		for j := len(b) - 1; j >= 0; j-- {
+			if a[i] == b[j] {
+				lcs[i][j] = lcs[i+1][j+1] + 1
+			} else {
+				lcs[i][j] = max(lcs[i+1][j], lcs[i][j+1])
+			}
+		}
+	}
+	return lcs
+}
+
+func mergeLineEdits(base []string, ours, theirs []lineEdit) ([]string, bool) {
+	var merged []string
+	pos := 0
+	i, j := 0, 0
+	appendBase := func(to int) {
+		merged = append(merged, base[pos:to]...)
+		pos = to
+	}
+	apply := func(edit lineEdit) bool {
+		if edit.start < pos {
+			return false
+		}
+		appendBase(edit.start)
+		merged = append(merged, edit.repl...)
+		pos = edit.end
+		return true
+	}
+
+	for i < len(ours) || j < len(theirs) {
+		if j >= len(theirs) || (i < len(ours) && ours[i].start < theirs[j].start) {
+			if j < len(theirs) && ours[i].end > theirs[j].start {
+				return nil, false
+			}
+			if !apply(ours[i]) {
+				return nil, false
+			}
+			i++
+			continue
+		}
+		if i >= len(ours) || theirs[j].start < ours[i].start {
+			if i < len(ours) && theirs[j].end > ours[i].start {
+				return nil, false
+			}
+			if !apply(theirs[j]) {
+				return nil, false
+			}
+			j++
+			continue
+		}
+
+		if ours[i].end != theirs[j].end || !stringSlicesEqual(ours[i].repl, theirs[j].repl) {
+			return nil, false
+		}
+		if !apply(ours[i]) {
+			return nil, false
+		}
+		i++
+		j++
+	}
+	appendBase(len(base))
+	return merged, true
+}
+
+func stringSlicesEqual(a, b []string) bool {
+	if len(a) != len(b) {
+		return false
+	}
+	for i := range a {
+		if a[i] != b[i] {
+			return false
+		}
+	}
+	return true
 }
 
 func conflictBytes(base, ours, theirs []byte, oursLabel, theirsLabel string) []byte {

@@ -146,6 +146,50 @@ func TestJSONSetMissingMemberUsesExistingSeparatorStyle(t *testing.T) {
 	}
 }
 
+func TestJSONDeeplyNestedEdits(t *testing.T) {
+	before := []byte(`{"outer":{"items":[{"name":"a","tags":["x","y"]},{"name":"b","tags":["z"]}],"keep":true}}` + "\n")
+
+	got, changed, err := evalJSON("outer.items[1].tags[0]", "set", "done", before)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !changed {
+		t.Fatal("evalJSON reported no change")
+	}
+	want := `{"outer":{"items":[{"name":"a","tags":["x","y"]},{"name":"b","tags":["done"]}],"keep":true}}` + "\n"
+	if string(got) != want {
+		t.Fatalf("JSON output = %s, want %s", got, want)
+	}
+
+	got, changed, err = evalJSON("outer.items[0].tags", "remove", `"y"`, got)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !changed {
+		t.Fatal("evalJSON reported no change")
+	}
+	want = `{"outer":{"items":[{"name":"a","tags":["x"]},{"name":"b","tags":["done"]}],"keep":true}}` + "\n"
+	if string(got) != want {
+		t.Fatalf("JSON output = %s, want %s", got, want)
+	}
+}
+
+func TestJSONDeleteLastArrayElementWhitespace(t *testing.T) {
+	before := []byte("{\n  \"items\": [\n    \"a\",\n    \"b\"\n  ]\n}\n")
+
+	got, changed, err := evalJSON("items[1]", "delete", "", before)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !changed {
+		t.Fatal("evalJSON reported no change")
+	}
+	want := "{\n  \"items\": [\n    \"a\"\n  ]\n}\n"
+	if string(got) != want {
+		t.Fatalf("JSON output:\n%s\nwant:\n%s", got, want)
+	}
+}
+
 func TestYAMLAndFrontmatterVerbs(t *testing.T) {
 	dir := initRepo(t)
 	writeFile(t, dir, "config.yaml", "tags:\n  - a\n")

@@ -83,7 +83,17 @@ func TestNormalizeSelector(t *testing.T) {
 			t.Fatalf("NormalizeSelector(%q) = %q, want %q", input, got, want)
 		}
 	}
-	for _, bad := range []string{"$..a", "$.a[*]", "$.a[-1]", "$.a[0:2]", `$["a","b"]`, "$[?(@.a)]"} {
+	for _, bad := range []string{
+		"$..a",
+		"$.a[*]",
+		"$.a[-1]",
+		"$.a[0:2]",
+		`$["a","b"]`,
+		"$[?(@.a)]",
+		"$.items[?(@.status == 'open')]",
+		"$.items[?count(@.tags) > 0]",
+		"$.items[?match(@.name, 'a.*')]",
+	} {
 		if _, err := NormalizeSelector(bad); err == nil {
 			t.Fatalf("NormalizeSelector(%q) succeeded", bad)
 		}
