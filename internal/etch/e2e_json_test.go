@@ -34,6 +34,64 @@ func TestE2EJSONSetCommitsAndMaterializes(t *testing.T) {
 	}
 }
 
+func TestE2EJSONLAppendCommitsAndMaterializes(t *testing.T) {
+	dir := initRepo(t)
+	writeFile(t, dir, "events.jsonl", `{"kind":"base"}`+"\n")
+	commitAll(t, dir, "initial")
+
+	_, errb, code, err := runCLIInDir(t, dir, "append", "events.jsonl", `{"kind":"prompt","n":2}`)
+	if err != nil || code != exitOK {
+		t.Fatalf("runCLI code=%d err=%v stderr=%s", code, err, errb.String())
+	}
+	want := `{"kind":"base"}` + "\n" + `{"kind":"prompt","n":2}` + "\n"
+	headBytes := testGit(t, dir, "show", "HEAD:events.jsonl")
+	if headBytes != want {
+		t.Fatalf("HEAD events.jsonl = %q, want %q", headBytes, want)
+	}
+	wt, readErr := os.ReadFile(filepath.Join(dir, "events.jsonl"))
+	if readErr != nil {
+		t.Fatal(readErr)
+	}
+	if string(wt) != headBytes {
+		t.Fatalf("worktree not materialized:\nwt=%s\nhead=%s", wt, headBytes)
+	}
+	subject := stringsTrim(testGit(t, dir, "log", "-1", "--format=%s"))
+	if subject != `etch append events.jsonl {"kind":"prompt","n":2}` {
+		t.Fatalf("subject = %q", subject)
+	}
+}
+
+func TestE2EJSONLAppendCreatesMissingLog(t *testing.T) {
+	dir := initRepo(t)
+	writeFile(t, dir, "README.md", "# hi\n")
+	commitAll(t, dir, "initial")
+
+	_, errb, code, err := runCLIInDir(t, dir, "jsonl", "append", "events.log", `{"kind":"prompt"}`)
+	if err != nil || code != exitOK {
+		t.Fatalf("runCLI code=%d err=%v stderr=%s", code, err, errb.String())
+	}
+	if got := testGit(t, dir, "show", "HEAD:events.log"); got != `{"kind":"prompt"}`+"\n" {
+		t.Fatalf("HEAD events.log = %q", got)
+	}
+}
+
+func TestE2EJSONLAppendBoundaryErrorDoesNotCommit(t *testing.T) {
+	dir := initRepo(t)
+	writeFile(t, dir, "events.jsonl", `{"kind":"base"}`)
+	head := commitAll(t, dir, "initial")
+
+	_, errb, code, err := runCLIInDir(t, dir, "append", "events.jsonl", `{"kind":"prompt"}`)
+	if err == nil || code != exitFailure {
+		t.Fatalf("runCLI code=%d err=%v stderr=%s", code, err, errb.String())
+	}
+	if !strings.Contains(err.Error(), "must end with a newline") {
+		t.Fatalf("error = %v", err)
+	}
+	if got := stringsTrim(testGit(t, dir, "rev-parse", "HEAD")); got != head {
+		t.Fatalf("failed JSONL append moved HEAD to %s", got)
+	}
+}
+
 func TestE2EExplicitFalseBoolFlagsDoNotEnablePlanModes(t *testing.T) {
 	dir := initRepo(t)
 	writeFile(t, dir, "state.json", `{"status":"open"}`+"\n")
@@ -363,10 +421,11 @@ func TestE2ECreateExtensionDefaults(t *testing.T) {
 	commitAll(t, dir, "initial")
 
 	cases := map[string]string{
-		"config.yaml": "{}\n",
-		"note.md":     "",
-		"data.csv":    "",
-		"plain.txt":   "{}",
+		"config.yaml":  "{}\n",
+		"events.jsonl": "",
+		"note.md":      "",
+		"data.csv":     "",
+		"plain.txt":    "{}",
 	}
 	for path, want := range cases {
 		var out, errb bytes.Buffer

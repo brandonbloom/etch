@@ -245,6 +245,8 @@ func planOne(w *Workspace, files map[string]fileChange, op Operation) (Operation
 		return planFileOp(w, files, op)
 	case "structured":
 		return planStructured(w, files, op)
+	case "jsonl":
+		return planJSONLAppend(w, files, op)
 	case "md-section":
 		return planSection(w, files, op)
 	case "table":
@@ -433,6 +435,28 @@ func valueHash(op Operation) string {
 		return shaHex([]byte(op.Value))
 	}
 	return shaHex([]byte(string(op.ValueMode) + "\x00" + op.Value))
+}
+
+func planJSONLAppend(w *Workspace, files map[string]fileChange, op Operation) (Operation, bool, error) {
+	ch, res, err := ensureFileState(w, files, op.Path, false, true)
+	if err != nil {
+		return op, false, err
+	}
+	if ch.AbsentAfter {
+		ch.After = nil
+		ch.AbsentAfter = false
+	}
+	out, changed, err := evalJSONLAppend(op.Value, ch.After)
+	if err != nil {
+		return op, false, err
+	}
+	c, _ := setFileState(files, ch, out, false)
+	op.Path = res.Clean
+	op.Target.Path = res.Clean
+	op.RepoPath = res.Repo
+	op.Noop = false
+	fillDescriptor(&op)
+	return op, changed || c, nil
 }
 
 func planSection(w *Workspace, files map[string]fileChange, op Operation) (Operation, bool, error) {

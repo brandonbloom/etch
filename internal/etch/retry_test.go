@@ -40,6 +40,38 @@ func TestRetryReplansAfterRefCASConflict(t *testing.T) {
 	}
 }
 
+func TestRetryJSONLAppendReplansWithoutDuplicateEvent(t *testing.T) {
+	dir := initRepo(t)
+	writeFile(t, dir, "events.jsonl", `{"kind":"base"}`+"\n")
+	commitAll(t, dir, "initial")
+
+	hooked := false
+	beforeUpdateRefHook = func(attempt int) {
+		if hooked {
+			return
+		}
+		hooked = true
+		writeFile(t, dir, "events.jsonl", `{"kind":"base"}`+"\n"+`{"kind":"concurrent"}`+"\n")
+		testGit(t, dir, "add", "events.jsonl")
+		testGit(t, dir, "commit", "-m", "concurrent")
+	}
+	t.Cleanup(func() { beforeUpdateRefHook = nil })
+
+	var out, errb bytes.Buffer
+	code, err := runCLIAt(dir, []string{"--retries", "1", "append", "events.jsonl", `{"kind":"etch"}`}, &out, &errb)
+	if err != nil || code != exitOK {
+		t.Fatalf("runCLI code=%d err=%v stderr=%s", code, err, errb.String())
+	}
+	got := testGit(t, dir, "show", "HEAD:events.jsonl")
+	want := `{"kind":"base"}` + "\n" + `{"kind":"concurrent"}` + "\n" + `{"kind":"etch"}` + "\n"
+	if got != want {
+		t.Fatalf("events after retry = %q, want %q", got, want)
+	}
+	if strings.Count(got, `"kind":"etch"`) != 1 {
+		t.Fatalf("etch event duplicated:\n%s", got)
+	}
+}
+
 func TestRetryBudgetExhaustion(t *testing.T) {
 	dir := initRepo(t)
 	writeFile(t, dir, "state.json", `{"status":"open"}`+"\n")

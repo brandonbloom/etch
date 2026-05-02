@@ -108,6 +108,48 @@ func TestDecodeAssignmentItemsAreSetOnlyWithoutBlockingLiteralValues(t *testing.
 	}
 }
 
+func TestDecodeJSONLAppend(t *testing.T) {
+	tests := []struct {
+		name string
+		args []string
+		verb string
+		path string
+	}{
+		{
+			name: "porcelain jsonl",
+			args: []string{"append", "events.jsonl", `{"kind":"prompt"}`},
+			verb: "append",
+			path: "events.jsonl",
+		},
+		{
+			name: "porcelain ndjson",
+			args: []string{"append", "events.ndjson", `true`},
+			verb: "append",
+			path: "events.ndjson",
+		},
+		{
+			name: "plumbing",
+			args: []string{"jsonl", "append", "events.log", `12`},
+			verb: "jsonl append",
+			path: "events.log",
+		},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			op, err := DecodeOperation(Statement{Tokens: tc.args})
+			if err != nil {
+				t.Fatal(err)
+			}
+			if op.Verb != tc.verb || op.Kind != "jsonl" || op.Class != ClassNonIdempotent || op.Path != tc.path || op.ValueMode != ValueModeJSON || op.Target.Path != tc.path {
+				t.Fatalf("op = %#v", op)
+			}
+		})
+	}
+	if _, err := DecodeOperation(Statement{Tokens: []string{"append", "events.jsonl", "items", `{"kind":"prompt"}`}}); err == nil {
+		t.Fatal("jsonl append accepted selector form")
+	}
+}
+
 func TestNormalizeSelector(t *testing.T) {
 	tests := map[string]string{
 		"a.b[0]":                 "$.a.b[0]",
@@ -190,6 +232,7 @@ func TestIntrospectionDoesNotRequireGit(t *testing.T) {
 	for name, class := range map[string]CommandClass{
 		"set":                 ClassIdempotent,
 		"append":              ClassNonIdempotent,
+		"jsonl append":        ClassNonIdempotent,
 		"exists":              ClassGuard,
 		"table row append":    ClassNonIdempotent,
 		"md table row delete": ClassIdempotent,

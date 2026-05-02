@@ -34,6 +34,89 @@ func TestJSONVerbs(t *testing.T) {
 	}
 }
 
+func TestEvalJSONLAppend(t *testing.T) {
+	tests := []struct {
+		name   string
+		before string
+		value  string
+		want   string
+	}{
+		{
+			name:   "empty file",
+			before: "",
+			value:  `{"kind":"prompt","n":2}`,
+			want:   `{"kind":"prompt","n":2}` + "\n",
+		},
+		{
+			name:   "existing records",
+			before: `{"kind":"old"}` + "\n",
+			value:  `{"kind":"prompt","nested":{"ok":true}}`,
+			want:   `{"kind":"old"}` + "\n" + `{"kind":"prompt","nested":{"ok":true}}` + "\n",
+		},
+		{
+			name:   "malformed non-tail record is not parsed",
+			before: "not json\n{\"ok\":true}\n",
+			value:  `12`,
+			want:   "not json\n{\"ok\":true}\n12\n",
+		},
+		{
+			name:   "non-object value",
+			before: "",
+			value:  `"hello"`,
+			want:   "\"hello\"\n",
+		},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			got, changed, err := evalJSONLAppend(tc.value, []byte(tc.before))
+			if err != nil {
+				t.Fatal(err)
+			}
+			if !changed {
+				t.Fatal("evalJSONLAppend reported no change")
+			}
+			if string(got) != tc.want {
+				t.Fatalf("JSONL output:\n%s\nwant:\n%s", got, tc.want)
+			}
+		})
+	}
+}
+
+func TestEvalJSONLAppendErrors(t *testing.T) {
+	tests := []struct {
+		name   string
+		before string
+		value  string
+		want   string
+	}{
+		{
+			name:   "missing trailing newline",
+			before: `{"kind":"old"}`,
+			value:  `{"kind":"new"}`,
+			want:   "must end with a newline",
+		},
+		{
+			name:   "blank tail boundary",
+			before: `{"kind":"old"}` + "\n \n",
+			value:  `{"kind":"new"}`,
+			want:   "boundary is blank",
+		},
+		{
+			name:   "invalid new value",
+			before: "",
+			value:  `{`,
+			want:   "invalid JSONL value",
+		},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			if _, _, err := evalJSONLAppend(tc.value, []byte(tc.before)); err == nil || !strings.Contains(err.Error(), tc.want) {
+				t.Fatalf("err = %v, want %q", err, tc.want)
+			}
+		})
+	}
+}
+
 func TestJSONAddAndRemoveDistinguishLargeNumbers(t *testing.T) {
 	dir := initRepo(t)
 	writeFile(t, dir, "state.json", `{"ids":[9007199254740992]}`+"\n")
@@ -907,6 +990,14 @@ func TestInvalidUTF8RefusedForStructuredFormats(t *testing.T) {
 				return err
 			},
 			want: "invalid UTF-8 in JSON input",
+		},
+		{
+			name: "jsonl",
+			run: func() error {
+				_, _, err := evalJSONLAppend(`{"ok":true}`, invalid)
+				return err
+			},
+			want: "invalid UTF-8 in JSONL input",
 		},
 		{
 			name: "yaml",

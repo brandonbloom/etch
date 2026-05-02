@@ -145,7 +145,7 @@ func buildCommandSpecs() []commandSpec {
 	specs := []commandSpec{
 		command("set", "set <path> <selector> <value>|<selector=value>...", "Set JSON/YAML/frontmatter values.", ClassIdempotent, true, parsePorcelainStructured("set"), "--json"),
 		command("delete", "delete <path> [<selector>]", "Delete a file or selected JSON/YAML/frontmatter value.", ClassIdempotent, true, parseDelete),
-		command("append", "append <path> <selector> <value|--json value>", "Append a value to an array.", ClassNonIdempotent, true, parsePorcelainStructured("append"), "--json"),
+		command("append", "append <path> <selector> <value|--json value>|<path.jsonl> <json-value>", "Append a value to an array, or a JSONL record to .jsonl/.ndjson.", ClassNonIdempotent, true, parsePorcelainAppend, "--json"),
 		command("add", "add <path> <selector> <value|--json value>", "Ensure an array contains a value.", ClassIdempotent, true, parsePorcelainStructured("add"), "--json"),
 		command("remove", "remove <path> <selector> <value|--json value>", "Ensure an array does not contain a value.", ClassIdempotent, true, parsePorcelainStructured("remove"), "--json"),
 		command("section replace", "section replace <path> <heading> <content>", "Replace the body under one Markdown heading.", ClassIdempotent, true, parseSection("replace")),
@@ -161,6 +161,7 @@ func buildCommandSpecs() []commandSpec {
 		command("md section replace", "md section replace <path> <heading> <content>", "Replace the body under one Markdown heading.", ClassIdempotent, true, parseSection("replace")),
 		command("md section append", "md section append <path> <heading> <content>", "Append a block fragment under one Markdown heading.", ClassNonIdempotent, true, parseSection("append")),
 		command("md section prepend", "md section prepend <path> <heading> <content>", "Prepend a block fragment under one Markdown heading.", ClassNonIdempotent, true, parseSection("prepend")),
+		command("jsonl append", "jsonl append <path> <json-value>", "Append one compact JSON value as a JSONL/NDJSON record.", ClassNonIdempotent, true, parseJSONLAppend),
 	}
 	for _, family := range []structuredCommandFamily{
 		{Format: "json", ValueDescription: "JSON values", DeleteDescription: "Delete a JSON value.", Sequence: "JSON array"},
@@ -369,6 +370,13 @@ func parsePorcelainStructured(verb string) commandParser {
 	}
 }
 
+func parsePorcelainAppend(inv commandInvocation) ([]Operation, error) {
+	if len(inv.Args) > 0 && isJSONLPath(inv.Args[0]) {
+		return decodeJSONLAppend(inv, "append <path.jsonl> <json-value>")
+	}
+	return parsePorcelainStructured("append")(inv)
+}
+
 func parseStructured(format, verb string) commandParser {
 	return func(inv commandInvocation) ([]Operation, error) {
 		spec, op, args := inv.Spec, inv.Op, inv.Args
@@ -394,6 +402,20 @@ func parseStructured(format, verb string) commandParser {
 		}
 		return oneOperation(decodeStructured(op, format, verb, valueArgs))
 	}
+}
+
+func parseJSONLAppend(inv commandInvocation) ([]Operation, error) {
+	return decodeJSONLAppend(inv, inv.Spec.Signature)
+}
+
+func decodeJSONLAppend(inv commandInvocation, signature string) ([]Operation, error) {
+	op, args := inv.Op, inv.Args
+	if len(args) != 2 {
+		return nil, usagef("usage: etch %s", signature)
+	}
+	op.Verb, op.Kind, op.Class, op.Path, op.Value, op.ValueMode = inv.Spec.name(), "jsonl", inv.Spec.Class, args[0], args[1], ValueModeJSON
+	op.Target = PlanTarget{Path: args[0]}
+	return parsedOperation(op)
 }
 
 func parseSection(action string) commandParser {
@@ -825,6 +847,11 @@ func isJSONPath(path string) bool {
 	return strings.EqualFold(filepath.Ext(path), ".json")
 }
 
+func isJSONLPath(path string) bool {
+	ext := strings.ToLower(filepath.Ext(path))
+	return ext == ".jsonl" || ext == ".ndjson"
+}
+
 func isYAMLPath(path string) bool {
 	ext := strings.ToLower(filepath.Ext(path))
 	return ext == ".yaml" || ext == ".yml"
@@ -845,7 +872,7 @@ func defaultCreateContent(path string) string {
 		return "{}"
 	case isYAMLPath(path):
 		return "{}\n"
-	case isMarkdownPath(path), isCSVPath(path):
+	case isJSONLPath(path), isMarkdownPath(path), isCSVPath(path):
 		return ""
 	default:
 		return "{}"
@@ -922,7 +949,7 @@ func printHelp(w io.Writer, topic string, all bool) error {
 }
 
 func isPlumbingVerb(v VerbInfo) bool {
-	for _, prefix := range []string{"json ", "yaml ", "frontmatter ", "md ", "csv "} {
+	for _, prefix := range []string{"json ", "jsonl ", "yaml ", "frontmatter ", "md ", "csv "} {
 		if strings.HasPrefix(v.Name, prefix) {
 			return true
 		}
@@ -947,9 +974,11 @@ Examples:
   etch set state.json status complete          # string "complete"
   etch set state.json count --json 12          # number 12
   etch append state.json events --json '{"kind":"prompt"}'
+  etch append events.jsonl '{"kind":"prompt"}'
   etch set state.json status=complete count:=12
 
 Assignment items are accepted by set only. NAME=value writes a string; NAME:=json writes JSON.
+JSONL and NDJSON append values are always strict JSON and do not use --json.
 `
 
 const fieldsHelp = `Markdown fields: use frontmatter for note-global metadata; use inline fields for body-local metadata.

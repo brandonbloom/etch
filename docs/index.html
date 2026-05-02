@@ -461,11 +461,11 @@
 <!-- WHAT IT IS -->
 <section class="reveal">
   <h2>What etch is</h2>
-  <p>etch is a small CLI for <strong>mechanical mutations to text and data files</strong>. It knows about a fixed set of file formats&mdash;Markdown, JSON, YAML, CSV&mdash;and a fixed set of operations on them. Every successful mutating call becomes a git commit by default.</p>
+  <p>etch is a small CLI for <strong>mechanical mutations to text and data files</strong>. It knows about a fixed set of file formats&mdash;Markdown, JSON, JSONL/NDJSON, YAML, CSV&mdash;and a fixed set of operations on them. Every successful mutating call becomes a git commit by default.</p>
   <p>The scope is intentionally narrow. No network. No subprocesses. No Turing-complete scripting. Just precise structural edits that land as atomic commits.</p>
 
   <ul class="kv-list">
-    <li><span class="kv-key">Formats</span><span class="kv-val">Markdown (with frontmatter), JSON, YAML, CSV&mdash;inferred from file extension</span></li>
+    <li><span class="kv-key">Formats</span><span class="kv-val">Markdown (with frontmatter), JSON, JSONL/NDJSON, YAML, CSV&mdash;inferred from file extension</span></li>
     <li><span class="kv-key">Operations</span><span class="kv-val">set, delete, append, add, remove on structured paths; section replace/append/prepend on markdown headings; create, move, copy, delete on files; table operations on CSV and markdown tables; guards (exists, missing, contains)</span></li>
     <li><span class="kv-key">Output</span><span class="kv-val">A git commit with touched paths materialized by default</span></li>
     <li><span class="kv-key">Language</span><span class="kv-val">Go, single binary, using git as the transaction backend</span></li>
@@ -766,6 +766,7 @@ plan=$(etch --plan set tasks/review.md frontmatter.status "complete")
       <select id="builder-format" onchange="updateBuilder()">
         <option value="md">Markdown (.md)</option>
         <option value="json">JSON (.json)</option>
+        <option value="jsonl">JSONL (.jsonl)</option>
         <option value="yaml">YAML (.yaml)</option>
         <option value="csv">CSV (.csv)</option>
       </select>
@@ -817,29 +818,36 @@ const examples = {
   'set-md':    { cmd: 'etch set tasks/review.md frontmatter.snooze "2026-05-10"',   commit: 'etch set tasks/review.md frontmatter.snooze', note: 'Adds a snooze date to the task\'s YAML frontmatter.' },
   'set-json':  { cmd: 'etch set state.json agents.assistant.last_run "2026-04-27"',  commit: 'etch set state.json agents.assistant.last_run', note: 'Navigates the JSON structure and sets the nested key.' },
   'set-yaml':  { cmd: 'etch set config.yaml feeds.daily_digest.enabled true',        commit: 'etch set config.yaml feeds.daily_digest.enabled', note: 'Sets a value in the YAML file, preserving structure.' },
+  'set-jsonl': { cmd: '# JSONL is append-only.\n# Use append to add a record:\netch append events.jsonl \'{"kind":"prompt"}\'', commit: 'etch append events.jsonl {"kind":"prompt"}', note: 'JSONL logs do not have selectors; records are appended one line at a time.' },
   'set-csv':   { cmd: 'etch table set data.csv status=open,status done',               commit: 'etch table set data.csv status=open,status', note: 'Sets the status column to "done" for the row where status is "open".' },
   'delete-md': { cmd: 'etch delete tasks/review.md frontmatter.draft',               commit: 'etch delete tasks/review.md frontmatter.draft', note: 'Removes the "draft" key from the markdown file\'s frontmatter.' },
   'delete-json': { cmd: 'etch delete state.json cache.stale_entry',                  commit: 'etch delete state.json cache.stale_entry', note: 'Removes the key from the JSON object.' },
   'delete-yaml': { cmd: 'etch delete config.yaml old.unused_key',                    commit: 'etch delete config.yaml old.unused_key', note: 'Removes the key from the YAML file.' },
+  'delete-jsonl': { cmd: '# JSONL delete is out of scope.\n# Use append-only event records instead.', commit: 'none', note: 'JSONL support is intentionally append-only.' },
   'delete-csv':  { cmd: 'etch table row delete data.csv status=closed',                commit: 'etch table row delete data.csv status=closed', note: 'Deletes the row where status equals "closed".' },
   'append-md': { cmd: 'etch append people/alice.md frontmatter.tags \'"vip"\'',      commit: 'etch append people/alice.md frontmatter.tags', note: 'Appends a tag to the list in the dossier\'s frontmatter.' },
   'append-json': { cmd: 'etch append log.json entries \'{"date":"2026-04-27","event":"sync"}\'', commit: 'etch append log.json entries', note: 'Appends an object to a JSON array.' },
+  'append-jsonl': { cmd: 'etch append events.jsonl \'{"date":"2026-05-02","event":"sync"}\'', commit: 'etch append events.jsonl {"date":"2026-05-02","event":"sync"}', note: 'Appends one compact JSON record to the event log.' },
   'append-yaml': { cmd: 'etch append config.yaml plugins \'"analytics"\'',           commit: 'etch append config.yaml plugins', note: 'Appends to a YAML sequence.' },
   'append-csv':  { cmd: 'etch table row append data.csv \'{"id":"3","status":"open"}\'', commit: 'etch table row append data.csv', note: 'Appends a row to the CSV table.' },
   'add-md':    { cmd: 'etch add people/alice.md frontmatter.tags \'"vip"\'',          commit: 'etch add people/alice.md frontmatter.tags', note: 'Ensures the tag is in the array, no-op if already present.' },
   'add-json':  { cmd: 'etch add config.json features \'"dark-mode"\'',              commit: 'etch add config.json features', note: 'Ensures "dark-mode" is in the array; idempotent.' },
+  'add-jsonl': { cmd: '# JSONL add is out of scope.\n# Duplicate events can be meaningful, so use append.', commit: 'none', note: 'JSONL event logs are non-idempotent append-only streams.' },
   'add-yaml':  { cmd: 'etch add config.yaml plugins \'"analytics"\'',               commit: 'etch add config.yaml plugins', note: 'Ensures "analytics" is in the sequence; idempotent.' },
   'add-csv':   { cmd: 'etch table column add data.csv priority --default medium',      commit: 'etch table column add data.csv priority', note: 'Adds a "priority" column with a default value; no-op if already present.' },
   'remove-md': { cmd: 'etch remove people/alice.md frontmatter.tags \'"vip"\'',       commit: 'etch remove people/alice.md frontmatter.tags', note: 'Removes "vip" from the tags array if present.' },
   'remove-json': { cmd: 'etch remove config.json features \'"dark-mode"\'',         commit: 'etch remove config.json features', note: 'Removes "dark-mode" from the array if present.' },
+  'remove-jsonl': { cmd: '# JSONL remove is out of scope.\n# Repair workflows should use ordinary file edits.', commit: 'none', note: 'JSONL support does not rewrite addressed records.' },
   'remove-yaml': { cmd: 'etch remove config.yaml plugins \'"analytics"\'',          commit: 'etch remove config.yaml plugins', note: 'Removes "analytics" from the sequence if present.' },
   'remove-csv':  { cmd: 'etch table column delete data.csv legacy_field',              commit: 'etch table column delete data.csv legacy_field', note: 'Deletes the "legacy_field" column from the CSV.' },
   'section-replace-md': { cmd: 'etch section replace people/alice.md "## Notes" <<EOF\nDiscussed project timeline. Agreed on May deadline.\nEOF', commit: 'etch section replace people/alice.md "## Notes"', note: 'Replaces everything under ## Notes until the next heading of equal or higher level.' },
   'section-replace-json': { cmd: '# section replace is a markdown operation.\n# For JSON, use set with the target path instead:\netch set state.json status.block \'{"key": "value"}\'', commit: 'etch set state.json status.block', note: 'Section replacement is a markdown concept. For structured formats, use set.' },
+  'section-replace-jsonl': { cmd: '# section replace is a markdown operation.\n# JSONL support is append-only:\netch append events.jsonl \'{"kind":"note"}\'', commit: 'etch append events.jsonl {"kind":"note"}', note: 'Section replacement is a markdown concept.' },
   'section-replace-yaml': { cmd: '# section replace is a markdown operation.\n# For YAML, use set with the target path instead:\netch set config.yaml settings.block \'{"key": "value"}\'', commit: 'etch set config.yaml settings.block', note: 'Section replacement is a markdown concept. For structured formats, use set.' },
   'section-replace-csv': { cmd: '# section replace is a markdown operation.\n# For CSV, use table operations instead:\netch table set data.csv all,status done', commit: 'etch table set data.csv all,status', note: 'Section replacement is a markdown concept. For CSV, use table operations.' },
   'create-md':   { cmd: 'etch create people/bob.md',                                  commit: 'etch create people/bob.md', note: 'Creates a new empty markdown file. Fails if the file already exists.' },
   'create-json': { cmd: 'etch create state.json',                                     commit: 'etch create state.json', note: 'Creates a new JSON file with default content {}. Fails if it already exists.' },
+  'create-jsonl': { cmd: 'etch create events.jsonl',                                  commit: 'etch create events.jsonl ""', note: 'Creates an empty event log. Append also creates a missing JSONL target.' },
   'create-yaml': { cmd: 'etch create config.yaml',                                    commit: 'etch create config.yaml', note: 'Creates a new YAML file with default content {}. Fails if it already exists.' },
   'create-csv':  { cmd: 'etch create data.csv',                                       commit: 'etch create data.csv', note: 'Creates a new empty CSV file. Fails if it already exists.' },
 };

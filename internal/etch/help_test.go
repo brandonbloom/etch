@@ -24,7 +24,7 @@ func TestDefaultHelpTableExcludesPlumbing(t *testing.T) {
 		t.Fatal(err)
 	}
 	text := out.String()
-	for _, hidden := range []string{"json set", "yaml set", "frontmatter set", "md section replace", "csv set"} {
+	for _, hidden := range []string{"json set", "jsonl append", "yaml set", "frontmatter set", "md section replace", "csv set"} {
 		if strings.Contains(text, hidden) {
 			t.Fatalf("default help contains plumbing command %q:\n%s", hidden, text)
 		}
@@ -42,7 +42,7 @@ func TestHelpAllIncludesPlumbing(t *testing.T) {
 		t.Fatal(err)
 	}
 	text := out.String()
-	for _, shown := range []string{"json set", "yaml set", "frontmatter set", "md section replace", "csv set"} {
+	for _, shown := range []string{"json set", "jsonl append", "yaml set", "frontmatter set", "md section replace", "csv set"} {
 		if !strings.Contains(text, shown) {
 			t.Fatalf("help --all missing plumbing command %q:\n%s", shown, text)
 		}

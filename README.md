@@ -4,7 +4,7 @@
 Git worktree. Each successful mutating invocation is planned from `HEAD` and
 recorded as a Git commit, so the repository history becomes the transaction log
 for file changes such as "set this JSON field", "replace this Markdown section",
-or "append this table row".
+or "append this JSONL event".
 
 The project is aimed at agentic coding workflows and wiki-style repositories
 where many edits are simple but easy to get subtly wrong with hand-authored
@@ -13,8 +13,8 @@ that are atomic, reviewable, and replayable.
 
 ## What etch does
 
-- Mutates JSON, YAML, Markdown frontmatter, Markdown sections, CSV tables,
-  Markdown pipe tables, and plain files.
+- Mutates JSON, JSONL/NDJSON, YAML, Markdown frontmatter, Markdown sections,
+  CSV tables, Markdown pipe tables, and plain files.
 - Commits each successful mutating invocation as one Git commit.
 - Treats multi-operation scripts as one transaction: all operations commit
   together, or none of them do.
@@ -95,6 +95,7 @@ Porcelain commands infer the format from the file extension:
 | `set <path> <selector=value>...` | Set multiple structured values in one file. |
 | `delete <path> [<selector>]` | Delete a file or selected structured value. |
 | `append <path> <selector> <value>` | Append a value to an array. |
+| `append <path.jsonl> <json-value>` | Append one compact JSON record to a JSONL or NDJSON log. |
 | `add <path> <selector> <value>` | Ensure an array contains a value. |
 | `remove <path> <selector> <value>` | Ensure an array does not contain a value. |
 | `section replace <path> <heading> <content>` | Replace the body under one Markdown heading. |
@@ -120,8 +121,8 @@ Table commands infer CSV or Markdown table behavior:
 | `table column delete <path> ... <column>` | Delete a column. |
 
 Use `etch help --all` to see format-explicit plumbing commands such as
-`json set`, `yaml set`, `frontmatter set`, `md section replace`, and
-`csv row append`.
+`json set`, `jsonl append`, `yaml set`, `frontmatter set`,
+`md section replace`, and `csv row append`.
 
 For machine-readable command metadata:
 
@@ -138,6 +139,13 @@ etch set state.json status complete
 etch set state.json priority --json 1
 etch set state.json labels --json '["agent","docs"]'
 etch set state.json status=complete priority:=1
+```
+
+Append JSONL/NDJSON:
+
+```sh
+etch append events.jsonl '{"kind":"prompt","at":"2026-05-02T09:00:00-07:00"}'
+etch jsonl append events.log '{"kind":"heartbeat"}'
 ```
 
 Mutate Markdown frontmatter:
@@ -234,11 +242,15 @@ token as a strict JSON value.
 etch set state.json status complete
 etch set state.json count --json 12
 etch append state.json events --json '{"status":"done"}'
+etch append events.jsonl '{"status":"done"}'
 ```
 
 `set` also accepts assignment items: `selector=value` writes a string and
 `selector:=json` writes strict JSON. Assignment items are not accepted by
 `append`, `add`, `remove`, or `delete`.
+
+JSONL and NDJSON append values are always strict JSON and do not use `--json`;
+missing JSONL targets are created as empty logs before appending.
 
 ## Transaction Model
 
@@ -274,8 +286,9 @@ segments, `.git` path segments, and symlink escapes. Mutating invocations requir
 a Git worktree. The implementation invokes Git for repository, object, and ref
 operations.
 
-Supported structured formats are UTF-8 text. JSON, YAML, Markdown, and CSV
-inputs may include a UTF-8 BOM; `etch` preserves it when writing the file back.
+Supported structured formats are UTF-8 text. JSON, JSONL/NDJSON, YAML,
+Markdown, and CSV inputs may include a UTF-8 BOM; `etch` preserves it when
+writing the file back.
 
 ## Development
 

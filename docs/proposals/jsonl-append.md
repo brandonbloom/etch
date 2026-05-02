@@ -1,5 +1,5 @@
 ---
-status: draft
+status: implemented
 depends_on: []
 ---
 
@@ -39,6 +39,7 @@ monomorphic plumbing for callers that want explicit format selection.
 - Etch validates the new value and the append boundary, not the whole existing
   file.
 - Empty files are valid append targets.
+- Missing files are treated as empty logs and created.
 - Non-empty files must end with a newline. Etch fails rather than silently
   repairing a missing trailing newline, because the previous record boundary is
   ambiguous.
@@ -122,9 +123,10 @@ Code:
   values, `.ndjson` paths, porcelain arity, CAS retry, duplicate successful
   invocations, and compact rendering.
 
-## Open Questions
+## Decisions
 
-- Should `ndjson append` be a spelling alias for `jsonl append`, or are
-  extension inference and docs enough?
-- Should Etch add an object-only mode for event logs, or leave schema
-  conventions outside the command?
+- There is no `ndjson append` spelling alias. `.ndjson` paths infer the JSONL
+  adapter through porcelain `append`, and `jsonl append` remains the single
+  format-explicit spelling.
+- Etch accepts any strict JSON value. Object-only event schemas remain a
+  repository convention rather than an Etch mode.
