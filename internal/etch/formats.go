@@ -158,17 +158,10 @@ func evalMarkdownSection(path, verb, heading, content string, before []byte) ([]
 	if !utf8.Valid(raw) {
 		return nil, false, failf("invalid UTF-8 in Markdown input")
 	}
-	sections, err := markdownSections(raw, heading)
+	section, err := resolveMarkdownSection(raw, path, heading)
 	if err != nil {
 		return nil, false, err
 	}
-	if len(sections) == 0 {
-		return nil, false, failf("heading %q not found in %s", heading, path)
-	}
-	if len(sections) > 1 {
-		return nil, false, failf("heading %q is ambiguous in %s", heading, path)
-	}
-	section := sections[0]
 	newline := markdownNewline(raw)
 	repl, err := markdownSectionBody(raw, section, verb, content, newline)
 	if err != nil {

@@ -918,9 +918,9 @@ func printHelp(w io.Writer, topic string, all bool) error {
 		}
 		fmt.Fprintln(w)
 		if all {
-			fmt.Fprint(w, "Topics: model, scripts, selectors, values, fields, plans, security, conflicts, section, table, csv\n")
+			fmt.Fprint(w, "Topics: model, scripts, selectors, values, fields, plans, security, conflicts, addressing, section, table, csv\n")
 		} else {
-			fmt.Fprint(w, "Topics: model, scripts, selectors, values, fields, plans, security, conflicts, section, table, csv. Use --all for plumbing commands.\n")
+			fmt.Fprint(w, "Topics: model, scripts, selectors, values, fields, plans, security, conflicts, addressing, section, table, csv. Use --all for plumbing commands.\n")
 		}
 	case "scripts":
 		fmt.Fprint(w, scriptsHelp)
@@ -936,6 +936,8 @@ func printHelp(w io.Writer, topic string, all bool) error {
 		fmt.Fprint(w, securityHelp)
 	case "conflicts":
 		fmt.Fprint(w, conflictsHelp)
+	case "addressing":
+		fmt.Fprint(w, addressingHelp)
 	case "model":
 		fmt.Fprint(w, modelHelp)
 	case "section":
@@ -1001,6 +1003,19 @@ It does not perform network operations. The implementation invokes git for repos
 
 const conflictsHelp = `When materialization cannot merge local checkout changes after the commit lands, etch leaves recovery text on stderr.
 The commit is durable once the ref update succeeds; resolve conflict markers, then commit or discard the checkout resolution.
+`
+
+const addressingHelp = `Markdown addressing uses exact matching with syntax normalization and ambiguity errors.
+
+Section selectors accept either a title such as "Status" or an ATX heading such as "## Status".
+Title-only selectors search all ATX heading levels; ATX selectors include the heading level.
+
+List-item selectors normalize away the list marker, task checkbox, surrounding whitespace,
+and Dataview inline field annotations. Inline Markdown remains source text, so "**Buy milk**"
+matches "**Buy milk**", not "Buy milk".
+
+Item type filters are task, plain, numbered, and bullet. Repeated filters combine across
+independent axes, such as task+numbered. Contradictory filters fail before planning.
 `
 
 const modelHelp = `Mutating invocations read tracked inputs from HEAD, not from dirty checkout files.

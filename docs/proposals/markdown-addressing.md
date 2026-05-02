@@ -1,5 +1,5 @@
 ---
-status: draft
+status: implemented
 depends_on: []
 ---
 
@@ -10,6 +10,10 @@ depends_on: []
 Define shared addressing and placement rules for Markdown body operations.
 Inline fields, section insertion, task/list operations, and future section
 deletion should use the same vocabulary for locating parts of a Markdown file.
+
+Implementation note: this proposal landed as shared internal helpers and
+documentation. Existing section commands use the shared heading resolver; item,
+task, and placement helpers are ready for dependent Markdown commands.
 
 ## Candidate Addressing Flags
 
