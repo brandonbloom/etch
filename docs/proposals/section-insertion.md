@@ -72,7 +72,8 @@ model, not a mandate to expose generic paragraph editing commands.
 Prefer stable scopes and anchors in this order:
 
 1. Heading scope.
-2. Obsidian-style block ID, if the note already has one.
+2. Obsidian-compatible block ID, if that addressing proposal is adopted and the
+   note already has one.
 3. Exact list item or task text for list/task commands.
 4. Exact `--after`/`--before` anchor windows.
 

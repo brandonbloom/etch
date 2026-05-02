@@ -17,8 +17,8 @@ the same vocabulary for locating parts of a Markdown file.
 --body
 --section <heading>
 --item <literal>
+--item-type <task|plain|numbered|bullet>
 --task <literal>
---bullet <literal>
 --after <literal>
 --before <literal>
 ```
@@ -27,9 +27,12 @@ the same vocabulary for locating parts of a Markdown file.
 
 - `--body` selects the whole Markdown body after frontmatter.
 - `--section <heading>` selects one heading-delimited section.
-- `--item <literal>` selects one list item or task.
-- `--task <literal>` selects one task item.
-- `--bullet <literal>` selects one non-task list item.
+- `--item <literal>` selects one Markdown list item, including task, plain,
+  numbered, and bullet-list items.
+- `--item-type` narrows an `--item` selection. It is repeatable, and repeated
+  item-type constraints are AND-ed.
+- `--task <literal>` is shorthand for `--item <literal> --item-type task`.
+- `--item-type` without `--item` or `--task` is an error.
 - `--after` and `--before` narrow the selected body, section, or item scope.
 - Missing selectors are errors for mutating commands that need an existing
   location.
@@ -67,22 +70,32 @@ the address.
 
 ## Items
 
-- `--item` accepts either the item text or the item source including the list
-  marker and checkbox.
-- `--task` and `--bullet` use the same matching rules as `--item`, but filter
-  the candidate set first. `--task` only considers task list items.
-  `--bullet` only considers non-task list items, including unordered and ordered
-  list items.
-- Item matching normalizes away the list marker, checkbox marker, surrounding
-  whitespace, and Dataview inline field annotations.
-- The normalized text must match exactly.
-- Repeated matching items are ambiguous and cause an error.
+- `--item` accepts either the source text after the list marker and checkbox, or
+  the item source including the list marker and checkbox.
+- `--item-type task` matches list items with a Markdown task checkbox marker,
+  such as `[ ]` or `[x]`.
+- `--item-type plain` matches list items without a Markdown task checkbox
+  marker.
+- `--item-type numbered` matches list items with a numbered/ordered marker,
+  such as `1.` or `1)`.
+- `--item-type bullet` matches list items with a bullet-list marker: `-`, `+`,
+  or `*`.
+- Contradictory item-type combinations, such as `task` with `plain` or
+  `numbered` with `bullet`, are errors.
+- Item matching is source-normalized, not rendered-text-normalized. Etch
+  normalizes away the list marker, checkbox marker, surrounding whitespace, and
+  Dataview inline field annotations.
+- Inline Markdown syntax remains meaningful source text. `**Buy milk**` matches
+  `**Buy milk**`, not `Buy milk`; `[Buy milk](url)` matches the link source,
+  not just the rendered label.
+- The normalized source text must match exactly.
+- Repeated matching items are ambiguous and cause an error. If the same text
+  appears as both a numbered task and a bullet-list task, callers can add
+  `--item-type numbered` or `--item-type bullet`.
 - Complex cases such as nested items, multiline items, or items whose normalized
-  text is unstable should fail rather than guess.
-- `--task` is useful when the same text appears as both a plain list item and a
-  task. `--bullet` is the inverse convenience for prose lists.
-- Block IDs should become a first-class addressing form if adopters use them as
-  stable anchors.
+  source text is unstable should fail rather than guess.
+- Obsidian-compatible block IDs are deferred to
+  [Markdown Block IDs](block-ids.md).
 
 ## Impact
 
@@ -101,11 +114,11 @@ Docs:
 
 Code:
 
-- Add reusable Markdown addressing helpers for body, section, item, task,
-  bullet, and anchor resolution.
+- Add reusable Markdown addressing helpers for body, section, item, item-type,
+  task shorthand, and anchor resolution.
 - Add fixtures for title and ATX heading matching, repeated headings, closing
-  heading markers, item text normalization, ambiguous items, nested items,
-  multiline items, and block ID behavior if adopted.
+  heading markers, item source normalization, item-type filters, ambiguous
+  items, nested items, and multiline items.
 
 ## Rationale
 

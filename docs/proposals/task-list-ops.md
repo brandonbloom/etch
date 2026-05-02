@@ -10,8 +10,9 @@ depends_on:
 
 ## Summary
 
-Add a narrow Markdown task/list layer for checkbox toggles and bullet appends.
-This proposal is deliberately narrower than generic Markdown list editing.
+Add a narrow Markdown task/list layer for checkbox toggles and list-item
+appends. This proposal is deliberately narrower than generic Markdown list
+editing.
 
 ## Dataview Background
 

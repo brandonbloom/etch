@@ -37,13 +37,14 @@ Review these in priority order:
 
 1. [Markdown fields](inline-fields.md)
 2. [Markdown addressing](markdown-addressing.md)
-3. [Markdown section insertion and block whitespace](section-insertion.md)
-4. [Transaction batching](transactions.md)
-5. [Markdown task and list operations](task-list-ops.md)
-6. [JSONL append](jsonl-append.md)
-7. [TOML set/delete](toml-set-delete.md)
-8. [Frontmatter migration guidance](frontmatter-migration.md)
-9. [Template-based creation](template-creation.md)
+3. [Markdown block IDs](block-ids.md)
+4. [Markdown section insertion and block whitespace](section-insertion.md)
+5. [Transaction batching](transactions.md)
+6. [Markdown task and list operations](task-list-ops.md)
+7. [JSONL append](jsonl-append.md)
+8. [TOML set/delete](toml-set-delete.md)
+9. [Frontmatter migration guidance](frontmatter-migration.md)
+10. [Template-based creation](template-creation.md)
 
 The first two proposals are the highest-leverage adopter-driven additions.
 Transaction batching is listed before task/list operations because commit

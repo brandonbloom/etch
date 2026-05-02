@@ -11,14 +11,16 @@ depends_on:
 Extend Markdown `set` and `delete` so a Markdown file behaves like a structured
 data document:
 
-- With no body-location flags, `set` targets YAML frontmatter.
-- With body-location flags, `set` targets Dataview inline fields in the
+- With no address flags, `set` targets YAML frontmatter.
+- With address flags, `set` targets Dataview inline fields in the
   Markdown body.
 - Dataview implicit fields, such as `file.name` and task `status`, are not
   mutable through this proposal.
 
-This avoids new `field.*` or `frontmatter.*` syntax for the adopter-facing
-surface while still allowing Etch to disambiguate where the field lives.
+This is a breaking change from the MVP Markdown selector model, which required
+`frontmatter.*` to mutate frontmatter through porcelain `set`. The new model
+treats a Markdown file as a structured document whose default writable field
+location is frontmatter, while address flags opt into body-local inline fields.
 
 ## Dataview Model
 
@@ -46,16 +48,20 @@ References:
 
 ## Candidate Commands
 
-Use the existing `set` and `delete` primitives. Body-location flags imply
-inline-field mutation.
+Use the existing `set` and `delete` primitives. Address flags imply inline-field
+mutation.
 
 ```sh
 etch set <path.md> <field> <value>
 etch delete <path.md> <field>
 
-etch set <path.md> <field> <value> [--body] [--section <heading>] [--item <literal>] [--task <literal>] [--bullet <literal>] [--after <literal>] [--before <literal>] [--hidden]
-etch delete <path.md> <field> [--body] [--section <heading>] [--item <literal>] [--task <literal>] [--bullet <literal>] [--after <literal>] [--before <literal>]
+etch set <path.md> <field> <value> [address flags] [--hidden]
+etch delete <path.md> <field> [address flags]
 ```
+
+Address flags are the optional Markdown addressing flags defined in
+[Markdown Addressing](markdown-addressing.md), such as `--body`, `--section`,
+`--item`, `--item-type`, `--task`, `--after`, and `--before`.
 
 Examples:
 
@@ -69,33 +75,49 @@ etch set memory/tasks/follow-up.md trace-id "abc123" --task "Send follow-up" --h
 
 ## Semantics
 
-- For Markdown paths, `set <path> <field> <value>` without body-location flags
+- For Markdown paths, `set <path> <field> <value>` without address flags
   mutates YAML frontmatter.
+- Porcelain Markdown `frontmatter.*` selectors are replaced by the bare
+  frontmatter-default form. `set note.md frontmatter.title ...` should fail
+  rather than address frontmatter or create a field named `frontmatter.title`.
+  Frontmatter-specific plumbing can remain available as
+  `frontmatter set <path> <selector> <value>`.
 - The Dataview page implicit namespace `file.*` is reserved. This proposal does
   not add read/query commands, but `set note.md file.name ...` should fail
   rather than create frontmatter at `file.name`.
-- `--body`, `--section`, `--item`, `--task`, `--bullet`, `--after`, and
-  `--before` are body-location flags. Supplying any of them switches the target
-  from frontmatter to Dataview inline fields.
-- The body-location flags use the shared Markdown addressing rules in
-  [Markdown Addressing](markdown-addressing.md).
+- Address flags switch the target from frontmatter to Dataview inline fields in
+  the Markdown body. Illegal or contradictory address flag combinations are
+  handled by the shared Markdown addressing rules.
 - Etch parses full-line, bracketed, and parenthesized inline fields outside
   fenced code blocks, indented code blocks, inline code spans, and raw HTML
   blocks.
 - Updating an existing inline field preserves its source form, field-name
   spelling, whitespace around `::`, and surrounding Markdown.
+- Updating or deleting an inline field resolves field names in two steps:
+  first exact raw source field-name match, then Dataview-normalized field-name
+  match if no raw match exists.
+- Dataview normalization lowercases the field name, replaces whitespace with
+  `-`, removes built-in Markdown formatting from field keys, and removes
+  punctuation that Dataview excludes from simplified names. `_` is not a
+  whitespace alias, so `last-run` can match `[last run:: ...]` but `last_run`
+  cannot.
+- A Dataview-normalized match must resolve to exactly one existing inline
+  field. If multiple source field names normalize to the requested name, Etch
+  fails and reports candidate locations rather than choosing one.
+- Creating an inline field uses the `<field>` operand literally as the source
+  field name.
 - Creating a page-level or section-level inline field uses full-line syntax.
   The placement flag for field creation is still open; candidate spellings are
   `--head` and `--tail` on `set`, rather than a shared `--at` flag.
-- Creating an item-local inline field through `--item`, `--task`, or `--bullet`
-  uses bracketed syntax.
+- Creating an item-local inline field through `--item` or `--task` uses
+  bracketed syntax.
 - `--hidden` applies only when creating an inline field. It uses parenthesized
   syntax, which hides the field name in Obsidian reading mode while still
   rendering the value. The source text remains ordinary Markdown text, so other
   frontends may render the parentheses literally.
 - Existing task/list date shorthands are conventions Etch should avoid
   duplicating accidentally, but shorthand mutation is out of scope here.
-- With `--item`, `--task`, or `--bullet`, implicit fields such as `status`,
+- With `--item` or `--task`, implicit fields such as `status`,
   `checked`, `completed`, `text`, and `blockId` are not writable through `set`;
   task/list structure changes belong to task/list operations.
 - Repeated-key list editing is out of scope for this proposal.
@@ -103,18 +125,18 @@ etch set memory/tasks/follow-up.md trace-id "abc123" --task "Send follow-up" --h
 ## Rationale
 
 This keeps the command surface simple: `set` remains the primitive, the field
-operand is the Dataview field name, and location flags decide whether Etch
+operand is the Dataview field name, and address flags decide whether Etch
 writes frontmatter or inline Markdown. The tradeoff is terminology precision:
 internally, Dataview fields are key/value pairs, but `field` is the word users
 see in Dataview and is clearer than asking them to set a "key" to a value.
 
-Another tradeoff is that page-level inline fields need an explicit body-location
-flag. Frontmatter remains the default because it is the least surprising
-location for structured Markdown data, while body mutation should be opt-in.
+Another tradeoff is that this changes the MVP Markdown selector model. The new
+porcelain behavior is intentionally simpler: bare Markdown fields target
+frontmatter, and body-local inline fields require address flags.
 
 ## Deferred
 
-- Repeated-key list editing, likely as `append` or `add` with body-location
+- Repeated-key list editing, likely as `append` or `add` with address
   flags.
 - Page-level and section-level inline field creation placement, including
   whether to use `--head`/`--tail`, operation-specific defaults, or only
@@ -127,13 +149,14 @@ location for structured Markdown data, while body mutation should be opt-in.
 
 Spec:
 
-- Change Markdown porcelain `set` so bare field names target frontmatter by
-  default.
-- Define body-location flags that switch Markdown `set` and `delete` to
-  Dataview inline fields.
+- Change Markdown porcelain `set` and `delete` so bare field names target
+  frontmatter by default and `frontmatter.*` is no longer a porcelain selector
+  namespace.
+- Define address flags that switch Markdown `set` and `delete` to Dataview
+  inline fields.
 - Define Dataview-compatible parsing for full-line, bracketed, parenthesized,
-  repeated-field, raw-field-name, canonical-field-name, and shorthand-detection
-  behavior.
+  repeated-field, raw-field-name, Dataview-normalized field-name, and
+  shorthand-detection behavior.
 - Reserve Dataview implicit fields from mutation through this surface.
 
 Docs:
@@ -145,17 +168,16 @@ Docs:
 Code:
 
 - Extend Markdown `set` and `delete` decoding for field operands plus
-  body-location flags.
+  address flags.
+- Implement Dataview field-name normalization as an independently unit-tested
+  helper, separate from inline-field parsing and mutation.
 - Add fixtures for default frontmatter mutation, inline body mutation,
   item-local fields, hidden fields, shorthand detection, anchor windows,
-  ambiguous field names, repeated fields, code-block exclusion, and no-op
+  exact raw field-name matching, Dataview-normalized field-name matching,
+  normalized-name collisions, repeated fields, code-block exclusion, and no-op
   deletion.
 
 ## Open Questions
 
 - Should `--body` be the flag for page-level inline fields, or should that spell
   as `--inline`, `--head`, or `--tail` depending on insertion placement?
-- Should Etch accept Dataview's sanitized field names as selectors, or only raw
-  source field names? Accepting sanitized names would match Dataview query
-  behavior, but it can make source mutation ambiguous when multiple raw
-  spellings normalize to the same field name.
