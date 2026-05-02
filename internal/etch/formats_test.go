@@ -183,6 +183,22 @@ func TestJSONRemoveAdjacentArrayElements(t *testing.T) {
 	}
 }
 
+func TestJSONRemoveRootArray(t *testing.T) {
+	before := []byte(`["x","y","z","y"]` + "\n")
+
+	got, changed, err := evalJSON("$", "remove", "y", ValueModeString, before)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !changed {
+		t.Fatal("evalJSON reported no change")
+	}
+	want := `["x","z"]` + "\n"
+	if string(got) != want {
+		t.Fatalf("JSON output:\n%s\nwant:\n%s", got, want)
+	}
+}
+
 func TestJSONSetPreservesSurroundingSource(t *testing.T) {
 	before := []byte("{\n  \"z\": 0,\n  \"status\" : \"open\",\n  \"nested\": {\"keep\":true}\n}\n")
 

@@ -386,6 +386,20 @@ func TestE2EJSONAppendAndAddCreateMissingFile(t *testing.T) {
 	}
 }
 
+func TestE2EJSONRemoveRootArray(t *testing.T) {
+	dir := initRepo(t)
+	writeFile(t, dir, "root.json", `["x","y","z","y"]`+"\n")
+	commitAll(t, dir, "initial")
+
+	_, errb, code, err := runCLIInDir(t, dir, "remove", "root.json", "$", "y")
+	if err != nil || code != exitOK {
+		t.Fatalf("runCLI code=%d err=%v stderr=%s", code, err, errb.String())
+	}
+	if got := testGit(t, dir, "show", "HEAD:root.json"); got != `["x","z"]`+"\n" {
+		t.Fatalf("HEAD root.json = %s", got)
+	}
+}
+
 func TestE2EValueSyntaxAndAssignmentItems(t *testing.T) {
 	dir := initRepo(t)
 	writeFile(t, dir, "state.json", `{"events":[]}`+"\n")

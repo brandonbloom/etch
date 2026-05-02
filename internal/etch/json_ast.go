@@ -222,8 +222,13 @@ func editJSONRoot(raw []byte, node *jsonNode, verb string, value []byte) ([]byte
 	switch verb {
 	case "set":
 		return replaceBytes(raw, node.Start, node.End, value), nil
-	case "delete", "remove":
+	case "delete":
 		return raw, nil
+	case "remove":
+		if node.Kind != '[' {
+			return nil, failf("selector $ does not identify an array")
+		}
+		return removeJSONElements(raw, node, value), nil
 	case "append", "add":
 		if node.Kind != '[' {
 			return nil, failf("selector $ does not identify an array")
