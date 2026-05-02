@@ -20,23 +20,24 @@ level, with fields such as `status`, `checked`, `completed`, `fullyCompleted`,
 Dataview is mostly display/index oriented. The documented write exception is
 interactive task checking from a `TASK` query, which can update the original
 file and can set a completion metadata field when configured. That makes task
-completion the Dataview write behavior Etch should intentionally mirror.
+checkbox changes the Dataview write behavior Etch should intentionally mirror.
 
 ## Candidate Commands
 
 ```sh
-etch task complete <path> [--section <heading>] [--after <literal>] [--before <literal>] <text>
-etch task reopen <path> [--section <heading>] [--after <literal>] [--before <literal>] <text>
-etch list add <path> <heading> <text> [--task] [--before <literal>] [--after <literal>]
-etch task add <path> <heading> <text> [--before <literal>] [--after <literal>]
+etch task close <path> <text> [--section <heading>] [--before <literal>] [--after <literal>]
+etch task open <path> <text> [--section <heading>] [--before <literal>] [--after <literal>]
+etch list add <path> <text> [--section <heading>] [--task] [--before <literal>] [--after <literal>]
+etch task add <path> <text> [--section <heading>] [--before <literal>] [--after <literal>]
 ```
 
 Examples:
 
 ```sh
-etch task complete memory/2026-04-29.md --section "## Action Items" "Send follow-up"
-etch list add memory/2026-04-29.md "## Action Items" "Send follow-up" --task
-etch task add memory/2026-04-29.md "## Action Items" "Send follow-up"
+etch task close memory/2026-04-29.md "Send follow-up" --section "## Action Items"
+etch task open memory/2026-04-29.md "Send follow-up" --section "## Action Items"
+etch list add memory/2026-04-29.md "Send follow-up" --section "## Action Items" --task
+etch task add memory/2026-04-29.md "Send follow-up" --section "## Action Items"
 ```
 
 ## Semantics
@@ -44,14 +45,27 @@ etch task add memory/2026-04-29.md "## Action Items" "Send follow-up"
 - Task selectors should avoid matching arbitrary prose. The first version can
   require exact task text and uniqueness within an optional section or exact
   anchor window.
-- `task complete` changes only the checkbox marker from `[ ]` to `[x]`.
-- `task reopen` changes only `[x]` to `[ ]`.
-- `list add` adds one list item under the selected heading. `<text>` is
+- `task close` changes only the checkbox marker from `[ ]` to `[x]`.
+- `task close` does not create missing tasks.
+- `task open` is an "ensure open task" operation:
+  - If a matching open task exists, it is a no-op.
+  - If a matching closed task exists, it changes `[x]` or `[X]` to `[ ]`.
+  - If no matching task exists, it creates `- [ ] <text>` using the same
+    placement and marker inference rules as `task add`.
+  - If multiple matching tasks exist, it fails as ambiguous.
+- Missing-task creation through `task open` requires a destination address such
+  as `--section`, `--before`, or `--after`; bare `task open <path> <text>`
+  should fail rather than append to the document body by accident.
+- Custom task statuses are out of scope for the first version. A task with a
+  checkbox marker other than `[ ]`, `[x]`, or `[X]` fails rather than guessing
+  how that status maps to open or closed.
+- `list add` adds one list item in the selected Markdown address. `<text>` is
   plain item text, not Markdown list item source.
 - `list add` defaults to tail placement within the selected compatible list.
 - `--before` and `--after` use the placement rules from
   [Markdown Addressing](markdown-addressing.md) to choose an insertion point
-  relative to an existing item in the selected section.
+  relative to an existing item in the selected section or body. For `list add`
+  and `task add`, these anchors match list items, not arbitrary prose.
 - `task add` is shorthand for `list add ... --task`.
 - `list add ... --task` constructs an unchecked task item.
 - If the selected section already contains a compatible list, Etch follows that
@@ -62,6 +76,14 @@ etch task add memory/2026-04-29.md "## Action Items" "Send follow-up"
 - `list add` rejects multiline text in the first version.
 - `list add` rejects text that already starts with a Markdown list marker;
   callers pass item text, not full list item source.
+- Command-local Markdown address flags are order-insensitive. These forms are
+  equivalent:
+
+```sh
+etch task add note.md "Send follow-up" --section Actions
+etch task add note.md --section Actions "Send follow-up"
+```
+
 - List-item moves are deferred. They are likely a filtered case of a broader
   Markdown block move operation, where the source range is restricted to one
   list item and the destination is a section, list, or neighboring block.
@@ -73,7 +95,7 @@ Dataview recognizes task/list metadata fields such as `due`, `completion`,
 depends on Markdown inline field mutation and should not be part of the first
 task/list operation.
 
-If Etch later adds an option that creates completion metadata while completing a
+If Etch later adds an option that creates completion metadata while closing a
 task, it should write an ordinary inline field such as
 `[completion:: 2026-04-29]` because that form is explicit and easy to update
 deterministically. If Etch updates an existing task/list date field and the
@@ -91,14 +113,14 @@ Spec:
 
 Docs:
 
-- Add examples for completing, reopening, adding plain list items, and adding
-  task items.
+- Add examples for opening, closing, adding plain list items, and adding task
+  items.
 - Explain deferred interaction with Dataview completion metadata.
 
 Code:
 
-- Add `task complete`, `task reopen`, `list add`, and `task add` to the
-  verb catalog if approved.
+- Add `task close`, `task open`, `list add`, and `task add` to the verb catalog
+  if approved.
 - Add fixtures for exact task matching, ambiguous task text, section scoping,
   nested tasks, list add marker inference, default tail placement, before/after
   placement, task add shorthand, multiline add refusal, full-source add
@@ -121,9 +143,7 @@ destination list structure without guessing.
 
 ## Open Questions
 
-- Should `task complete` later set `[completion:: <date>]` in the same
+- Should `task close` later set `[completion:: <date>]` in the same
   operation, or should that stay a separate Markdown field operation?
-- Should Etch preserve custom task statuses, or should the first version only
-  handle `[ ]` and `[x]`?
 - Is `list move` useful enough as a filtered command, or should all moves wait
   for a general Markdown block move proposal?
