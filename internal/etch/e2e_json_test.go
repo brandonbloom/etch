@@ -297,6 +297,51 @@ func TestE2EContainsGuardWithMultilineHeredoc(t *testing.T) {
 	}
 }
 
+func TestE2EMissingGuardDoesNotBreakMaterialization(t *testing.T) {
+	dir := initRepo(t)
+	writeFile(t, dir, "README.md", "# hi\n")
+	writeFile(t, dir, "ops.etch", "missing no-such-file.txt\nset script-output.json x --json true\n")
+	commitAll(t, dir, "initial")
+
+	_, errb, code, err := runCLIInDir(t, dir, "run", "ops.etch")
+	if err != nil || code != exitOK {
+		t.Fatalf("runCLI code=%d err=%v stderr=%s", code, err, errb.String())
+	}
+	if got := testGit(t, dir, "show", "HEAD:script-output.json"); !strings.Contains(got, `"x": true`) {
+		t.Fatalf("HEAD script-output.json = %s", got)
+	}
+	if _, err := os.Stat(filepath.Join(dir, "no-such-file.txt")); !isNoSuch(err) {
+		t.Fatalf("missing guard path materialized: %v", err)
+	}
+	if got := stringsTrim(testGit(t, dir, "status", "--porcelain")); got != "" {
+		t.Fatalf("worktree dirty after missing guard materialization:\n%s", got)
+	}
+}
+
+func TestE2ECreateThenDeleteDoesNotBreakMaterialization(t *testing.T) {
+	dir := initRepo(t)
+	writeFile(t, dir, "state.json", `{"status":"open"}`+"\n")
+	writeFile(t, dir, "ops.etch", "create transient.txt temporary\ndelete transient.txt\nset state.json status complete\n")
+	commitAll(t, dir, "initial")
+
+	_, errb, code, err := runCLIInDir(t, dir, "run", "ops.etch")
+	if err != nil || code != exitOK {
+		t.Fatalf("runCLI code=%d err=%v stderr=%s", code, err, errb.String())
+	}
+	if got := testGit(t, dir, "show", "HEAD:state.json"); !strings.Contains(got, `"status":"complete"`) {
+		t.Fatalf("HEAD state.json = %s", got)
+	}
+	if err := testGitMayFail(t, dir, "show", "HEAD:transient.txt"); err == nil {
+		t.Fatal("transient path exists in HEAD")
+	}
+	if _, err := os.Stat(filepath.Join(dir, "transient.txt")); !isNoSuch(err) {
+		t.Fatalf("transient path materialized: %v", err)
+	}
+	if got := stringsTrim(testGit(t, dir, "status", "--porcelain")); got != "" {
+		t.Fatalf("worktree dirty after create-delete materialization:\n%s", got)
+	}
+}
+
 func TestE2EJSONSetCreatesMissingFile(t *testing.T) {
 	dir := initRepo(t)
 	writeFile(t, dir, "README.md", "# hi\n")

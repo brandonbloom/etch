@@ -110,6 +110,77 @@ func TestPlanFileDeleteNoop(t *testing.T) {
 	}
 }
 
+func TestPlanGuardsDoNotAddTouchedFiles(t *testing.T) {
+	dir := initRepo(t)
+	writeFile(t, dir, "state.json", `{"status":"open"}`+"\n")
+	commitAll(t, dir, "initial")
+
+	var ops []Operation
+	for _, tokens := range [][]string{
+		{"missing", "no-such-file.txt"},
+		{"set", "state.json", "status", "complete"},
+	} {
+		op, err := DecodeOperation(Statement{Tokens: tokens})
+		if err != nil {
+			t.Fatal(err)
+		}
+		ops = append(ops, op)
+	}
+	w, err := OpenWorkspaceAt(dir, false)
+	if err != nil {
+		t.Fatal(err)
+	}
+	plan, err := PlanOperations(w, GlobalOptions{}, ops)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, ok := plan.Files["no-such-file.txt"]; ok {
+		t.Fatalf("guard path included in plan files: %#v", plan.Files)
+	}
+	if _, ok := plan.Touched["no-such-file.txt"]; ok {
+		t.Fatalf("guard path included in touched files: %#v", plan.Touched)
+	}
+	if len(plan.Files) != 1 {
+		t.Fatalf("plan files = %#v, want only state.json", plan.Files)
+	}
+}
+
+func TestPlanPrunesCreateThenDeleteNetNoop(t *testing.T) {
+	dir := initRepo(t)
+	writeFile(t, dir, "state.json", `{"status":"open"}`+"\n")
+	commitAll(t, dir, "initial")
+
+	var ops []Operation
+	for _, tokens := range [][]string{
+		{"create", "transient.txt", "temporary\n"},
+		{"delete", "transient.txt"},
+		{"set", "state.json", "status", "complete"},
+	} {
+		op, err := DecodeOperation(Statement{Tokens: tokens})
+		if err != nil {
+			t.Fatal(err)
+		}
+		ops = append(ops, op)
+	}
+	w, err := OpenWorkspaceAt(dir, false)
+	if err != nil {
+		t.Fatal(err)
+	}
+	plan, err := PlanOperations(w, GlobalOptions{}, ops)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, ok := plan.Files["transient.txt"]; ok {
+		t.Fatalf("net no-op path included in plan files: %#v", plan.Files)
+	}
+	if _, ok := plan.Touched["transient.txt"]; ok {
+		t.Fatalf("net no-op path included in touched files: %#v", plan.Touched)
+	}
+	if len(plan.Files) != 1 {
+		t.Fatalf("plan files = %#v, want only state.json", plan.Files)
+	}
+}
+
 func TestPlanMarkdownSectionAppendDescriptorAndCommitMessage(t *testing.T) {
 	dir := initRepo(t)
 	writeFile(t, dir, "note.md", "## Notes\nold\n")

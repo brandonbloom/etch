@@ -181,10 +181,9 @@ func PlanOperations(w *Workspace, opts GlobalOptions, ops []Operation) (*Plan, e
 	files := map[string]fileChange{}
 	planOps := make([]Operation, 0, len(ops))
 	mutating := false
-	changed := false
 
 	for _, op := range ops {
-		planned, opChanged, err := planOne(w, files, op)
+		planned, _, err := planOne(w, files, op)
 		if err != nil {
 			if op.Loc.Name != "" {
 				return nil, errWithCode{code: classifyErr(err), err: fmt.Errorf("%s%s", op.Loc.Prefix(), err)}
@@ -194,12 +193,11 @@ func PlanOperations(w *Workspace, opts GlobalOptions, ops []Operation) (*Plan, e
 		if planned.Class != ClassGuard {
 			mutating = true
 		}
-		if opChanged {
-			changed = true
-		}
 		planOps = append(planOps, planned)
 	}
 
+	pruneUnchangedFiles(files)
+	changed := fileChangesChanged(files)
 	tree, err := w.computePlannedTreeOID(files)
 	if err != nil {
 		return nil, err
@@ -235,6 +233,28 @@ func PlanOperations(w *Workspace, opts GlobalOptions, ops []Operation) (*Plan, e
 	}
 	plan.Hash = planHash(plan)
 	return plan, nil
+}
+
+func pruneUnchangedFiles(files map[string]fileChange) {
+	for path, ch := range files {
+		if fileChangeChanged(ch) {
+			continue
+		}
+		delete(files, path)
+	}
+}
+
+func fileChangesChanged(files map[string]fileChange) bool {
+	for _, ch := range files {
+		if fileChangeChanged(ch) {
+			return true
+		}
+	}
+	return false
+}
+
+func fileChangeChanged(ch fileChange) bool {
+	return !bytesStateEqual(ch.Before, ch.AbsentBefore, ch.After, ch.AbsentAfter)
 }
 
 func planOne(w *Workspace, files map[string]fileChange, op Operation) (Operation, bool, error) {
@@ -295,16 +315,12 @@ func planGuard(w *Workspace, files map[string]fileChange, op Operation) (Operati
 	if err != nil {
 		return op, false, err
 	}
-	exists, b, mode, err := w.ExistsInAdmittedView(res)
+	exists, b, _, err := w.ExistsInAdmittedView(res)
 	if err != nil {
 		return op, false, err
 	}
 	op.Path = res.Clean
 	op.Target = PlanTarget{Path: res.Clean}
-	ch := fileChange{Path: res.Clean, RepoPath: res.Repo, AbsPath: res.Abs, Before: b, After: b, Mode: mode, AbsentBefore: !exists, AbsentAfter: !exists}
-	if _, ok := files[res.Clean]; !ok {
-		files[res.Clean] = ch
-	}
 	switch op.Verb {
 	case "exists":
 		if !exists {
