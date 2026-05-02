@@ -1,5 +1,5 @@
 ---
-status: draft
+status: implemented
 depends_on:
   - markdown-addressing
 ---
@@ -64,8 +64,8 @@ etch task add memory/2026-04-29.md "Send follow-up" --section "## Action Items"
 - `list add` defaults to tail placement within the selected compatible list.
 - `--before` and `--after` use the placement rules from
   [Markdown Addressing](markdown-addressing.md) to choose an insertion point
-  relative to an existing item in the selected section or body. For `list add`
-  and `task add`, these anchors match list items, not arbitrary prose.
+  relative to an existing item in the selected section or body. For task/list
+  commands, these anchors match list items, not arbitrary prose.
 - `task add` is shorthand for `list add ... --task`.
 - `list add ... --task` constructs an unchecked task item.
 - If the selected section already contains a compatible list, Etch follows that
@@ -119,12 +119,12 @@ Docs:
 
 Code:
 
-- Add `task close`, `task open`, `list add`, and `task add` to the verb catalog
-  if approved.
+- Add `task close`, `task open`, `list add`, and `task add` to the verb
+  catalog.
 - Add fixtures for exact task matching, ambiguous task text, section scoping,
   nested tasks, list add marker inference, default tail placement, before/after
-  placement, task add shorthand, multiline add refusal, full-source add
-  refusal, optional Dataview completion metadata, and no-op behavior.
+  placement, task add shorthand, multiline add refusal, full-source add refusal,
+  custom task status refusal, and no-op behavior.
 
 ## Deferred Move Design
 
@@ -141,7 +141,7 @@ general block move. The hard part is not the spelling; it is preserving the
 source item's nested children, continuation lines, surrounding blank lines, and
 destination list structure without guessing.
 
-## Open Questions
+## Deferred
 
 - Should `task close` later set `[completion:: <date>]` in the same
   operation, or should that stay a separate Markdown field operation?

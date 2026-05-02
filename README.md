@@ -101,6 +101,10 @@ Porcelain commands infer the format from the file extension:
 | `section replace <path> <heading> <content>` | Replace the body under one Markdown heading. |
 | `section append <path> <heading> <content>` | Append a block fragment under one Markdown heading. |
 | `section prepend <path> <heading> <content>` | Prepend a block fragment under one Markdown heading. |
+| `task close <path> <text>` | Ensure a Markdown task is closed. |
+| `task open <path> <text>` | Ensure a Markdown task is open, creating it when a destination is addressed. |
+| `list add <path> <text>` | Add one Markdown list item. |
+| `task add <path> <text>` | Add one open Markdown task. |
 | `create <path> [<content>]` | Create a file with explicit or extension-aware default content. |
 | `move <src> <dst>` | Move a file path. |
 | `copy <src> <dst>` | Copy a file path. |
@@ -162,6 +166,15 @@ Mutate Dataview-style Markdown inline fields:
 etch set tasks/follow-up.md done "2026-05-02" --task "Send follow-up"
 etch set journal/today.md heartbeat "ok" --section "## Status" --tail
 etch delete tasks/follow-up.md snooze --task "Send follow-up"
+```
+
+Mutate Markdown tasks and lists:
+
+```sh
+etch task close tasks/follow-up.md "Send follow-up" --section "## Actions"
+etch task open tasks/follow-up.md "Review draft" --section "## Actions"
+etch list add tasks/follow-up.md "Capture launch note" --section "## Notes"
+etch task add tasks/follow-up.md "Send update" --section "## Actions"
 ```
 
 Mutate a Markdown section:
@@ -263,6 +276,9 @@ missing JSONL targets are created as empty logs before appending.
 For Markdown paths, structured selectors target YAML frontmatter by default.
 Markdown address flags such as `--body`, `--section`, and `--task` switch
 `set` and `delete` to Dataview-style inline fields in the Markdown body.
+Task/list commands use `--section`, `--before`, and `--after` to address where
+task and list mutations happen; `--before` and `--after` match list items, not
+arbitrary prose.
 
 ## Transaction Model
 

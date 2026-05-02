@@ -251,6 +251,8 @@ func planOne(w *Workspace, files map[string]fileChange, op Operation) (Operation
 		return planSection(w, files, op)
 	case "md-field":
 		return planMarkdownField(w, files, op)
+	case "md-task-list":
+		return planMarkdownTaskList(w, files, op)
 	case "table":
 		return planTable(w, files, op)
 	default:
@@ -485,6 +487,24 @@ func planMarkdownField(w *Workspace, files map[string]fileChange, op Operation) 
 		return op, false, err
 	}
 	out, changed, err := evalMarkdownField(res.Clean, op, ch.After)
+	if err != nil {
+		return op, false, err
+	}
+	c, _ := setFileState(files, ch, out, false)
+	op.Path = res.Clean
+	op.Target.Path = res.Clean
+	op.RepoPath = res.Repo
+	op.Noop = !changed && !c
+	fillDescriptor(&op)
+	return op, changed || c, nil
+}
+
+func planMarkdownTaskList(w *Workspace, files map[string]fileChange, op Operation) (Operation, bool, error) {
+	ch, res, err := ensureFileState(w, files, op.Path, true, true)
+	if err != nil {
+		return op, false, err
+	}
+	out, changed, err := evalMarkdownTaskList(res.Clean, op, ch.After)
 	if err != nil {
 		return op, false, err
 	}

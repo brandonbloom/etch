@@ -2,6 +2,7 @@ package etch
 
 import (
 	"bytes"
+	"strconv"
 	"strings"
 
 	goldast "github.com/yuin/goldmark/ast"
@@ -196,12 +197,18 @@ func (c markdownItemTypeConstraints) matches(item markdownListItem) bool {
 }
 
 type markdownListItem struct {
-	LineStart  int
-	LineEnd    int
-	Normalized string
-	Task       bool
-	Numbered   bool
-	Complex    bool
+	LineStart        int
+	LineEnd          int
+	Normalized       string
+	Task             bool
+	TaskStatus       byte
+	TaskStatusOffset int
+	Numbered         bool
+	Number           int
+	Delimiter        byte
+	Indent           string
+	Marker           string
+	Complex          bool
 }
 
 func resolveMarkdownTask(raw []byte, path, literal string, types []string) (markdownListItem, error) {
@@ -225,9 +232,23 @@ func resolveMarkdownTaskInRange(raw []byte, path string, scope markdownRange, li
 }
 
 func resolveMarkdownItemInRange(raw []byte, path string, scope markdownRange, literal string, types []string) (markdownListItem, error) {
-	constraints, err := markdownItemTypeConstraintsFromArgs(types)
+	matches, err := findMarkdownItemsInRange(raw, path, scope, literal, types)
 	if err != nil {
 		return markdownListItem{}, err
+	}
+	if len(matches) == 0 {
+		return markdownListItem{}, failf("item %q not found in %s", literal, path)
+	}
+	if len(matches) > 1 {
+		return markdownListItem{}, failf("item %q is ambiguous in %s", literal, path)
+	}
+	return matches[0], nil
+}
+
+func findMarkdownItemsInRange(raw []byte, path string, scope markdownRange, literal string, types []string) ([]markdownListItem, error) {
+	constraints, err := markdownItemTypeConstraintsFromArgs(types)
+	if err != nil {
+		return nil, err
 	}
 	want := normalizeMarkdownItemText(literal)
 	var matches []markdownListItem
@@ -237,18 +258,12 @@ func resolveMarkdownItemInRange(raw []byte, path string, scope markdownRange, li
 		}
 		if constraints.matches(item) && item.Normalized == want {
 			if item.Complex {
-				return markdownListItem{}, failf("item %q is structurally complex in %s", literal, path)
+				return nil, failf("item %q is structurally complex in %s", literal, path)
 			}
 			matches = append(matches, item)
 		}
 	}
-	if len(matches) == 0 {
-		return markdownListItem{}, failf("item %q not found in %s", literal, path)
-	}
-	if len(matches) > 1 {
-		return markdownListItem{}, failf("item %q is ambiguous in %s", literal, path)
-	}
-	return matches[0], nil
+	return matches, nil
 }
 
 func markdownListItems(raw []byte) []markdownListItem {
@@ -275,12 +290,18 @@ func markdownListItems(raw []byte) []markdownListItem {
 		list, _ := item.Parent().(*goldast.List)
 		complex := list == nil || list.Parent() != doc || item.ChildCount() != 1 || markdownNodeLineCount(item.FirstChild()) != 1
 		items = append(items, markdownListItem{
-			LineStart:  lineStart,
-			LineEnd:    lineEnd,
-			Normalized: normalizeMarkdownItemText(info.Text),
-			Task:       info.Task,
-			Numbered:   info.Numbered,
-			Complex:    complex,
+			LineStart:        lineStart,
+			LineEnd:          lineEnd,
+			Normalized:       normalizeMarkdownItemText(info.Text),
+			Task:             info.Task,
+			TaskStatus:       info.TaskStatus,
+			TaskStatusOffset: lineStart + info.TaskStatusOffset,
+			Numbered:         info.Numbered,
+			Number:           info.Number,
+			Delimiter:        info.Delimiter,
+			Indent:           info.Indent,
+			Marker:           info.Marker,
+			Complex:          complex,
 		})
 		return goldast.WalkContinue, nil
 	})
@@ -325,9 +346,15 @@ func markdownNodeLineCount(n goldast.Node) int {
 }
 
 type markdownListItemLine struct {
-	Text     string
-	Task     bool
-	Numbered bool
+	Text             string
+	Task             bool
+	TaskStatus       byte
+	TaskStatusOffset int
+	Numbered         bool
+	Number           int
+	Delimiter        byte
+	Indent           string
+	Marker           string
 }
 
 func parseMarkdownListItemLine(line []byte) (markdownListItemLine, bool) {
@@ -339,8 +366,13 @@ func parseMarkdownListItemLine(line []byte) (markdownListItemLine, bool) {
 	if i > 3 || i >= len(line) {
 		return markdownListItemLine{}, false
 	}
+	indent := string(line[:i])
 	numbered := false
+	number := 0
+	delimiter := byte(0)
+	markerStart := i
 	if line[i] == '-' || line[i] == '+' || line[i] == '*' {
+		delimiter = line[i]
 		i++
 	} else if line[i] >= '0' && line[i] <= '9' {
 		start := i
@@ -350,11 +382,18 @@ func parseMarkdownListItemLine(line []byte) (markdownListItemLine, bool) {
 		if i == start || i-start > 9 || i >= len(line) || (line[i] != '.' && line[i] != ')') {
 			return markdownListItemLine{}, false
 		}
+		n, err := strconv.Atoi(string(line[start:i]))
+		if err != nil {
+			return markdownListItemLine{}, false
+		}
+		number = n
+		delimiter = line[i]
 		i++
 		numbered = true
 	} else {
 		return markdownListItemLine{}, false
 	}
+	marker := string(line[markerStart:i])
 	if i < len(line) && line[i] != ' ' && line[i] != '\t' {
 		return markdownListItemLine{}, false
 	}
@@ -362,14 +401,28 @@ func parseMarkdownListItemLine(line []byte) (markdownListItemLine, bool) {
 		i++
 	}
 	task := false
-	if i+2 < len(line) && line[i] == '[' && line[i+2] == ']' && (line[i+1] == ' ' || line[i+1] == 'x' || line[i+1] == 'X') {
+	taskStatus := byte(0)
+	taskStatusOffset := 0
+	if i+2 < len(line) && line[i] == '[' && line[i+2] == ']' {
 		task = true
+		taskStatus = line[i+1]
+		taskStatusOffset = i + 1
 		i += 3
 		for i < len(line) && (line[i] == ' ' || line[i] == '\t') {
 			i++
 		}
 	}
-	return markdownListItemLine{Text: string(line[i:]), Task: task, Numbered: numbered}, true
+	return markdownListItemLine{
+		Text:             string(line[i:]),
+		Task:             task,
+		TaskStatus:       taskStatus,
+		TaskStatusOffset: taskStatusOffset,
+		Numbered:         numbered,
+		Number:           number,
+		Delimiter:        delimiter,
+		Indent:           indent,
+		Marker:           marker,
+	}, true
 }
 
 func normalizeMarkdownItemText(source string) string {

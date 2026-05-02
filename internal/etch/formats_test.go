@@ -722,6 +722,35 @@ func TestMarkdownInlineFieldCommandsCommitAndMaterialize(t *testing.T) {
 	}
 }
 
+func TestMarkdownTaskListCommandsCommitAndMaterialize(t *testing.T) {
+	dir := initRepo(t)
+	writeFile(t, dir, "note.md", "# Note\n\n## Actions\n- [ ] Send follow-up\n")
+	commitAll(t, dir, "initial")
+
+	runOK(t, dir, "task", "close", "note.md", "Send follow-up", "--section", "Actions")
+	got := testGit(t, dir, "show", "HEAD:note.md")
+	if got != "# Note\n\n## Actions\n- [x] Send follow-up\n" {
+		t.Fatalf("task close output = %q", got)
+	}
+	subject := stringsTrim(testGit(t, dir, "log", "-1", "--format=%s"))
+	if subject != `etch task close note.md --section Actions "Send follow-up"` {
+		t.Fatalf("task close subject = %q", subject)
+	}
+
+	runOK(t, dir, "task", "open", "note.md", "Review draft", "--section", "Actions")
+	got = testGit(t, dir, "show", "HEAD:note.md")
+	if got != "# Note\n\n## Actions\n- [x] Send follow-up\n- [ ] Review draft\n" {
+		t.Fatalf("task open create output = %q", got)
+	}
+	wt, err := os.ReadFile(filepath.Join(dir, "note.md"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if string(wt) != got {
+		t.Fatalf("worktree not materialized:\nwt=%s\nhead=%s", wt, got)
+	}
+}
+
 func TestEvalMarkdownSectionReplace(t *testing.T) {
 	tests := []struct {
 		name    string

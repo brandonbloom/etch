@@ -120,6 +120,61 @@ func TestDecodeMarkdownFieldAddressValidation(t *testing.T) {
 	}
 }
 
+func TestDecodeMarkdownTaskListCommands(t *testing.T) {
+	tests := []struct {
+		name    string
+		tokens  []string
+		verb    string
+		class   CommandClass
+		value   string
+		section string
+		before  string
+	}{
+		{
+			name:    "task close",
+			tokens:  []string{"task", "close", "note.md", "Send follow-up", "--section", "Actions"},
+			verb:    "task close",
+			class:   ClassIdempotent,
+			value:   "Send follow-up",
+			section: "Actions",
+		},
+		{
+			name:    "task add flags before text",
+			tokens:  []string{"task", "add", "note.md", "--section", "Actions", "--before", "Later", "Send follow-up"},
+			verb:    "task add",
+			class:   ClassNonIdempotent,
+			value:   "Send follow-up",
+			section: "Actions",
+			before:  "Later",
+		},
+		{
+			name:    "list add task shorthand",
+			tokens:  []string{"list", "add", "note.md", "Send follow-up", "--task", "--section", "Actions"},
+			verb:    "task add",
+			class:   ClassNonIdempotent,
+			value:   "Send follow-up",
+			section: "Actions",
+		},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			op, err := DecodeOperation(Statement{Tokens: tc.tokens})
+			if err != nil {
+				t.Fatal(err)
+			}
+			if op.Verb != tc.verb || op.Kind != "md-task-list" || op.Class != tc.class || op.Path != "note.md" || op.Value != tc.value || op.Markdown.Section != tc.section || op.Markdown.Before != tc.before {
+				t.Fatalf("op = %#v", op)
+			}
+		})
+	}
+	if _, err := DecodeOperation(Statement{Tokens: []string{"task", "add", "note.md", "Send", "--task"}}); err == nil || !strings.Contains(err.Error(), "--task is only accepted by list add") {
+		t.Fatalf("task add --task err = %v", err)
+	}
+	if _, err := DecodeOperation(Statement{Tokens: []string{"list", "add", "note.md", "Send", "--before", "A", "--after", "B"}}); err == nil || !strings.Contains(err.Error(), "mutually exclusive") {
+		t.Fatalf("list add before/after err = %v", err)
+	}
+}
+
 func TestDecodeJSONLAppend(t *testing.T) {
 	tests := []struct {
 		name string

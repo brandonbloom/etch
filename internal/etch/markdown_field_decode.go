@@ -76,8 +76,7 @@ func decodeMarkdownField(op Operation, verb, path, field, value string, address 
 
 func hasMarkdownAddressArgs(args []string) bool {
 	for _, arg := range args {
-		switch arg {
-		case "--body", "--section", "--item", "--item-type", "--task", "--after", "--before", "--head", "--tail", "--hidden":
+		if isMarkdownAddressFlag(arg) {
 			return true
 		}
 	}
@@ -86,46 +85,25 @@ func hasMarkdownAddressArgs(args []string) bool {
 
 func parseMarkdownAddressArgs(args []string, allowHidden bool) (markdownAddress, error) {
 	var address markdownAddress
+	options := markdownFieldAddressFlagOptions
+	options.Hidden = allowHidden
 	for i := 0; i < len(args); i++ {
 		arg := args[i]
-		switch arg {
-		case "--body":
-			address.Body = true
-		case "--section", "--item", "--item-type", "--task", "--after", "--before":
-			if i+1 >= len(args) {
-				return markdownAddress{}, usagef("%s requires a value", arg)
-			}
-			value := args[i+1]
-			i++
-			switch arg {
-			case "--section":
-				address.Section = value
-			case "--item":
-				address.Item = value
-			case "--item-type":
-				address.ItemTypes = append(address.ItemTypes, value)
-			case "--task":
-				address.Task = value
-			case "--after":
-				address.After = value
-			case "--before":
-				address.Before = value
-			}
-		case "--head":
-			address.Head = true
-		case "--tail":
-			address.Tail = true
-		case "--hidden":
-			if !allowHidden {
-				return markdownAddress{}, usagef("--hidden is only accepted by set")
-			}
-			address.Hidden = true
-		default:
-			if strings.HasPrefix(arg, "--") {
-				return markdownAddress{}, usagef("unknown Markdown address flag %s", arg)
-			}
-			return markdownAddress{}, usagef("unexpected Markdown field argument %q", arg)
+		parsed, next, err := parseMarkdownAddressFlag(args, i, &address, options)
+		if err != nil {
+			return markdownAddress{}, err
 		}
+		if parsed {
+			i = next
+			continue
+		}
+		if arg == "--hidden" && !allowHidden {
+			return markdownAddress{}, usagef("--hidden is only accepted by set")
+		}
+		if strings.HasPrefix(arg, "--") {
+			return markdownAddress{}, usagef("unknown Markdown address flag %s", arg)
+		}
+		return markdownAddress{}, usagef("unexpected Markdown field argument %q", arg)
 	}
 	if address.Item != "" && address.Task != "" {
 		return markdownAddress{}, usagef("--item and --task are mutually exclusive")

@@ -138,6 +138,8 @@ func commandPhrase(parts ...string) string {
 var markdownAddressFlags = []string{"--body", "--section", "--item", "--item-type", "--task", "--after", "--before", "--head", "--tail"}
 var markdownSetFlags = append(append([]string{"--json"}, markdownAddressFlags...), "--hidden")
 var markdownDeleteFlags = markdownAddressFlags
+var markdownTaskListFlags = []string{"--section", "--before", "--after"}
+var markdownListAddFlags = []string{"--section", "--before", "--after", "--task"}
 
 var allCommandSpecs = buildCommandSpecs()
 
@@ -155,6 +157,10 @@ func buildCommandSpecs() []commandSpec {
 		command("section replace", "section replace <path> <heading> <content>", "Replace the body under one Markdown heading.", ClassIdempotent, true, parseSection("replace")),
 		command("section append", "section append <path> <heading> <content>", "Append a block fragment under one Markdown heading.", ClassNonIdempotent, true, parseSection("append")),
 		command("section prepend", "section prepend <path> <heading> <content>", "Prepend a block fragment under one Markdown heading.", ClassNonIdempotent, true, parseSection("prepend")),
+		command("task close", "task close <path> <text> [--section <heading>] [--before <item>] [--after <item>]", "Ensure one Markdown task is closed.", ClassIdempotent, true, parseMarkdownTaskList("task close"), markdownTaskListFlags...),
+		command("task open", "task open <path> <text> [--section <heading>] [--before <item>] [--after <item>]", "Ensure one Markdown task is open, creating it when a destination is addressed.", ClassIdempotent, true, parseMarkdownTaskList("task open"), markdownTaskListFlags...),
+		command("list add", "list add <path> <text> [--section <heading>] [--task] [--before <item>] [--after <item>]", "Add one Markdown list item.", ClassNonIdempotent, true, parseMarkdownTaskList("list add"), markdownListAddFlags...),
+		command("task add", "task add <path> <text> [--section <heading>] [--before <item>] [--after <item>]", "Add one open Markdown task.", ClassNonIdempotent, true, parseMarkdownTaskList("task add"), markdownTaskListFlags...),
 		command("create", "create <path> [<content>]", "Create a new file; omitted content uses an extension-aware default.", ClassIdempotent, true, parseCreate),
 		command("move", "move <src> <dst>", "Move a file path.", ClassIdempotent, true, parseFileVerb("move")),
 		command("copy", "copy <src> <dst>", "Copy a file path.", ClassIdempotent, true, parseFileVerb("copy")),
@@ -443,6 +449,57 @@ func parseSection(action string) commandParser {
 		op.Target = PlanTarget{Path: args[0], Part: "body", Section: args[1]}
 		return parsedOperation(op)
 	}
+}
+
+func parseMarkdownTaskList(verb string) commandParser {
+	return func(inv commandInvocation) ([]Operation, error) {
+		spec, op := inv.Spec, inv.Op
+		path, text, address, asTask, err := parseMarkdownTaskListArgs(inv.Args, verb == "list add")
+		if err != nil {
+			return nil, err
+		}
+		actualVerb := verb
+		if asTask {
+			actualVerb = "task add"
+		}
+		op.Verb, op.Kind, op.Class, op.Path, op.Value, op.ValueMode = actualVerb, "md-task-list", spec.Class, path, text, ValueModeString
+		op.Target = PlanTarget{Path: path, Part: "body", Section: address.Section}
+		op.Markdown = address
+		return parsedOperation(op)
+	}
+}
+
+func parseMarkdownTaskListArgs(args []string, allowTaskFlag bool) (path, text string, address markdownAddress, asTask bool, err error) {
+	var positional []string
+	for i := 0; i < len(args); i++ {
+		arg := args[i]
+		if arg == "--task" {
+			if !allowTaskFlag {
+				return "", "", markdownAddress{}, false, usagef("--task is only accepted by list add")
+			}
+			asTask = true
+			continue
+		}
+		parsed, next, err := parseMarkdownAddressFlag(args, i, &address, markdownTaskListAddressFlagOptions)
+		if err != nil {
+			return "", "", markdownAddress{}, false, err
+		}
+		if parsed {
+			i = next
+			continue
+		}
+		if strings.HasPrefix(arg, "--") {
+			return "", "", markdownAddress{}, false, usagef("unknown Markdown task/list flag %s", arg)
+		}
+		positional = append(positional, arg)
+	}
+	if len(positional) != 2 {
+		return "", "", markdownAddress{}, false, usagef("usage: etch <task/list command> <path> <text> [flags]")
+	}
+	if _, err := markdownPlacementFromFlags(false, false, address.Before, address.After); err != nil {
+		return "", "", markdownAddress{}, false, err
+	}
+	return positional[0], positional[1], address, asTask, nil
 }
 
 func parseTable(format string, tablePath ...string) commandParser {
@@ -830,10 +887,10 @@ func fillDescriptor(op *Operation) {
 	} else if op.Target.Selector != "" {
 		parts = append(parts, op.Target.Selector)
 	}
-	if op.Target.Section != "" && op.Kind != "md-field" {
+	if op.Target.Section != "" && op.Kind != "md-field" && op.Kind != "md-task-list" {
 		parts = append(parts, shellQuote(op.Target.Section))
 	}
-	if op.Kind == "md-field" {
+	if op.Kind == "md-field" || op.Kind == "md-task-list" {
 		parts = appendMarkdownAddressDescriptor(parts, op.Markdown)
 	}
 	if op.Target.Range != "" {
@@ -971,9 +1028,9 @@ func printHelp(w io.Writer, topic string, all bool) error {
 		}
 		fmt.Fprintln(w)
 		if all {
-			fmt.Fprint(w, "Topics: model, scripts, selectors, values, fields, plans, security, conflicts, addressing, section, table, csv\n")
+			fmt.Fprint(w, "Topics: model, scripts, selectors, values, fields, plans, security, conflicts, addressing, section, tasks, table, csv\n")
 		} else {
-			fmt.Fprint(w, "Topics: model, scripts, selectors, values, fields, plans, security, conflicts, addressing, section, table, csv. Use --all for plumbing commands.\n")
+			fmt.Fprint(w, "Topics: model, scripts, selectors, values, fields, plans, security, conflicts, addressing, section, tasks, table, csv. Use --all for plumbing commands.\n")
 		}
 	case "scripts":
 		fmt.Fprint(w, scriptsHelp)
@@ -995,6 +1052,8 @@ func printHelp(w io.Writer, topic string, all bool) error {
 		fmt.Fprint(w, modelHelp)
 	case "section":
 		fmt.Fprint(w, sectionHelp)
+	case "tasks":
+		fmt.Fprint(w, tasksHelp)
 	case "table", "csv":
 		fmt.Fprint(w, tableHelp)
 	default:
@@ -1094,6 +1153,22 @@ Commands:
 Section selectors accept either a title such as Status or an ATX heading such as ## Status.
 Repeated matching headings are ambiguous. Append/prepend trim payload boundary blank lines
 and use one blank line between non-empty block fragments.
+`
+
+const tasksHelp = `Markdown task/list commands operate on exact source-normalized item text.
+
+Commands:
+  etch task close note.md "Send follow-up" --section Actions
+  etch task open note.md "Send follow-up" --section Actions
+  etch list add note.md "Launch notes" --section Actions
+  etch task add note.md "Send follow-up" --section Actions
+
+task close changes [ ] to [x] and never creates missing tasks.
+task open ensures an open task: it reopens [x]/[X], no-ops on [ ], and creates
+missing tasks only when a destination address such as --section, --before, or
+--after is supplied. Custom checkbox statuses fail.
+--before and --after match list items, not arbitrary prose.
+list add and task add create source from plain item text; do not include "- " or "- [ ]".
 `
 
 const tableHelp = `Tables are ordered rows and named columns of string cells.
