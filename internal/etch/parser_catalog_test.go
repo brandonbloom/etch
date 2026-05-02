@@ -11,7 +11,7 @@ func TestScriptParserQuotingAndHeredoc(t *testing.T) {
 	stmts, err := ParseScriptBytes("ops.etch", []byte(`
 # comment
 set posts/hello.md frontmatter.title "Hello, world"
-replace-section posts/hello.md "## Summary" <<EOF
+section replace posts/hello.md "## Summary" <<EOF
 $FOO is literal
 EOF
 `))
@@ -24,7 +24,7 @@ EOF
 	if got := strings.Join(stmts[0].Tokens, "|"); got != "set|posts/hello.md|frontmatter.title|Hello, world" {
 		t.Fatalf("statement 0 tokens = %q", got)
 	}
-	if got := stmts[1].Tokens[3]; got != "$FOO is literal\n" {
+	if got := stmts[1].Tokens[4]; got != "$FOO is literal\n" {
 		t.Fatalf("heredoc = %q", got)
 	}
 	if stmts[1].Loc.Name != "ops.etch" || stmts[1].Loc.Line != 4 {

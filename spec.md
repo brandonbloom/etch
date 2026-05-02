@@ -91,7 +91,7 @@ set posts/hello.md frontmatter.tags --json '["draft","intro"]'
 set cache/state.json last_ingestion=2026-05-02 count:=12
 
 # Multi-line content via heredoc
-replace-section posts/hello.md "## Summary" <<EOF
+section replace posts/hello.md "## Summary" <<EOF
 This post introduces the project and its goals.
 EOF
 
@@ -120,7 +120,7 @@ Two tiers:
 
 **Porcelain** verbs infer file format from path extension (`.md` → markdown-with-optional-frontmatter, `.json` → json, `.yaml`/`.yml` → yaml, `.csv` → csv). They cover the common cases and are what most scripts use. A porcelain command may have format-specific operands after the path; the decoder resolves the command prefix, reads the path, infers the format, and then validates the resolved operand schema.
 
-**Plumbing** commands are format-explicit subcommands (`json set`, `yaml set`, `frontmatter set`, `md replace-section`). They have no inference and no surprises, suitable for scripts where the file extension might lie or where the porcelain heuristics would pick the wrong format.
+**Plumbing** commands are format-explicit subcommands (`json set`, `yaml set`, `frontmatter set`, `md section replace`). They have no inference and no surprises, suitable for scripts where the file extension might lie or where the porcelain heuristics would pick the wrong format.
 
 The MVP verb surface is constrained by §3 (regular command shapes) and §10 (must fit in a dense help page). The committed MVP verb surface is mutating operations plus transaction guards: mutating verbs compute new file contents, and guards assert preconditions before those contents flow through the plan/commit/materialization pipeline.
 
@@ -159,7 +159,7 @@ The resulting rule: porcelain Markdown selectors may use explicit part prefixes 
 | JSON | `set`, `delete`, `append`, `add`, `remove` | Selectors use the JSONPath subset above. Values are strings by default. `--json <value>` parses one following token as a strict JSON value; JavaScript object-literal shorthand is intentionally not accepted. `set` also accepts field assignment items, where `selector=value` writes a string and `selector:=json` writes strict JSON. Assignment items are not accepted by `append`, `add`, `remove`, or `delete`. `set` creates missing object containers, creates missing final object members, updates existing array elements, and appends to an array only when the selected index equals the array length. `delete` removes an existing member or array element and is a no-op when the final target is absent. `append` appends the value to an array, creating a missing final array under object-container rules. `add` ensures an array contains the value, appending only if no structurally equal value is present. `remove` ensures an array does not contain the value, removing all structurally equal occurrences and doing nothing when the final target is absent. |
 | YAML | `set`, `delete`, `append`, `add`, `remove` | Same selector and value semantics as JSON, but using a round-tripping YAML representation so comments, key order, indentation style, anchors, aliases, and scalar spelling are preserved where the parser can preserve them. |
 | Markdown frontmatter | `set`, `delete`, `append`, `add`, `remove` | Selectors under `frontmatter.*` operate on YAML frontmatter using the YAML rules above. If a Markdown file has no frontmatter, `set frontmatter.*`, `append frontmatter.*`, and `add frontmatter.*` can create a frontmatter block; `delete` and `remove` are no-ops when the final target is absent. |
-| Markdown body | `replace-section` | The selector is a heading line such as `## Notes`. Replacement covers the content under that heading up to the next heading of equal or higher level. Missing or ambiguous headings are errors. |
+| Markdown body | `section replace`, `section append`, `section prepend` | The selector is a heading title such as `Notes` or heading line such as `## Notes`. Matching covers the content under that heading up to the next heading of equal or higher level. Missing or ambiguous headings are errors. `section replace` replaces the body. `section append` and `section prepend` insert block fragments with deterministic one-blank-line boundaries for non-empty sections. |
 | Tables | `table set`, `table row append`, `table row insert`, `table row delete`, `table column add`, `table column rename`, `table column delete` | Table commands infer Markdown pipe tables or CSV tables from the path. Markdown operands include a scope and optional table ordinal; CSV operands omit them because a CSV file is one table. Format-explicit plumbing commands are available as `md table ...` and `csv ...`. |
 | Files | `create`, `delete`, `move`, `copy` | File-level verbs use explicit etch names rather than shell primitive names. Signatures are `create <path> <content>`, `delete <path>`, `move <src> <dst>`, and `copy <src> <dst>`. `create` and `copy` fail if the destination exists in the transaction base. `delete` is idempotent when the path is absent from the transaction base. `move` fails if the source is absent or destination exists in the transaction base. |
 | Transaction guards | `exists`, `missing`, `contains` | Guards have no stdout and make no content changes. They participate in the same plan and transaction as mutating operations, and the invocation aborts with exit 1 before side effects if any guard is false. |
@@ -170,7 +170,7 @@ YAML and frontmatter operations edit the document representation, not the YAML g
 
 For JSON, YAML, and frontmatter `add` and `remove`, structural equality is semantic rather than byte-spelling equality within the same document-representation model. Editing the representation means etch preserves and rewrites source structure; it does not make array membership depend on superficial source spelling. Object and mapping key order, whitespace, quoting style, and numeric spelling for numeric values do not affect equality; arrays remain ordered, strings compare after decoding, and numbers compare by parsed numeric value in the accepted format domain. YAML aliases compare as alias nodes by anchor name and are not equal to the values they would resolve to. For example, `{"a":1,"b":2}` and `{"b":2,"a":1}` are equal for `add` and `remove`.
 
-Deferred mutating operations include ordered-list `prepend` and positional `insert`; Markdown `append-section`, `prepend-section`, `delete-section`, `move-section`, and `split-section`; and cross-file transforms that read from one location and write/remove/insert elsewhere. These are still mutating verbs, not queries, because their contract is new file contents rather than stdout.
+Deferred mutating operations include ordered-list `prepend` and positional `insert`; Markdown `section delete`, `section move`, and `section split`; and cross-file transforms that read from one location and write/remove/insert elsewhere. These are still mutating verbs, not queries, because their contract is new file contents rather than stdout.
 
 ### Transaction guards
 
@@ -288,7 +288,7 @@ Human preview is a separate surface. `--dry-run` lowers the semantic JSON plan t
       "value_sha256": "5d41402a..."
     },
     {
-      "verb": "replace-section",
+      "verb": "section replace",
       "target": {
         "path": "posts/hello.md",
         "part": "body",
@@ -305,7 +305,7 @@ Human preview is a separate surface. `--dry-run` lowers the semantic JSON plan t
   },
   "tree": "7f4e8d...",
   "commit": {
-    "message": "etch: 2 changes in posts/hello.md\n\nChanges:\n- set posts/hello.md frontmatter.title \"Hello, world\"\n- replace-section posts/hello.md \"## Summary\" \"A tighter summary.\""
+    "message": "etch: 2 changes in posts/hello.md\n\nChanges:\n- set posts/hello.md frontmatter.title \"Hello, world\"\n- section replace posts/hello.md \"## Summary\" \"A tighter summary.\""
   }
 }
 ```
@@ -360,7 +360,7 @@ Etch-Tree: 7f4e8d...
 
 Changes:
 - set posts/hello.md frontmatter.title "Hello, world"
-- replace-section posts/hello.md "## Summary" "A tighter summary."
+- section replace posts/hello.md "## Summary" "A tighter summary."
 
 ---
  posts/hello.md | 6 +++---
@@ -549,7 +549,7 @@ etch: 2 changes in posts/hello.md
 
 Changes:
 - set posts/hello.md frontmatter.title "Hello, world"
-- replace-section posts/hello.md "## Summary" "A tighter summary."
+- section replace posts/hello.md "## Summary" "A tighter summary."
 ```
 
 Example long-value message:

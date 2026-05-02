@@ -148,7 +148,9 @@ func buildCommandSpecs() []commandSpec {
 		command("append", "append <path> <selector> <value|--json value>", "Append a value to an array.", ClassNonIdempotent, true, parsePorcelainStructured("append"), "--json"),
 		command("add", "add <path> <selector> <value|--json value>", "Ensure an array contains a value.", ClassIdempotent, true, parsePorcelainStructured("add"), "--json"),
 		command("remove", "remove <path> <selector> <value|--json value>", "Ensure an array does not contain a value.", ClassIdempotent, true, parsePorcelainStructured("remove"), "--json"),
-		command("replace-section", "replace-section <path> <heading> <content>", "Replace the body under one Markdown heading.", ClassIdempotent, true, parseReplaceSection),
+		command("section replace", "section replace <path> <heading> <content>", "Replace the body under one Markdown heading.", ClassIdempotent, true, parseSection("replace")),
+		command("section append", "section append <path> <heading> <content>", "Append a block fragment under one Markdown heading.", ClassNonIdempotent, true, parseSection("append")),
+		command("section prepend", "section prepend <path> <heading> <content>", "Prepend a block fragment under one Markdown heading.", ClassNonIdempotent, true, parseSection("prepend")),
 		command("create", "create <path> [<content>]", "Create a new file; omitted content uses an extension-aware default.", ClassIdempotent, true, parseCreate),
 		command("move", "move <src> <dst>", "Move a file path.", ClassIdempotent, true, parseFileVerb("move")),
 		command("copy", "copy <src> <dst>", "Copy a file path.", ClassIdempotent, true, parseFileVerb("copy")),
@@ -156,7 +158,9 @@ func buildCommandSpecs() []commandSpec {
 		command("missing", "missing <path>", "Guard that a path is missing in the admitted input view.", ClassGuard, true, parsePathGuard("missing")),
 		command("contains", "contains <path> <literal>", "Guard that admitted file bytes contain a literal.", ClassGuard, true, parseContains),
 
-		command("md replace-section", "md replace-section <path> <heading> <content>", "Replace the body under one Markdown heading.", ClassIdempotent, true, parseReplaceSection),
+		command("md section replace", "md section replace <path> <heading> <content>", "Replace the body under one Markdown heading.", ClassIdempotent, true, parseSection("replace")),
+		command("md section append", "md section append <path> <heading> <content>", "Append a block fragment under one Markdown heading.", ClassNonIdempotent, true, parseSection("append")),
+		command("md section prepend", "md section prepend <path> <heading> <content>", "Prepend a block fragment under one Markdown heading.", ClassNonIdempotent, true, parseSection("prepend")),
 	}
 	for _, family := range []structuredCommandFamily{
 		{Format: "json", ValueDescription: "JSON values", DeleteDescription: "Delete a JSON value.", Sequence: "JSON array"},
@@ -392,14 +396,16 @@ func parseStructured(format, verb string) commandParser {
 	}
 }
 
-func parseReplaceSection(inv commandInvocation) ([]Operation, error) {
-	spec, op, args := inv.Spec, inv.Op, inv.Args
-	if len(args) != 3 {
-		return nil, usagef("usage: etch %s", spec.Signature)
+func parseSection(action string) commandParser {
+	return func(inv commandInvocation) ([]Operation, error) {
+		spec, op, args := inv.Spec, inv.Op, inv.Args
+		if len(args) != 3 {
+			return nil, usagef("usage: etch %s", spec.Signature)
+		}
+		op.Verb, op.Kind, op.Class, op.Path, op.Value = "section "+action, "md-section", spec.Class, args[0], args[2]
+		op.Target = PlanTarget{Path: args[0], Part: "body", Section: args[1]}
+		return parsedOperation(op)
 	}
-	op.Verb, op.Kind, op.Class, op.Path, op.Value = "replace-section", "md-section", spec.Class, args[0], args[2]
-	op.Target = PlanTarget{Path: args[0], Part: "body", Section: args[1]}
-	return parsedOperation(op)
 }
 
 func parseTable(format string, tablePath ...string) commandParser {
@@ -885,9 +891,9 @@ func printHelp(w io.Writer, topic string, all bool) error {
 		}
 		fmt.Fprintln(w)
 		if all {
-			fmt.Fprint(w, "Topics: model, scripts, selectors, values, fields, plans, security, conflicts, table, csv\n")
+			fmt.Fprint(w, "Topics: model, scripts, selectors, values, fields, plans, security, conflicts, section, table, csv\n")
 		} else {
-			fmt.Fprint(w, "Topics: model, scripts, selectors, values, fields, plans, security, conflicts, table, csv. Use --all for plumbing commands.\n")
+			fmt.Fprint(w, "Topics: model, scripts, selectors, values, fields, plans, security, conflicts, section, table, csv. Use --all for plumbing commands.\n")
 		}
 	case "scripts":
 		fmt.Fprint(w, scriptsHelp)
@@ -905,6 +911,8 @@ func printHelp(w io.Writer, topic string, all bool) error {
 		fmt.Fprint(w, conflictsHelp)
 	case "model":
 		fmt.Fprint(w, modelHelp)
+	case "section":
+		fmt.Fprint(w, sectionHelp)
 	case "table", "csv":
 		fmt.Fprint(w, tableHelp)
 	default:
@@ -976,6 +984,18 @@ The script path is optional. Omit it or pass "-" to read the script from stdin.
 Every statement is planned together against one base tree, so later statements see earlier statements.
 If parsing, guards, or mutations fail, the batch produces no commit.
 On success, the whole batch produces one commit unless every mutating statement is a no-op.
+`
+
+const sectionHelp = `Markdown sections are heading-delimited body ranges.
+
+Commands:
+  etch section replace note.md "## Status" "done"
+  etch section append note.md Status "new block"
+  etch section prepend note.md Status "new block"
+
+Section selectors accept either a title such as Status or an ATX heading such as ## Status.
+Repeated matching headings are ambiguous. Append/prepend trim payload boundary blank lines
+and use one blank line between non-empty block fragments.
 `
 
 const tableHelp = `Tables are ordered rows and named columns of string cells.

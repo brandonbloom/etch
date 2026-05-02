@@ -78,7 +78,7 @@ func TestMaterializationCleanlyMergesStagedAndUnstagedChanges(t *testing.T) {
 	writeFile(t, dir, "note.md", local)
 
 	var out, errb bytes.Buffer
-	code, err := runCLIAt(dir, []string{"replace-section", "note.md", "## Status", "complete\n"}, &out, &errb)
+	code, err := runCLIAt(dir, []string{"section", "replace", "note.md", "## Status", "complete\n"}, &out, &errb)
 	if err != nil || code != exitOK {
 		t.Fatalf("runCLI code=%d err=%v stderr=%s", code, err, errb.String())
 	}

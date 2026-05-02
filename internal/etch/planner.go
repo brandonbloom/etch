@@ -440,7 +440,7 @@ func planSection(w *Workspace, files map[string]fileChange, op Operation) (Opera
 	if err != nil {
 		return op, false, err
 	}
-	out, changed, err := evalReplaceSection(res.Clean, op.Target.Section, op.Value, ch.After)
+	out, changed, err := evalMarkdownSection(res.Clean, op.Verb, op.Target.Section, op.Value, ch.After)
 	if err != nil {
 		return op, false, err
 	}

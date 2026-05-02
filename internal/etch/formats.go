@@ -111,7 +111,7 @@ func splitFrontmatter(b []byte) (fm, body []byte, had bool, err error) {
 	return nil, nil, false, failf("unterminated YAML frontmatter in markdown file")
 }
 
-func evalReplaceSection(path, heading, content string, before []byte) ([]byte, bool, error) {
+func evalMarkdownSection(path, verb, heading, content string, before []byte) ([]byte, bool, error) {
 	raw, bom := trimUTF8BOM(before)
 	if !utf8.Valid(raw) {
 		return nil, false, failf("invalid UTF-8 in Markdown input")
@@ -127,9 +127,10 @@ func evalReplaceSection(path, heading, content string, before []byte) ([]byte, b
 		return nil, false, failf("heading %q is ambiguous in %s", heading, path)
 	}
 	section := sections[0]
-	repl := content
-	if repl != "" && !strings.HasSuffix(repl, "\n") {
-		repl += "\n"
+	newline := markdownNewline(raw)
+	repl, err := markdownSectionBody(raw, section, verb, content, newline)
+	if err != nil {
+		return nil, false, err
 	}
 	out := make([]byte, 0, len(raw)-(section.BodyEnd-section.Heading.BodyStart)+len(repl))
 	out = append(out, raw[:section.Heading.BodyStart]...)
@@ -139,9 +140,153 @@ func evalReplaceSection(path, heading, content string, before []byte) ([]byte, b
 	return out, !bytes.Equal(out, before), nil
 }
 
+func markdownSectionBody(raw []byte, section markdownSection, verb, content, newline string) ([]byte, error) {
+	body := raw[section.Heading.BodyStart:section.BodyEnd]
+	prefix := raw[:section.Heading.BodyStart]
+	needsHeadingNewline := len(prefix) > 0 && !bytes.HasSuffix(prefix, []byte("\n"))
+	switch verb {
+	case "section replace":
+		repl := content
+		if repl != "" && !strings.HasSuffix(repl, "\n") {
+			repl += "\n"
+		}
+		if repl != "" && needsHeadingNewline {
+			repl = newline + repl
+		}
+		return []byte(repl), nil
+	case "section append":
+		fragment, err := markdownBlockFragment(content, newline)
+		if err != nil {
+			return nil, err
+		}
+		existing := trimTrailingMarkdownBlankLines(body)
+		return appendSectionBody(existing, fragment, newline, needsHeadingNewline), nil
+	case "section prepend":
+		fragment, err := markdownBlockFragment(content, newline)
+		if err != nil {
+			return nil, err
+		}
+		existing := trimLeadingMarkdownBlankLines(body)
+		return prependSectionBody(existing, fragment, newline, needsHeadingNewline), nil
+	default:
+		return nil, usagef("unknown section verb %s", verb)
+	}
+}
+
+func appendSectionBody(existing, fragment []byte, newline string, needsHeadingNewline bool) []byte {
+	var out []byte
+	if needsHeadingNewline {
+		out = append(out, newline...)
+	}
+	if len(bytes.Trim(existing, " \t\r\n")) == 0 {
+		out = append(out, fragment...)
+		out = append(out, newline...)
+		return out
+	}
+	out = append(out, existing...)
+	out = append(out, newline...)
+	out = append(out, newline...)
+	out = append(out, fragment...)
+	out = append(out, newline...)
+	return out
+}
+
+func prependSectionBody(existing, fragment []byte, newline string, needsHeadingNewline bool) []byte {
+	var out []byte
+	if needsHeadingNewline {
+		out = append(out, newline...)
+	}
+	if len(bytes.Trim(existing, " \t\r\n")) == 0 {
+		out = append(out, fragment...)
+		out = append(out, newline...)
+		return out
+	}
+	out = append(out, fragment...)
+	out = append(out, newline...)
+	out = append(out, newline...)
+	out = append(out, existing...)
+	return out
+}
+
+func markdownNewline(raw []byte) string {
+	if bytes.Contains(raw, []byte("\r\n")) {
+		return "\r\n"
+	}
+	return "\n"
+}
+
+func markdownBlockFragment(content, newline string) ([]byte, error) {
+	s := strings.ReplaceAll(content, "\r\n", "\n")
+	s = strings.ReplaceAll(s, "\r", "\n")
+	lines := strings.Split(s, "\n")
+	start, end := 0, len(lines)
+	for start < end && markdownBlankStringLine(lines[start]) {
+		start++
+	}
+	for end > start && markdownBlankStringLine(lines[end-1]) {
+		end--
+	}
+	if start == end {
+		return nil, usagef("section fragment must not be blank")
+	}
+	return []byte(strings.Join(lines[start:end], newline)), nil
+}
+
+func markdownBlankStringLine(line string) bool {
+	return strings.Trim(line, " \t") == ""
+}
+
+func trimTrailingMarkdownBlankLines(b []byte) []byte {
+	end := len(b)
+	for end > 0 {
+		lineEnd := end
+		if b[lineEnd-1] == '\n' {
+			lineEnd--
+			if lineEnd > 0 && b[lineEnd-1] == '\r' {
+				lineEnd--
+			}
+		}
+		lineStart := bytes.LastIndexByte(b[:lineEnd], '\n') + 1
+		if !markdownBlankBytesLine(b[lineStart:lineEnd]) {
+			return b[:lineEnd]
+		}
+		end = lineStart
+	}
+	return b[:0]
+}
+
+func trimLeadingMarkdownBlankLines(b []byte) []byte {
+	start := 0
+	for start < len(b) {
+		lineEnd := markdownLineEnd(b, start)
+		contentEnd := lineEnd
+		if contentEnd > start && b[contentEnd-1] == '\n' {
+			contentEnd--
+			if contentEnd > start && b[contentEnd-1] == '\r' {
+				contentEnd--
+			}
+		}
+		if !markdownBlankBytesLine(b[start:contentEnd]) {
+			return b[start:]
+		}
+		start = lineEnd
+	}
+	return b[len(b):]
+}
+
+func markdownBlankBytesLine(line []byte) bool {
+	return len(bytes.Trim(line, " \t\r")) == 0
+}
+
 type markdownSection struct {
 	Heading markdownHeading
 	BodyEnd int
+}
+
+type markdownHeadingSelector struct {
+	Level    int
+	HasLevel bool
+	Content  string
 }
 
 type markdownHeading struct {
@@ -151,16 +296,19 @@ type markdownHeading struct {
 	BodyStart int
 }
 
-func parseMarkdownHeadingSelector(heading string) (markdownHeading, error) {
-	raw := []byte(heading)
-	if !bytes.HasSuffix(raw, []byte("\n")) {
-		raw = append(raw, '\n')
+func parseMarkdownHeadingSelector(heading string) (markdownHeadingSelector, error) {
+	if strings.ContainsAny(heading, "\r\n") {
+		return markdownHeadingSelector{}, usagef("section selector must be a single Markdown heading or title")
 	}
-	headings := markdownHeadings(raw)
-	if len(headings) != 1 || strings.TrimSpace(string(raw[headings[0].BodyStart:])) != "" {
-		return markdownHeading{}, usagef("section selector must be a single Markdown heading")
+	line := strings.TrimSpace(heading)
+	if line == "" {
+		return markdownHeadingSelector{}, usagef("section selector must not be blank")
 	}
-	return headings[0], nil
+	level, content, ok := parseATXHeadingLine([]byte(line))
+	if ok {
+		return markdownHeadingSelector{Level: level, HasLevel: true, Content: content}, nil
+	}
+	return markdownHeadingSelector{Content: line}, nil
 }
 
 func markdownHeadings(raw []byte) []markdownHeading {
@@ -180,7 +328,7 @@ func markdownHeadings(raw []byte) []markdownHeading {
 		lineStart, bodyStart := markdownHeadingBlockRange(raw, heading)
 		headings = append(headings, markdownHeading{
 			Level:     heading.Level,
-			Content:   strings.TrimSpace(string(heading.Lines().Value(raw))),
+			Content:   markdownHeadingContent(raw, heading, lineStart),
 			LineStart: lineStart,
 			BodyStart: bodyStart,
 		})
@@ -201,7 +349,7 @@ func markdownSections(raw []byte, selector string) ([]markdownSection, error) {
 	headings := markdownHeadings(raw)
 	var sections []markdownSection
 	for i, h := range headings {
-		if h.Level == target.Level && h.Content == target.Content {
+		if (!target.HasLevel || h.Level == target.Level) && h.Content == target.Content {
 			sections = append(sections, markdownSection{
 				Heading: h,
 				BodyEnd: markdownSectionBodyEnd(raw, headings, i),
@@ -218,6 +366,15 @@ func markdownSectionBodyEnd(raw []byte, headings []markdownHeading, idx int) int
 		}
 	}
 	return len(raw)
+}
+
+func markdownHeadingContent(raw []byte, heading *goldast.Heading, lineStart int) string {
+	lineEnd := markdownLineEnd(raw, lineStart)
+	if level, content, ok := parseATXHeadingLine(raw[lineStart:lineEnd]); ok {
+		_ = level
+		return content
+	}
+	return strings.TrimSpace(string(heading.Lines().Value(raw)))
 }
 
 func markdownHeadingBlockRange(raw []byte, heading *goldast.Heading) (int, int) {
@@ -251,15 +408,40 @@ func markdownLineEnd(raw []byte, pos int) int {
 }
 
 func markdownLineIsATXHeading(line []byte) bool {
+	_, _, ok := parseATXHeadingLine(line)
+	return ok
+}
+
+func parseATXHeadingLine(line []byte) (int, string, bool) {
 	line = bytes.TrimLeft(line, " \t")
 	n := 0
 	for n < len(line) && line[n] == '#' {
 		n++
 	}
 	if n == 0 || n > 6 {
-		return false
+		return 0, "", false
 	}
-	return n == len(line) || line[n] == ' ' || line[n] == '\t' || line[n] == '\r' || line[n] == '\n'
+	if n < len(line) && line[n] != ' ' && line[n] != '\t' && line[n] != '\r' && line[n] != '\n' {
+		return 0, "", false
+	}
+	return n, stripClosingATXMarkers(strings.TrimSpace(string(line[n:]))), true
+}
+
+func stripClosingATXMarkers(content string) string {
+	end := len(content)
+	for end > 0 && content[end-1] == '#' {
+		end--
+	}
+	if end == len(content) {
+		return content
+	}
+	if end == 0 {
+		return ""
+	}
+	if end > 0 && (content[end-1] == ' ' || content[end-1] == '\t') {
+		return strings.TrimSpace(content[:end])
+	}
+	return content
 }
 
 type tableData struct {

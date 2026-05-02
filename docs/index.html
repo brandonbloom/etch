@@ -466,7 +466,7 @@
 
   <ul class="kv-list">
     <li><span class="kv-key">Formats</span><span class="kv-val">Markdown (with frontmatter), JSON, YAML, CSV&mdash;inferred from file extension</span></li>
-    <li><span class="kv-key">Operations</span><span class="kv-val">set, delete, append, add, remove on structured paths; replace-section on markdown headings; create, move, copy, delete on files; table operations on CSV and markdown tables; guards (exists, missing, contains)</span></li>
+    <li><span class="kv-key">Operations</span><span class="kv-val">set, delete, append, add, remove on structured paths; section replace/append/prepend on markdown headings; create, move, copy, delete on files; table operations on CSV and markdown tables; guards (exists, missing, contains)</span></li>
     <li><span class="kv-key">Output</span><span class="kv-val">A git commit with touched paths materialized by default</span></li>
     <li><span class="kv-key">Language</span><span class="kv-val">Go, single binary, using git as the transaction backend</span></li>
   </ul>
@@ -516,7 +516,7 @@
         <div class="line">set tasks/review-proposal.md frontmatter.snooze "2026-05-10"</div>
         <div class="line">set tasks/review-proposal.md frontmatter.status "deferred"</div>
         <div class="line">append people/alice.md frontmatter.tags '"pending-review"'</div>
-        <div class="line">replace-section log/2026-04-27.md "## Activity" &lt;&lt;EOF</div>
+        <div class="line">section replace log/2026-04-27.md "## Activity" &lt;&lt;EOF</div>
         <div class="line">- Deferred proposal review to May 10</div>
         <div class="line">- Added pending-review tag to Alice's dossier</div>
         <div class="line">EOF</div>
@@ -760,7 +760,7 @@ plan=$(etch --plan set tasks/review.md frontmatter.status "complete")
         <option value="append">append</option>
         <option value="add">add</option>
         <option value="remove">remove</option>
-        <option value="replace-section">replace-section</option>
+        <option value="section-replace">section replace</option>
         <option value="create">create</option>
       </select>
       <select id="builder-format" onchange="updateBuilder()">
@@ -834,10 +834,10 @@ const examples = {
   'remove-json': { cmd: 'etch remove config.json features \'"dark-mode"\'',         commit: 'etch remove config.json features', note: 'Removes "dark-mode" from the array if present.' },
   'remove-yaml': { cmd: 'etch remove config.yaml plugins \'"analytics"\'',          commit: 'etch remove config.yaml plugins', note: 'Removes "analytics" from the sequence if present.' },
   'remove-csv':  { cmd: 'etch table column delete data.csv legacy_field',              commit: 'etch table column delete data.csv legacy_field', note: 'Deletes the "legacy_field" column from the CSV.' },
-  'replace-section-md': { cmd: 'etch replace-section people/alice.md "## Notes" <<EOF\nDiscussed project timeline. Agreed on May deadline.\nEOF', commit: 'etch replace-section people/alice.md "## Notes"', note: 'Replaces everything under ## Notes until the next heading of equal or higher level.' },
-  'replace-section-json': { cmd: '# replace-section is a markdown operation.\n# For JSON, use set with the target path instead:\netch set state.json status.block \'{"key": "value"}\'', commit: 'etch set state.json status.block', note: 'Section replacement is a markdown concept. For structured formats, use set.' },
-  'replace-section-yaml': { cmd: '# replace-section is a markdown operation.\n# For YAML, use set with the target path instead:\netch set config.yaml settings.block \'{"key": "value"}\'', commit: 'etch set config.yaml settings.block', note: 'Section replacement is a markdown concept. For structured formats, use set.' },
-  'replace-section-csv': { cmd: '# replace-section is a markdown operation.\n# For CSV, use table operations instead:\netch table set data.csv all,status done', commit: 'etch table set data.csv all,status', note: 'Section replacement is a markdown concept. For CSV, use table operations.' },
+  'section-replace-md': { cmd: 'etch section replace people/alice.md "## Notes" <<EOF\nDiscussed project timeline. Agreed on May deadline.\nEOF', commit: 'etch section replace people/alice.md "## Notes"', note: 'Replaces everything under ## Notes until the next heading of equal or higher level.' },
+  'section-replace-json': { cmd: '# section replace is a markdown operation.\n# For JSON, use set with the target path instead:\netch set state.json status.block \'{"key": "value"}\'', commit: 'etch set state.json status.block', note: 'Section replacement is a markdown concept. For structured formats, use set.' },
+  'section-replace-yaml': { cmd: '# section replace is a markdown operation.\n# For YAML, use set with the target path instead:\netch set config.yaml settings.block \'{"key": "value"}\'', commit: 'etch set config.yaml settings.block', note: 'Section replacement is a markdown concept. For structured formats, use set.' },
+  'section-replace-csv': { cmd: '# section replace is a markdown operation.\n# For CSV, use table operations instead:\netch table set data.csv all,status done', commit: 'etch table set data.csv all,status', note: 'Section replacement is a markdown concept. For CSV, use table operations.' },
   'create-md':   { cmd: 'etch create people/bob.md',                                  commit: 'etch create people/bob.md', note: 'Creates a new empty markdown file. Fails if the file already exists.' },
   'create-json': { cmd: 'etch create state.json',                                     commit: 'etch create state.json', note: 'Creates a new JSON file with default content {}. Fails if it already exists.' },
   'create-yaml': { cmd: 'etch create config.yaml',                                    commit: 'etch create config.yaml', note: 'Creates a new YAML file with default content {}. Fails if it already exists.' },

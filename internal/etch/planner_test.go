@@ -110,6 +110,44 @@ func TestPlanFileDeleteNoop(t *testing.T) {
 	}
 }
 
+func TestPlanMarkdownSectionAppendDescriptorAndCommitMessage(t *testing.T) {
+	dir := initRepo(t)
+	writeFile(t, dir, "note.md", "## Notes\nold\n")
+	commitAll(t, dir, "initial")
+
+	op, err := DecodeOperation(Statement{Tokens: []string{"section", "append", "note.md", "Notes", "new"}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	w, err := OpenWorkspaceAt(dir, false)
+	if err != nil {
+		t.Fatal(err)
+	}
+	plan, err := PlanOperations(w, GlobalOptions{}, []Operation{op})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(plan.Operations) != 1 {
+		t.Fatalf("operations = %d, want 1", len(plan.Operations))
+	}
+	got := plan.Operations[0]
+	if got.Class != ClassNonIdempotent {
+		t.Fatalf("class = %v, want %v", got.Class, ClassNonIdempotent)
+	}
+	if got.Target != (PlanTarget{Path: "note.md", Part: "body", Section: "Notes"}) {
+		t.Fatalf("target = %#v", got.Target)
+	}
+	if got.Descriptor != `section append note.md Notes "new"` {
+		t.Fatalf("descriptor = %q", got.Descriptor)
+	}
+	if got.ValueHash != shaHex([]byte("new")) {
+		t.Fatalf("value hash = %q", got.ValueHash)
+	}
+	if plan.Commit.Message != `etch section append note.md Notes "new"` {
+		t.Fatalf("commit message = %q", plan.Commit.Message)
+	}
+}
+
 func TestPlanHashUsesJCSCanonicalBytes(t *testing.T) {
 	plan := &Plan{
 		Schema:     "schema",

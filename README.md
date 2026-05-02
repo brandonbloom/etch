@@ -97,7 +97,9 @@ Porcelain commands infer the format from the file extension:
 | `append <path> <selector> <value>` | Append a value to an array. |
 | `add <path> <selector> <value>` | Ensure an array contains a value. |
 | `remove <path> <selector> <value>` | Ensure an array does not contain a value. |
-| `replace-section <path> <heading> <content>` | Replace the body under one Markdown heading. |
+| `section replace <path> <heading> <content>` | Replace the body under one Markdown heading. |
+| `section append <path> <heading> <content>` | Append a block fragment under one Markdown heading. |
+| `section prepend <path> <heading> <content>` | Prepend a block fragment under one Markdown heading. |
 | `create <path> [<content>]` | Create a file with explicit or extension-aware default content. |
 | `move <src> <dst>` | Move a file path. |
 | `copy <src> <dst>` | Copy a file path. |
@@ -118,7 +120,7 @@ Table commands infer CSV or Markdown table behavior:
 | `table column delete <path> ... <column>` | Delete a column. |
 
 Use `etch help --all` to see format-explicit plumbing commands such as
-`json set`, `yaml set`, `frontmatter set`, `md replace-section`, and
+`json set`, `yaml set`, `frontmatter set`, `md section replace`, and
 `csv row append`.
 
 For machine-readable command metadata:
@@ -146,11 +148,15 @@ etch add posts/hello.md frontmatter.tags draft
 etch delete posts/hello.md frontmatter.draft
 ```
 
-Replace a Markdown section:
+Mutate a Markdown section:
 
 ```sh
-etch replace-section posts/hello.md "## Summary" <<'EOF'
+etch section replace posts/hello.md "## Summary" <<'EOF'
 This post introduces the project and its goals.
+EOF
+
+etch section append posts/hello.md Summary <<'EOF'
+Follow-up note.
 EOF
 ```
 
@@ -178,7 +184,7 @@ etch run ops.etch
 ```text
 contains state.json open
 set state.json status complete
-replace-section README.md "## Status" <<EOF
+section replace README.md "## Status" <<EOF
 Complete.
 EOF
 ```
@@ -199,7 +205,7 @@ Multi-line values use heredocs:
 
 ```text
 set posts/hello.md frontmatter.title "Hello, world"
-replace-section posts/hello.md "## Summary" <<EOF
+section replace posts/hello.md "## Summary" <<EOF
 This is literal text.
 $FOO is not expanded.
 EOF

@@ -7,7 +7,7 @@ import (
 )
 
 func TestHelpTopicsSnapshotSmoke(t *testing.T) {
-	for _, topic := range []string{"", "model", "scripts", "selectors", "values", "fields", "plans", "security", "conflicts", "table", "csv"} {
+	for _, topic := range []string{"", "model", "scripts", "selectors", "values", "fields", "plans", "security", "conflicts", "section", "table", "csv"} {
 		var out bytes.Buffer
 		if err := printHelp(&out, topic, false); err != nil {
 			t.Fatalf("help %q: %v", topic, err)
@@ -24,12 +24,12 @@ func TestDefaultHelpTableExcludesPlumbing(t *testing.T) {
 		t.Fatal(err)
 	}
 	text := out.String()
-	for _, hidden := range []string{"json set", "yaml set", "frontmatter set", "md replace-section", "csv set"} {
+	for _, hidden := range []string{"json set", "yaml set", "frontmatter set", "md section replace", "csv set"} {
 		if strings.Contains(text, hidden) {
 			t.Fatalf("default help contains plumbing command %q:\n%s", hidden, text)
 		}
 	}
-	for _, shown := range []string{"set <path>", "table set", "replace-section"} {
+	for _, shown := range []string{"set <path>", "table set", "section replace", "section append", "section prepend"} {
 		if !strings.Contains(text, shown) {
 			t.Fatalf("default help missing porcelain command %q:\n%s", shown, text)
 		}
@@ -42,7 +42,7 @@ func TestHelpAllIncludesPlumbing(t *testing.T) {
 		t.Fatal(err)
 	}
 	text := out.String()
-	for _, shown := range []string{"json set", "yaml set", "frontmatter set", "md replace-section", "csv set"} {
+	for _, shown := range []string{"json set", "yaml set", "frontmatter set", "md section replace", "csv set"} {
 		if !strings.Contains(text, shown) {
 			t.Fatalf("help --all missing plumbing command %q:\n%s", shown, text)
 		}

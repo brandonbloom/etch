@@ -590,69 +590,173 @@ func TestFrontmatterMultilineStringUsesLiteralBlock(t *testing.T) {
 	}
 }
 
-func TestMarkdownReplaceSection(t *testing.T) {
+func TestEvalMarkdownSectionReplace(t *testing.T) {
 	tests := []struct {
 		name    string
+		heading string
 		input   string
 		content string
-		want    []string
-		reject  []string
+		want    string
 	}{
 		{
 			name:    "replaces body until next peer heading",
+			heading: "## Notes",
 			input:   "# Title\n\n## Notes\nold\n\n## Next\nkeep\n",
 			content: "new\nbody\n",
-			want:    []string{"## Notes\nnew\nbody\n## Next"},
-			reject:  []string{"old"},
+			want:    "# Title\n\n## Notes\nnew\nbody\n## Next\nkeep\n",
 		},
 		{
 			name:    "ignores fenced headings",
+			heading: "## Notes",
 			input:   "# Title\n\n```md\n## Notes\nold\n```\n\n## Notes\nreal\n\n## Next\nkeep\n",
 			content: "new\n",
-			want:    []string{"```md\n## Notes\nold\n```", "## Notes\nnew\n## Next"},
-			reject:  []string{"real"},
+			want:    "# Title\n\n```md\n## Notes\nold\n```\n\n## Notes\nnew\n## Next\nkeep\n",
 		},
 		{
 			name:    "ignores HTML block headings",
+			heading: "## Notes",
 			input:   "# Title\n\n<div>\n## Notes\nold\n</div>\n\n## Notes\nreal\n\n## Next\nkeep\n",
 			content: "new\n",
-			want:    []string{"<div>\n## Notes\nold\n</div>", "## Notes\nnew\n## Next"},
-			reject:  []string{"real"},
+			want:    "# Title\n\n<div>\n## Notes\nold\n</div>\n\n## Notes\nnew\n## Next\nkeep\n",
 		},
 		{
 			name:    "stops at setext heading",
+			heading: "## Notes",
 			input:   "# Title\n\n## Notes\nold\n\nNext\n----\nkeep\n",
 			content: "new\n",
-			want:    []string{"## Notes\nnew\nNext\n----\nkeep\n"},
-			reject:  []string{"old"},
+			want:    "# Title\n\n## Notes\nnew\nNext\n----\nkeep\n",
 		},
 		{
 			name:    "matches closing ATX markers",
+			heading: "## Notes",
 			input:   "# Title\n\n## Notes ##\nold\n\n## Next\nkeep\n",
 			content: "new\n",
-			want:    []string{"## Notes ##\nnew\n## Next"},
-			reject:  []string{"old"},
+			want:    "# Title\n\n## Notes ##\nnew\n## Next\nkeep\n",
+		},
+		{
+			name:    "matches title-only heading",
+			heading: "Notes",
+			input:   "# Title\n\n## Notes\nold\n\n## Next\nkeep\n",
+			content: "new\n",
+			want:    "# Title\n\n## Notes\nnew\n## Next\nkeep\n",
 		},
 	}
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
-			dir := initRepo(t)
-			writeFile(t, dir, "note.md", tc.input)
-			commitAll(t, dir, "initial")
-
-			runOK(t, dir, "replace-section", "note.md", "## Notes", tc.content)
-			got := testGit(t, dir, "show", "HEAD:note.md")
-			for _, want := range tc.want {
-				if !strings.Contains(got, want) {
-					t.Fatalf("replace-section output missing %q:\n%s", want, got)
-				}
+			got, changed, err := evalMarkdownSection("note.md", "section replace", tc.heading, tc.content, []byte(tc.input))
+			if err != nil {
+				t.Fatal(err)
 			}
-			for _, reject := range tc.reject {
-				if strings.Contains(got, reject) {
-					t.Fatalf("replace-section output still contains %q:\n%s", reject, got)
-				}
+			if !changed {
+				t.Fatal("section replace was not marked changed")
+			}
+			if string(got) != tc.want {
+				t.Fatalf("section replace output:\n--- got ---\n%q\n--- want ---\n%q", got, tc.want)
 			}
 		})
+	}
+}
+
+func TestEvalMarkdownSectionAppendPrepend(t *testing.T) {
+	tests := []struct {
+		name string
+		verb string
+		in   string
+		body string
+		want string
+	}{
+		{
+			name: "append non-empty section",
+			verb: "section append",
+			in:   "# Title\n\n## Notes\nold\n\n\n## Next\nkeep\n",
+			body: "\n\nnew\n\n",
+			want: "# Title\n\n## Notes\nold\n\nnew\n## Next\nkeep\n",
+		},
+		{
+			name: "prepend non-empty section",
+			verb: "section prepend",
+			in:   "# Title\n\n## Notes\n\nold\n\n## Next\nkeep\n",
+			body: "\nnew\n\n",
+			want: "# Title\n\n## Notes\nnew\n\nold\n\n## Next\nkeep\n",
+		},
+		{
+			name: "append empty section",
+			verb: "section append",
+			in:   "# Title\n\n## Notes\n## Next\nkeep\n",
+			body: "\nnew\n",
+			want: "# Title\n\n## Notes\nnew\n## Next\nkeep\n",
+		},
+		{
+			name: "prepend heading without trailing newline",
+			verb: "section prepend",
+			in:   "## Notes",
+			body: "new",
+			want: "## Notes\nnew\n",
+		},
+		{
+			name: "append uses file newline style",
+			verb: "section append",
+			in:   "## Notes\r\nold\r\n",
+			body: "new\nline",
+			want: "## Notes\r\nold\r\n\r\nnew\r\nline\r\n",
+		},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			got, changed, err := evalMarkdownSection("note.md", tc.verb, "Notes", tc.body, []byte(tc.in))
+			if err != nil {
+				t.Fatal(err)
+			}
+			if !changed {
+				t.Fatal("section insertion was not marked changed")
+			}
+			if string(got) != tc.want {
+				t.Fatalf("section output:\n--- got ---\n%q\n--- want ---\n%q", got, tc.want)
+			}
+		})
+	}
+}
+
+func TestEvalMarkdownSectionAppendRejectsBlankFragment(t *testing.T) {
+	_, _, err := evalMarkdownSection("note.md", "section append", "Notes", "\n \n", []byte("## Notes\nold\n"))
+	if err == nil || !strings.Contains(err.Error(), "section fragment must not be blank") {
+		t.Fatalf("err = %v", err)
+	}
+}
+
+func TestMarkdownSectionCommandCommitsAndMaterializes(t *testing.T) {
+	dir := initRepo(t)
+	writeFile(t, dir, "note.md", "## Notes\nold\n")
+	commitAll(t, dir, "initial")
+
+	runOK(t, dir, "md", "section", "append", "note.md", "## Notes", "new")
+
+	got := testGit(t, dir, "show", "HEAD:note.md")
+	want := "## Notes\nold\n\nnew\n"
+	if got != want {
+		t.Fatalf("section command output:\n--- got ---\n%q\n--- want ---\n%q", got, want)
+	}
+	subject := testGit(t, dir, "log", "-1", "--pretty=%s")
+	if stringsTrim(subject) != `etch section append note.md '## Notes' "new"` {
+		t.Fatalf("commit subject = %q", subject)
+	}
+}
+
+func TestMarkdownSectionAmbiguousTitleOnlyHeading(t *testing.T) {
+	dir := initRepo(t)
+	writeFile(t, dir, "note.md", "# Title\n\n## Notes\nold\n\n### Notes\nnested\n")
+	head := commitAll(t, dir, "initial")
+
+	var out, errb bytes.Buffer
+	code, err := runCLIAt(dir, []string{"section", "replace", "note.md", "Notes", "new\n"}, &out, &errb)
+	if err == nil || code == exitOK {
+		t.Fatalf("ambiguous section replace succeeded stdout=%s stderr=%s", out.String(), errb.String())
+	}
+	if !strings.Contains(err.Error(), `heading "Notes" is ambiguous`) {
+		t.Fatalf("err = %v", err)
+	}
+	if got := stringsTrim(testGit(t, dir, "rev-parse", "HEAD")); got != head {
+		t.Fatalf("failed section mutation moved HEAD to %s", got)
 	}
 }
 
@@ -770,7 +874,7 @@ func TestBOMPreservedForYAMLMarkdownAndCSV(t *testing.T) {
 	commitAll(t, dir, "initial")
 
 	runOK(t, dir, "set", "config.yaml", "status", "complete")
-	runOK(t, dir, "replace-section", "note.md", "## Notes", "new\n")
+	runOK(t, dir, "section", "replace", "note.md", "## Notes", "new\n")
 	runOK(t, dir, "table", "set", "data.csv", "all,status", "done")
 
 	for _, path := range []string{"config.yaml", "note.md", "data.csv"} {
@@ -823,7 +927,7 @@ func TestInvalidUTF8RefusedForStructuredFormats(t *testing.T) {
 		{
 			name: "markdown section",
 			run: func() error {
-				_, _, err := evalReplaceSection("note.md", "## Notes", "new\n", invalid)
+				_, _, err := evalMarkdownSection("note.md", "section replace", "## Notes", "new\n", invalid)
 				return err
 			},
 			want: "invalid UTF-8 in Markdown input",
