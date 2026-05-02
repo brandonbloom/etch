@@ -265,7 +265,10 @@ func ensureFileState(w *Workspace, files map[string]fileChange, path string, req
 		}
 		return ch, res, nil
 	}
-	before, mode, absent := w.ReadBase(res)
+	before, mode, absent, err := w.ReadBase(res)
+	if err != nil {
+		return fileChange{}, res, err
+	}
 	if requireExists && absent {
 		return fileChange{}, res, failf("%s is missing", path)
 	}

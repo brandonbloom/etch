@@ -38,7 +38,10 @@ func TestWorkspaceReadsTrackedBytesFromHEAD(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	got, _, absent := w.ReadBase(res)
+	got, _, absent, err := w.ReadBase(res)
+	if err != nil {
+		t.Fatal(err)
+	}
 	if absent {
 		t.Fatal("state.json reported absent")
 	}
@@ -234,6 +237,48 @@ func TestWorkspaceUntrackedAdmissionUsesInjectedWorkingTree(t *testing.T) {
 	}
 }
 
+func TestWorkspaceUntrackedAdmissionReturnsReadError(t *testing.T) {
+	dir := t.TempDir()
+	realDir, err := filepath.EvalSymlinks(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	path := filepath.Join(realDir, "local.txt")
+	readErr := fmt.Errorf("read failed")
+	runner := &fakeGitRunner{
+		outputs: map[string]fakeGitResponse{
+			fakeGitKey("output", "rev-parse", "--show-toplevel"): {
+				out: []byte(realDir + "\n"),
+			},
+			fakeGitKey("output", "rev-parse", "--verify", "HEAD"): {
+				out: []byte("abc123\n"),
+			},
+			fakeGitKey("output", "symbolic-ref", "-q", "HEAD"): {
+				out: []byte("refs/heads/main\n"),
+			},
+			fakeGitKey("output", "show", "abc123:local.txt"): {
+				err: fmt.Errorf("not tracked"),
+			},
+		},
+	}
+	worktree := &fakeWorkingTreeFS{
+		files:      map[string][]byte{},
+		readErrors: map[string]error{path: readErr},
+	}
+
+	w, err := openWorkspaceAt(dir, true, workspaceDeps{git: runner, worktree: worktree})
+	if err != nil {
+		t.Fatal(err)
+	}
+	exists, _, _, err := w.ExistsInAdmittedView(ResolvedPath{Clean: "local.txt", Abs: path, Repo: "local.txt"})
+	if err != readErr {
+		t.Fatalf("ExistsInAdmittedView err = %v, want %v", err, readErr)
+	}
+	if exists {
+		t.Fatal("read error reported path as existing")
+	}
+}
+
 func TestWorkspaceContainedSymlinkAllowedEscapeRejected(t *testing.T) {
 	dir := initRepo(t)
 	writeFile(t, dir, "real/data.json", `{"a":1}`+"\n")
@@ -294,13 +339,17 @@ func fakeGitKey(kind string, args ...string) string {
 }
 
 type fakeWorkingTreeFS struct {
-	files  map[string][]byte
-	reads  []string
-	writes []string
+	files      map[string][]byte
+	readErrors map[string]error
+	reads      []string
+	writes     []string
 }
 
 func (f *fakeWorkingTreeFS) readFile(path string) ([]byte, error) {
 	f.reads = append(f.reads, path)
+	if err := f.readErrors[path]; err != nil {
+		return nil, err
+	}
 	b, ok := f.files[path]
 	if !ok {
 		return nil, os.ErrNotExist

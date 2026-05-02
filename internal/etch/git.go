@@ -137,9 +137,9 @@ func (w *Workspace) Resolve(input string, mayBeMissing bool, finalSymlink bool) 
 	}, nil
 }
 
-func (w *Workspace) ReadBase(path ResolvedPath) ([]byte, string, bool) {
+func (w *Workspace) ReadBase(path ResolvedPath) ([]byte, string, bool, error) {
 	if w.Unborn {
-		return nil, "100644", true
+		return nil, "100644", true, nil
 	}
 	git := w.gitRunner()
 	out, err := git.output(w.CWD, nil, "show", w.Head+":"+path.Repo)
@@ -147,10 +147,13 @@ func (w *Workspace) ReadBase(path ResolvedPath) ([]byte, string, bool) {
 		if w.Untracked {
 			b, readErr := w.workingTreeFS().readFile(path.Abs)
 			if readErr == nil {
-				return b, "100644", false
+				return b, "100644", false, nil
+			}
+			if !isNoSuch(readErr) {
+				return nil, "100644", true, readErr
 			}
 		}
-		return nil, "100644", true
+		return nil, "100644", true, nil
 	}
 	mode := "100644"
 	if m, err := git.output(w.CWD, nil, "ls-tree", "--format=%(objectmode)", w.Head, "--", path.Repo); err == nil {
@@ -159,11 +162,14 @@ func (w *Workspace) ReadBase(path ResolvedPath) ([]byte, string, bool) {
 			mode = "100644"
 		}
 	}
-	return out, mode, false
+	return out, mode, false, nil
 }
 
 func (w *Workspace) ExistsInAdmittedView(path ResolvedPath) (bool, []byte, string, error) {
-	b, mode, absent := w.ReadBase(path)
+	b, mode, absent, err := w.ReadBase(path)
+	if err != nil {
+		return false, nil, mode, err
+	}
 	if !absent {
 		return true, b, mode, nil
 	}
