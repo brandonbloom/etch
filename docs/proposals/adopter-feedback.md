@@ -57,6 +57,16 @@ with frequent script-driven mutations.
 
 Related guidance: `etch help fields` and `etch help scripts`.
 
+## 0.1.0 Release-Readiness Feedback
+
+The `Etch 0.1.0 -- Feedback Report` raised a separate set of release-readiness
+issues. These are not new adopter mutation families; they are safety and
+documentation proposals to review before implementation:
+
+1. [Format prefix safety](format-prefix-safety.md)
+2. [Help and usage polish](help-and-usage-polish.md)
+3. [Site adoption readiness](site-adoption-readiness.md)
+
 ## Shared Goals
 
 - Replace LLM-authored mechanical edits with deterministic Etch commands.

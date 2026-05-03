@@ -17,3 +17,17 @@
 - Review [JSON formatting options](docs/proposals/json-formatting.md).
 - Review the Markdown template additions in
   [template-based creation](docs/proposals/template-creation.md).
+
+# 0.1.0 adopter feedback pass
+
+- [x] Externalize the adopter report into proposal docs.
+- [ ] Review [format prefix safety](docs/proposals/format-prefix-safety.md).
+- [ ] Review [help and usage polish](docs/proposals/help-and-usage-polish.md).
+- [ ] Review [site adoption readiness](docs/proposals/site-adoption-readiness.md).
+- [ ] Decide the implementation order after proposal review.
+
+# Review gates
+
+- [ ] Brandon reviews the Cheatsheet examples and behavior descriptions before
+  the docs changes are finalized.
+- [ ] Verify generated site/reference output after docs implementation.
