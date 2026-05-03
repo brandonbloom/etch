@@ -25,11 +25,13 @@
   <h1>Cheatsheet</h1>
 
   <div class="browser browser-static">
-    <nav class="browser-cats" aria-label="Command categories">
-      {{ range $cats }}
-      <a class="cat-btn" href="#cat-{{ anchorize . }}">{{ . }}</a>
-      {{ end }}
-    </nav>
+    <div class="browser-cats-shell">
+      <nav class="browser-cats" aria-label="Command categories">
+        {{ range $cats }}
+        <a class="cat-btn" href="#cat-{{ anchorize . }}">{{ . }}</a>
+        {{ end }}
+      </nav>
+    </div>
 
     {{ range $cats }}
     {{ $cat := . }}

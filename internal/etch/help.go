@@ -353,7 +353,9 @@ EOF`},
 			Blocks: []HelpBlock{
 				{Kind: "paragraph", Text: "On Markdown paths, bare structured selectors mutate YAML frontmatter. Markdown address flags such as --body, --section, --item, and --task switch set and delete to Dataview-style inline fields in the Markdown body."},
 				{Kind: "paragraph", Text: "Frontmatter fits whole-note schema fields such as owner, source, status, and stable IDs. Inline fields fit metadata attached to a paragraph, list item, task, or local note context."},
+				{Kind: "paragraph", Text: `Dataview inline fields are Markdown annotations shaped like [field:: value] or (field:: value). The bracket form is visible in reading view; the parenthesized form is hidden. Etch preserves the surrounding line or list item and rewrites only the addressed field annotation.`},
 				{Kind: "paragraph", Text: "Existing fields match first by exact source field name, then by Dataview-normalized field name if the normalized match is unique. Dataview implicit fields such as file.name, task status, and task text are reserved and not writable."},
+				{Kind: "paragraph", Text: "For full Dataview metadata syntax and indexing behavior, see https://blacksmithgu.github.io/obsidian-dataview/."},
 				{Kind: "heading", Heading: "Examples"},
 				{Kind: "pre", Text: `  etch set note.md status Driving
   etch set note.md last "2026-05-02" --body
