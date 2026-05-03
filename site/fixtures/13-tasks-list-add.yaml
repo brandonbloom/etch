@@ -1,7 +1,7 @@
 cat: Tasks
 name: list add
-syntax: 'etch list add <file> <text> [--section <heading>]'
-desc: Add a plain list item (no checkbox) to a section.
+syntax: 'etch list add <file> <text> --section <heading>'
+desc: Add a plain list item (no checkbox) to an addressed section.
 example: 'etch list add notes.md "Follow up with Alice" --section "## Action items"'
 file: notes.md
 before: |

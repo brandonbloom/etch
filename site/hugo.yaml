@@ -14,9 +14,12 @@ menu:
     - name: Cheatsheet
       url: /cheatsheet/
       weight: 3
+    - name: Reference
+      url: /reference/
+      weight: 4
     - name: GitHub
       url: https://github.com/brandonbloom/etch
-      weight: 4
+      weight: 5
       params:
         external: true
         icon: github

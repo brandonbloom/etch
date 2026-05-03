@@ -18,6 +18,11 @@ concurrency:
 
 jobs:
   deploy:
+    env:
+      GIT_AUTHOR_NAME: github-actions[bot]
+      GIT_AUTHOR_EMAIL: 41898282+github-actions[bot]@users.noreply.github.com
+      GIT_COMMITTER_NAME: github-actions[bot]
+      GIT_COMMITTER_EMAIL: 41898282+github-actions[bot]@users.noreply.github.com
     environment:
       name: github-pages
       url: ${{ steps.deployment.outputs.page_url }}

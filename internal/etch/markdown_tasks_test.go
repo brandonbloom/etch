@@ -146,6 +146,38 @@ func TestEvalMarkdownListAndTaskAdd(t *testing.T) {
 	}
 }
 
+func TestEvalMarkdownListAddWithoutDestinationRejectsAmbiguousTargets(t *testing.T) {
+	before := []byte(strings.Join([]string{
+		"## Actions",
+		"- Existing",
+		"",
+		"## Later",
+		"- Other",
+		"",
+	}, "\n"))
+
+	_, _, err := evalMarkdownTaskList("note.md", markdownTaskListOp("list add", "Next", markdownAddress{}), before)
+	if err == nil || !strings.Contains(err.Error(), "ambiguous without --section") {
+		t.Fatalf("ambiguous list add err = %v", err)
+	}
+}
+
+func TestEvalMarkdownListAddWithoutDestinationAllowsSingleObviousList(t *testing.T) {
+	before := []byte(strings.Join([]string{
+		"## Actions",
+		"- Existing",
+		"",
+	}, "\n"))
+
+	got, changed, err := evalMarkdownTaskList("note.md", markdownTaskListOp("list add", "Next", markdownAddress{}), before)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !changed || string(got) != "## Actions\n- Existing\n- Next\n" {
+		t.Fatalf("list add changed=%v got=%q", changed, got)
+	}
+}
+
 func TestEvalMarkdownListAddNumberedAndValidation(t *testing.T) {
 	before := []byte("## Steps\n1. First\n")
 	got, changed, err := evalMarkdownTaskList("note.md", markdownTaskListOp("task add", "Second", markdownAddress{Section: "Steps"}), before)

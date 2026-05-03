@@ -92,6 +92,24 @@ func TestShortHelpMentionsCoreFlags(t *testing.T) {
 	}
 }
 
+func TestScriptsHelpIncludesQuotingExamples(t *testing.T) {
+	var out bytes.Buffer
+	if err := printHelp(&out, "scripts", false); err != nil {
+		t.Fatal(err)
+	}
+	text := out.String()
+	for _, want := range []string{
+		`set posts/hello.md title "Hello, world"`,
+		`append events.jsonl '{"kind":"prompt","name":"first"}'`,
+		`set state.json payload --json '{"name":"first"}'`,
+		`$FOO is not expanded.`,
+	} {
+		if !strings.Contains(text, want) {
+			t.Fatalf("scripts help missing %q:\n%s", want, text)
+		}
+	}
+}
+
 func TestShellCompletionThroughCLI(t *testing.T) {
 	var out, errb bytes.Buffer
 	code, err := runCLI([]string{"--generate-shell-completion"}, &out, &errb)

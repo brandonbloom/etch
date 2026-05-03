@@ -162,6 +162,9 @@ func TestDecodeMarkdownFieldAddressValidation(t *testing.T) {
 	if _, err := DecodeOperation(Statement{Tokens: []string{"set", "note.md", "status", "done", "--task", "Send"}}); err == nil || !strings.Contains(err.Error(), "task/list implicit field") {
 		t.Fatalf("task implicit err = %v", err)
 	}
+	if _, err := DecodeOperation(Statement{Tokens: []string{"set", "note.md", "done", "yes", "--body", "--task", "Send"}}); err == nil || !strings.Contains(err.Error(), "--body cannot be combined") {
+		t.Fatalf("body/task err = %v", err)
+	}
 }
 
 func TestDecodeMarkdownTaskListCommands(t *testing.T) {

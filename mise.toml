@@ -14,7 +14,7 @@ description = "Run all Go tests"
 run = "go test ./..."
 
 [tasks."site:verify"]
-description = "Verify cheatsheet fixtures and generate site/data/commands.json"
+description = "Verify cheatsheet fixtures and generate site reference data"
 depends = ["build"]
 run = "go run site/gen-commands.go"
 

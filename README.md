@@ -235,12 +235,15 @@ without a script path reads from stdin.
 Script lines use the same token sequence as CLI arguments after the `etch`
 binary name. Blank lines and `#` comments are ignored. Quoting supports single
 quotes, double quotes, and backslash escaping. There are no shell expansions:
-`$FOO` is literal text.
+`$FOO` is literal text. Quote values with spaces, and quote JSON values as one
+token, usually with single quotes.
 
 Multi-line values use heredocs:
 
 ```text
 set posts/hello.md title "Hello, world"
+append events.jsonl '{"kind":"prompt","name":"first"}'
+set state.json payload --json '{"name":"first"}'
 section replace posts/hello.md "## Summary" <<EOF
 This is literal text.
 $FOO is not expanded.
@@ -289,9 +292,10 @@ Markdown address flags such as `--body`, `--section`, and `--task` switch
 `set` and `delete` to Dataview-style inline fields in the Markdown body.
 Task/list commands use `--section`, `--before`, and `--after` to address where
 task and list mutations happen; `--before` and `--after` match list items, not
-arbitrary prose. Item matching ignores task/list markers, Dataview inline
-fields, numeric trailing reference-annotation links, and inline Markdown
-formatting.
+arbitrary prose. `task add` and `list add` without a destination only use the
+default insertion point when there is a single obvious list target. Item
+matching ignores task/list markers, Dataview inline fields, numeric trailing
+reference-annotation links, and inline Markdown formatting.
 
 For `create <path>` without explicit content, JSON files default to `{}` and
 other paths default to empty content.

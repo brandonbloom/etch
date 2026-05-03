@@ -71,6 +71,7 @@ func main() {
 	etchBin := flag.String("etch", "./bin/etch", "path to etch binary")
 	fixturesDir := flag.String("fixtures", "site/fixtures", "fixtures directory")
 	output := flag.String("output", "site/data/commands.json", "output JSON file")
+	referenceOutput := flag.String("reference-output", "site/content/reference.md", "output Markdown file for CLI help reference")
 	flag.Parse()
 
 	abs, err := filepath.Abs(*etchBin)
@@ -160,7 +161,69 @@ func main() {
 		fatal("writing output: %v", err)
 	}
 
+	if err := writeReference(*etchBin, *referenceOutput); err != nil {
+		fatal("writing reference: %v", err)
+	}
+
 	fmt.Fprintf(os.Stderr, "\nwrote %s (%d commands)\n", *output, len(commands))
+	fmt.Fprintf(os.Stderr, "wrote %s\n", *referenceOutput)
+}
+
+func writeReference(etchBin, output string) error {
+	topics := []struct {
+		Title string
+		Args  []string
+	}{
+		{Title: "Common Commands", Args: []string{"help"}},
+		{Title: "All Commands", Args: []string{"help", "--all"}},
+		{Title: "Model", Args: []string{"help", "model"}},
+		{Title: "Scripts", Args: []string{"help", "scripts"}},
+		{Title: "Selectors", Args: []string{"help", "selectors"}},
+		{Title: "Values", Args: []string{"help", "values"}},
+		{Title: "Fields", Args: []string{"help", "fields"}},
+		{Title: "Plans", Args: []string{"help", "plans"}},
+		{Title: "Security", Args: []string{"help", "security"}},
+		{Title: "Conflicts", Args: []string{"help", "conflicts"}},
+		{Title: "Addressing", Args: []string{"help", "addressing"}},
+		{Title: "Section", Args: []string{"help", "section"}},
+		{Title: "Tasks", Args: []string{"help", "tasks"}},
+		{Title: "Table And CSV", Args: []string{"help", "table"}},
+	}
+
+	var b strings.Builder
+	b.WriteString("---\n")
+	b.WriteString("title: Reference\n")
+	b.WriteString("description: CLI help topics generated from etch help.\n")
+	b.WriteString("---\n\n")
+	b.WriteString("This page is generated from `etch help` output by `mise run site:verify`.\n")
+
+	for _, topic := range topics {
+		out, err := commandOutput("", etchBin, topic.Args...)
+		if err != nil {
+			return err
+		}
+		b.WriteString("\n## ")
+		b.WriteString(topic.Title)
+		b.WriteString("\n\n")
+		b.WriteString("```text\n")
+		b.WriteString(strings.TrimRight(out, "\n"))
+		b.WriteString("\n```\n")
+	}
+
+	if err := os.MkdirAll(filepath.Dir(output), 0o755); err != nil {
+		return fmt.Errorf("creating reference dir: %w", err)
+	}
+	return os.WriteFile(output, []byte(b.String()), 0o644)
+}
+
+func commandOutput(dir, name string, args ...string) (string, error) {
+	cmd := exec.Command(name, args...)
+	cmd.Dir = dir
+	out, err := cmd.CombinedOutput()
+	if err != nil {
+		return "", fmt.Errorf("%s %s: %s", name, strings.Join(args, " "), out)
+	}
+	return string(out), nil
 }
 
 func verify(etchBin string, f *Fixture) (results []File, commitMsg string, err error) {

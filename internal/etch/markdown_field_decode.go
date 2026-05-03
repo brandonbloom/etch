@@ -108,6 +108,9 @@ func parseMarkdownAddressArgs(args []string, allowHidden bool) (markdownAddress,
 	if address.Item != "" && address.Task != "" {
 		return markdownAddress{}, usagef("--item and --task are mutually exclusive")
 	}
+	if address.Body && (address.Section != "" || address.Item != "" || address.Task != "") {
+		return markdownAddress{}, usagef("--body cannot be combined with --section, --item, or --task")
+	}
 	if len(address.ItemTypes) > 0 && !address.hasItemLocation() {
 		return markdownAddress{}, usagef("--item-type requires --item or --task")
 	}

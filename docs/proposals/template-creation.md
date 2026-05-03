@@ -9,7 +9,10 @@ depends_on: []
 
 Add a template mode to `create` for creating new files from tracked repository
 templates. Exact template copying is a useful baseline; placeholder expansion
-is the design work this proposal needs to settle.
+is the design work this proposal needs to settle. This is also the proposed
+answer for frontmatter-bearing Markdown creation: repository templates should
+carry repository-specific frontmatter, while bare `etch create note.md` remains
+empty content.
 
 ## Candidate Commands
 
@@ -21,6 +24,7 @@ etch create --template <source> <dest> --values <json-object>
 Examples:
 
 ```sh
+etch create --template templates/note.md notes/new-note.md
 etch create --template memory/TEMPLATE.md memory/programs/new-program.md
 etch create --template memory/programs/TEMPLATE.md memory/programs/spender-agent.md --values '{"name":"spender-agent"}'
 ```
@@ -28,6 +32,9 @@ etch create --template memory/programs/TEMPLATE.md memory/programs/spender-agent
 ## Semantics
 
 - `create <path> <content>` remains raw content creation.
+- `create <path>` without content keeps the existing extension-aware defaults.
+  Bare Markdown creation remains empty content rather than inventing a
+  frontmatter schema.
 - `create --template <source> <dest>` creates `<dest>` from template
   `<source>`.
 - `<source>` must be a tracked file in the transaction base.
@@ -40,6 +47,9 @@ etch create --template memory/programs/TEMPLATE.md memory/programs/spender-agent
 - Missing placeholder values should fail.
 - Placeholder expansion is text-only in the first version; frontmatter-aware or
   Markdown-section-aware template logic is out of scope.
+- Markdown templates are ordinary template files. Etch does not provide a
+  built-in minimal frontmatter template in the first version because
+  frontmatter fields are repository-specific.
 
 ## Placeholder Design To Decide
 
@@ -54,8 +64,11 @@ etch create --template memory/programs/TEMPLATE.md memory/programs/spender-agent
 
 Template copying is already possible with `copy`, but repository templates are
 a common enough creation workflow that `create --template` may be clearer for
-agents and scripts. The hard part is not copying; it is making placeholder
-expansion deterministic, auditable, and free of hidden shell behavior.
+agents and scripts. This is especially true for Markdown workflows that expect
+frontmatter: the useful frontmatter shape depends on the repository, so a
+tracked template is safer than a built-in `---\ntitle: ...\n---` default. The
+hard part is not copying; it is making placeholder expansion deterministic,
+auditable, and free of hidden shell behavior.
 
 ## Impact
 
@@ -68,7 +81,9 @@ Spec:
 Docs:
 
 - Add examples for exact template creation and value-expanded creation.
+- Add a Markdown/frontmatter template example.
 - Document how `create --template` differs from `copy`.
+- Document that bare Markdown `create` stays empty content.
 
 Code:
 
@@ -86,3 +101,5 @@ Code:
 - How should non-string JSON values render?
 - Should a future version understand frontmatter and Markdown sections, or
   should template expansion stay text-only?
+- Should Etch ever provide named built-in templates, or should all templates be
+  tracked repository files?

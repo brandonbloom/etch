@@ -5,7 +5,7 @@ syntax: |-
   etch run - <<'SCRIPT'
   ...
   SCRIPT
-desc: Execute a batch of commands as one atomic commit. All-or-nothing — if any operation fails, no commit. No shell expansions.
+desc: Execute a batch of commands as one atomic commit. All-or-nothing — if any operation fails, no commit. Quote JSON as one token; no shell expansions.
 example: |-
   etch run - <<'SCRIPT'
   contains state.json open

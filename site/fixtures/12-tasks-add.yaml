@@ -1,7 +1,7 @@
 cat: Tasks
 name: task add
-syntax: 'etch task add <file> <text> [--section <heading>]'
-desc: Add a new open task item to a section.
+syntax: 'etch task add <file> <text> --section <heading>'
+desc: Add a new open task item to an addressed section.
 example: 'etch task add tasks/sprint.md "Deploy staging" --section "## Remaining"'
 file: tasks/sprint.md
 before: |

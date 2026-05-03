@@ -80,8 +80,8 @@ etch section replace &lt;file&gt; &lt;heading&gt; &lt;content&gt;  # replace sec
 etch section append &lt;file&gt; &lt;heading&gt; &lt;content&gt;   # append to section
 etch task close &lt;file&gt; &lt;text&gt;                    # check off a task
 etch task open &lt;file&gt; &lt;text&gt;                     # uncheck a task
-etch task add &lt;file&gt; &lt;text&gt;                      # add a new task
-etch list add &lt;file&gt; &lt;text&gt;                      # add a list item
+etch task add &lt;file&gt; &lt;text&gt; --section &lt;heading&gt;  # add a new task
+etch list add &lt;file&gt; &lt;text&gt; --section &lt;heading&gt;  # add a list item
 etch create &lt;file&gt;                               # create a new file
 etch append &lt;file.jsonl&gt; '{"key":"value"}'       # append JSONL record
 ```

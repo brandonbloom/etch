@@ -1159,6 +1159,20 @@ The script path is optional. Omit it or pass "-" to read the script from stdin.
 Every statement is planned together against one base tree, so later statements see earlier statements.
 If parsing, guards, or mutations fail, the batch produces no commit.
 On success, the whole batch produces one commit unless every mutating statement is a no-op.
+
+Script lines use shell-style quoting, but no shell expansion. Quote values with spaces.
+Quote JSON values as one token, usually with single quotes:
+
+  set posts/hello.md title "Hello, world"
+  append events.jsonl '{"kind":"prompt","name":"first"}'
+  set state.json payload --json '{"name":"first"}'
+
+Multi-line values use heredocs. Heredoc bodies are literal text, and the
+terminator line contains only the delimiter:
+
+section replace posts/hello.md "## Summary" <<EOF
+$FOO is not expanded.
+EOF
 `
 
 const sectionHelp = `Markdown sections are heading-delimited body ranges.
@@ -1188,6 +1202,8 @@ missing tasks only when a destination address such as --section, --before, or
 --after is supplied. Custom checkbox statuses fail.
 --before and --after match list items, not arbitrary prose.
 list add and task add create source from plain item text; do not include "- " or "- [ ]".
+Without --section, --before, or --after, list insertion succeeds only when
+there is a single obvious list target.
 `
 
 const tableHelp = `Tables are ordered rows and named columns of string cells.

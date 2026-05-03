@@ -148,6 +148,11 @@ func addMarkdownListItem(raw []byte, path, text string, address markdownAddress,
 	if err != nil {
 		return nil, err
 	}
+	if address.Section == "" && address.Before == "" && address.After == "" {
+		if err := validateDefaultMarkdownListInsertion(raw, path, scope); err != nil {
+			return nil, err
+		}
+	}
 	placement, err := markdownPlacementFromFlags(false, false, address.Before, address.After)
 	if err != nil {
 		return nil, err
@@ -171,6 +176,38 @@ func validateMarkdownListItemText(text string) error {
 		return usagef("list item text must not include a Markdown list marker")
 	}
 	return nil
+}
+
+func validateDefaultMarkdownListInsertion(raw []byte, path string, scope markdownRange) error {
+	if markdownSimpleListBlockCountInRange(raw, scope) > 1 || markdownHeadingCountInRange(raw, scope) > 1 {
+		return usagef("Markdown list insertion in %s is ambiguous without --section, --before, or --after", path)
+	}
+	return nil
+}
+
+func markdownSimpleListBlockCountInRange(raw []byte, scope markdownRange) int {
+	count := 0
+	previousEnd := -1
+	for _, item := range markdownListItems(raw) {
+		if item.Complex || item.LineStart < scope.Start || item.LineEnd > scope.End {
+			continue
+		}
+		if previousEnd < 0 || item.LineStart > previousEnd {
+			count++
+		}
+		previousEnd = item.LineEnd
+	}
+	return count
+}
+
+func markdownHeadingCountInRange(raw []byte, scope markdownRange) int {
+	count := 0
+	for _, heading := range markdownHeadings(raw) {
+		if heading.LineStart >= scope.Start && heading.LineStart < scope.End {
+			count++
+		}
+	}
+	return count
 }
 
 type markdownListInsertion struct {

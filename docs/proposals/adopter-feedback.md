@@ -45,13 +45,17 @@ Review these in priority order:
 8. [JSONL append](jsonl-append.md)
 9. [TOML set/delete](toml-set-delete.md)
 10. [Template-based creation](template-creation.md)
+11. [Query commands](query-commands.md)
+12. [Negative array indexes](negative-array-indexes.md)
+13. [JSONC support](jsonc-support.md)
+14. [JSON formatting options](json-formatting.md)
 
 The first two proposals are the highest-leverage adopter-driven additions.
 Transaction batching is listed before task/list operations because commit
 volume and HEAD-sourced virtual state affect how comfortable adopters can be
 with frequent script-driven mutations.
 
-Related guidance: `etch help fields`.
+Related guidance: `etch help fields` and `etch help scripts`.
 
 ## Shared Goals
 
