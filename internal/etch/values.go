@@ -45,6 +45,11 @@ func normalizeJSONValue(v any) any {
 			x[i] = normalizeJSONValue(x[i])
 		}
 		return x
+	case jsonx.Object:
+		for i := range x {
+			x[i].Value = normalizeJSONValue(x[i].Value)
+		}
+		return x
 	case map[string]any:
 		for k, v := range x {
 			x[k] = normalizeJSONValue(v)
@@ -108,6 +113,12 @@ func semanticEqual(a, b any) bool {
 
 func canonicalSemantic(v any) any {
 	switch x := v.(type) {
+	case jsonx.Object:
+		m := make(map[string]any, len(x))
+		for _, member := range x {
+			m[member.Name] = canonicalSemantic(member.Value)
+		}
+		return m
 	case map[string]any:
 		m := make(map[string]any, len(x))
 		for k, v := range x {

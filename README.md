@@ -278,8 +278,9 @@ etch append events.jsonl '{"status":"done"}'
 `selector:=json` writes strict JSON. Assignment items are not accepted by
 `append`, `add`, `remove`, or `delete`.
 
-JSONL and NDJSON append values are always strict JSON and do not use `--json`;
-missing JSONL targets are created as empty logs before appending.
+JSONL and NDJSON append values are always strict JSON and do not use `--json`.
+Object member order is preserved when records are compacted, and missing JSONL
+targets are created as empty logs before appending.
 
 For Markdown paths, structured selectors target YAML frontmatter by default.
 When Etch creates a frontmatter block for an existing Markdown body, it keeps a
@@ -294,6 +295,9 @@ formatting.
 
 For `create <path>` without explicit content, JSON files default to `{}` and
 other paths default to empty content.
+
+Markdown `table set` preserves existing pipe-table whitespace when it can patch
+the addressed cells directly.
 
 ## Transaction Model
 

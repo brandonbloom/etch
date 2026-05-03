@@ -54,6 +54,12 @@ func TestEvalJSONLAppend(t *testing.T) {
 			want:   `{"kind":"old"}` + "\n" + `{"kind":"prompt","nested":{"ok":true}}` + "\n",
 		},
 		{
+			name:   "preserves object key order",
+			before: "",
+			value:  `{"z":1,"a":{"b":2,"a":3}}`,
+			want:   `{"z":1,"a":{"b":2,"a":3}}` + "\n",
+		},
+		{
 			name:   "malformed non-tail record is not parsed",
 			before: "not json\n{\"ok\":true}\n",
 			value:  `12`,
@@ -399,6 +405,20 @@ func TestYAMLSetPreservesQuotedStringStyle(t *testing.T) {
 
 	got := testGit(t, dir, "show", "HEAD:config.yaml")
 	want := "version: \"2.0.0\"\nname: 'new'\nplain: new\n"
+	if got != want {
+		t.Fatalf("YAML output:\n%s\nwant:\n%s", got, want)
+	}
+}
+
+func TestYAMLSetPreservesJSONObjectKeyOrder(t *testing.T) {
+	dir := initRepo(t)
+	writeFile(t, dir, "config.yaml", "{}\n")
+	commitAll(t, dir, "initial")
+
+	runOK(t, dir, "set", "config.yaml", "meta", "--json", `{"z":1,"a":{"b":2,"a":3}}`)
+
+	got := testGit(t, dir, "show", "HEAD:config.yaml")
+	want := "meta:\n  z: 1\n  a:\n    b: 2\n    a: 3\n"
 	if got != want {
 		t.Fatalf("YAML output:\n%s\nwant:\n%s", got, want)
 	}
@@ -1253,6 +1273,34 @@ func TestMarkdownTableVerbs(t *testing.T) {
 	got := testGit(t, dir, "show", "HEAD:note.md")
 	if !strings.Contains(got, "| A1 | done |") || !strings.Contains(got, "| B2 | open |") {
 		t.Fatalf("Markdown table output:\n%s", got)
+	}
+}
+
+func TestMarkdownTableSetPreservesUnalignedFormatting(t *testing.T) {
+	dir := initRepo(t)
+	writeFile(t, dir, "note.md", "## Inventory\n\n| sku | status |\n| --- | --- |\n| A1 | open   |\n")
+	commitAll(t, dir, "initial")
+
+	runOK(t, dir, "table", "set", "note.md", "## Inventory", "sku=A1,status", "done")
+
+	got := testGit(t, dir, "show", "HEAD:note.md")
+	want := "## Inventory\n\n| sku | status |\n| --- | --- |\n| A1 | done   |\n"
+	if got != want {
+		t.Fatalf("Markdown table output:\n%s\nwant:\n%s", got, want)
+	}
+}
+
+func TestMarkdownTableSetPatchesAlignedTableCellInPlace(t *testing.T) {
+	dir := initRepo(t)
+	writeFile(t, dir, "note.md", "## Inventory\n\n| sku | status |\n| --- | ------ |\n| A1  | open   |\n")
+	commitAll(t, dir, "initial")
+
+	runOK(t, dir, "table", "set", "note.md", "## Inventory", "sku=A1,status", "complete")
+
+	got := testGit(t, dir, "show", "HEAD:note.md")
+	want := "## Inventory\n\n| sku | status |\n| --- | ------ |\n| A1  | complete   |\n"
+	if got != want {
+		t.Fatalf("Markdown table output:\n%s\nwant:\n%s", got, want)
 	}
 }
 

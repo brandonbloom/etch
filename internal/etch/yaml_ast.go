@@ -461,6 +461,9 @@ func newYAMLContainerNode(next selectorPart) ast.Node {
 }
 
 func newYAMLValueNode(value any) (ast.Node, error) {
+	if obj, ok := value.(jsonx.Object); ok {
+		return newYAMLObjectNode(obj)
+	}
 	node, err := yaml.ValueToNode(
 		value,
 		yaml.UseLiteralStyleIfMultiline(true),
@@ -473,6 +476,23 @@ func newYAMLValueNode(value any) (ast.Node, error) {
 	}
 	setYAMLFlowStyle(node, false)
 	return node, nil
+}
+
+func newYAMLObjectNode(obj jsonx.Object) (ast.Node, error) {
+	node := mustYAMLValueNode(map[string]any{})
+	m, ok := node.(*ast.MappingNode)
+	if !ok {
+		return nil, fmt.Errorf("construct internal YAML mapping")
+	}
+	setYAMLFlowStyle(m, false)
+	for _, member := range obj {
+		value, err := newYAMLValueNode(member.Value)
+		if err != nil {
+			return nil, err
+		}
+		appendYAMLMapValue(m, member.Name, value)
+	}
+	return m, nil
 }
 
 func mustYAMLValueNode(value any) ast.Node {
@@ -771,6 +791,12 @@ func canonicalYAMLSemantic(value any) any {
 			out[i] = canonicalYAMLSemantic(v[i])
 		}
 		return out
+	case jsonx.Object:
+		m := make(map[string]any, len(v))
+		for _, member := range v {
+			m[member.Name] = canonicalYAMLSemantic(member.Value)
+		}
+		return m
 	case map[string]any:
 		m := make(map[string]any, len(v))
 		for k, item := range v {

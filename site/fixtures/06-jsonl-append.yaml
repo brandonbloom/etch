@@ -1,7 +1,7 @@
 cat: JSONL
 name: append (jsonl)
 syntax: "etch append <file.jsonl> '<json>'"
-desc: Append one compact JSON record. Append-only — values are always strict JSON. Missing files are created.
+desc: Append one compact JSON record, preserving object member order. Missing files are created.
 example: "etch append events.jsonl '{\"kind\":\"deploy\",\"at\":\"2026-05-02T14:00:00Z\"}'"
 file: events.jsonl
 before: |

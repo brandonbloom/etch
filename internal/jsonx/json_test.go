@@ -10,23 +10,51 @@ func TestDecodeValuePreservesNumbers(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	want := map[string]any{
-		"items": []any{Number("1.0"), Number("1e2")},
-		"n":     Number("9007199254740993"),
+	want := Object{
+		{Name: "n", Value: Number("9007199254740993")},
+		{Name: "items", Value: []any{Number("1.0"), Number("1e2")}},
 	}
 	if !reflect.DeepEqual(got, want) {
 		t.Fatalf("DecodeValue = %#v, want %#v", got, want)
 	}
 }
 
-func TestDecodeValueAllowsDuplicateObjectNames(t *testing.T) {
+func TestDecodeValuePreservesDuplicateObjectNames(t *testing.T) {
 	got, err := DecodeValue([]byte(`{"a":1,"a":2}`))
 	if err != nil {
 		t.Fatal(err)
 	}
-	want := map[string]any{"a": Number("2")}
+	want := Object{{Name: "a", Value: Number("1")}, {Name: "a", Value: Number("2")}}
 	if !reflect.DeepEqual(got, want) {
 		t.Fatalf("DecodeValue = %#v, want %#v", got, want)
+	}
+}
+
+func TestObjectMarshalsInMemberOrder(t *testing.T) {
+	got, err := Marshal(Object{
+		{Name: "z", Value: Number("1")},
+		{Name: "a", Value: Object{{Name: "b", Value: true}, {Name: "a", Value: false}}},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := `{"z":1,"a":{"b":true,"a":false}}`
+	if string(got) != want {
+		t.Fatalf("Marshal = %s, want %s", got, want)
+	}
+}
+
+func TestObjectMarshalIndentUsesMemberOrder(t *testing.T) {
+	got, err := MarshalIndent(Object{
+		{Name: "z", Value: Number("1")},
+		{Name: "a", Value: Object{{Name: "b", Value: true}, {Name: "a", Value: false}}},
+	}, "", "  ")
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := "{\n  \"z\": 1,\n  \"a\": {\n    \"b\": true,\n    \"a\": false\n  }\n}"
+	if string(got) != want {
+		t.Fatalf("MarshalIndent = %s, want %s", got, want)
 	}
 }
 

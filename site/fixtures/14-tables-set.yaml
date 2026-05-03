@@ -1,7 +1,7 @@
 cat: Tables
 name: table set
 syntax: "etch table set <file> [<scope> [<table>]] <range> <value>"
-desc: Set one or more cells in a CSV or Markdown table. Markdown files include a scope before the range.
+desc: Set one or more cells in a CSV or Markdown table while preserving Markdown table whitespace when possible.
 example: 'etch table set notes.md "## Inventory" sku=A1,status done'
 file: notes.md
 before: |

@@ -895,6 +895,13 @@ type mdTableBlock struct {
 	start int
 	end   int
 	table tableData
+	cells [][]mdTableCellRange
+}
+
+type mdTableCellRange struct {
+	Start int
+	End   int
+	OK    bool
 }
 
 func evalMarkdownTable(op Operation, before []byte) ([]byte, bool, error) {
@@ -924,8 +931,25 @@ func evalMarkdownTable(op Operation, before []byte) ([]byte, bool, error) {
 	}
 	block := blocks[idx]
 	td := block.table
-	if err := mutateTable(&td, op); err != nil {
-		return nil, false, err
+	if op.Verb == "table set" {
+		rows, cols, err := resolveTableRange(td, op.Target.Range)
+		if err != nil {
+			return nil, false, err
+		}
+		for _, r := range rows {
+			for _, c := range cols {
+				td.Rows[r][c] = op.Value
+			}
+		}
+		if patched, ok := patchMarkdownTableCells(raw, block, rows, cols, op.Value); ok {
+			out := withUTF8BOM(patched, bom)
+			return out, !bytes.Equal(out, before), nil
+		}
+	}
+	if op.Verb != "table set" {
+		if err := mutateTable(&td, op); err != nil {
+			return nil, false, err
+		}
 	}
 	rendered := []byte(renderMarkdownTable(td))
 	out := make([]byte, 0, len(raw)-(block.end-block.start)+len(rendered))
@@ -934,6 +958,54 @@ func evalMarkdownTable(op Operation, before []byte) ([]byte, bool, error) {
 	out = append(out, raw[block.end:]...)
 	out = withUTF8BOM(out, bom)
 	return out, !bytes.Equal(out, before), nil
+}
+
+func patchMarkdownTableCells(raw []byte, block mdTableBlock, rows, cols []int, value string) ([]byte, bool) {
+	repl := []byte(escapeMarkdownTableCell(value))
+	var ranges []jsonByteRange
+	for _, r := range rows {
+		if r < 0 || r >= len(block.cells) {
+			return nil, false
+		}
+		row := block.cells[r]
+		for _, c := range cols {
+			if c < 0 || c >= len(row) || !row[c].OK {
+				return nil, false
+			}
+			ranges = append(ranges, jsonByteRange{Start: row[c].Start, End: row[c].End})
+		}
+	}
+	out := raw
+	for i := len(ranges) - 1; i >= 0; i-- {
+		r := ranges[i]
+		out = replaceBytes(out, r.Start, r.End, repl)
+	}
+	return out, true
+}
+
+func markdownTableCellRanges(table *mdast.Table) [][]mdTableCellRange {
+	header := table.FirstChild()
+	if header == nil {
+		return nil
+	}
+	var rows [][]mdTableCellRange
+	for row := header.NextSibling(); row != nil; row = row.NextSibling() {
+		var cells []mdTableCellRange
+		for cell := row.FirstChild(); cell != nil; cell = cell.NextSibling() {
+			lines := cell.Lines()
+			if lines.Len() == 0 {
+				cells = append(cells, mdTableCellRange{})
+				continue
+			}
+			cells = append(cells, mdTableCellRange{
+				Start: lines.At(0).Start,
+				End:   lines.At(lines.Len() - 1).Stop,
+				OK:    true,
+			})
+		}
+		rows = append(rows, cells)
+	}
+	return rows
 }
 
 func findMarkdownTables(raw []byte, scope string) ([]mdTableBlock, error) {
@@ -959,6 +1031,7 @@ func findMarkdownTables(raw []byte, scope string) ([]mdTableBlock, error) {
 			start: start,
 			end:   end,
 			table: markdownTableData(raw, table),
+			cells: markdownTableCellRanges(table),
 		})
 		return goldast.WalkSkipChildren, nil
 	})
@@ -1035,7 +1108,7 @@ func renderMarkdownTable(td tableData) string {
 		b.WriteString("|")
 		for _, cell := range normalizeRow(row, len(td.Header)) {
 			b.WriteByte(' ')
-			b.WriteString(strings.ReplaceAll(cell, "|", "\\|"))
+			b.WriteString(escapeMarkdownTableCell(cell))
 			b.WriteString(" |")
 		}
 		b.WriteByte('\n')
@@ -1050,4 +1123,8 @@ func renderMarkdownTable(td tableData) string {
 		write(row)
 	}
 	return b.String()
+}
+
+func escapeMarkdownTableCell(cell string) string {
+	return strings.ReplaceAll(cell, "|", "\\|")
 }

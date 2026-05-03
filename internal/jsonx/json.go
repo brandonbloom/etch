@@ -12,6 +12,15 @@ import (
 // Number is a JSON number literal preserved from source text.
 type Number string
 
+// Member is one JSON object member in source order.
+type Member struct {
+	Name  string
+	Value any
+}
+
+// Object is a JSON object value that preserves source member order.
+type Object []Member
+
 func Marshal(v any) ([]byte, error) {
 	return json.Marshal(v, json.Deterministic(true))
 }
@@ -68,6 +77,30 @@ func (n Number) MarshalJSON() ([]byte, error) {
 	return b, nil
 }
 
+func (o Object) MarshalJSON() ([]byte, error) {
+	var b bytes.Buffer
+	enc := jsontext.NewEncoder(&b, jsontext.AllowDuplicateNames(true))
+	if err := enc.WriteToken(jsontext.BeginObject); err != nil {
+		return nil, err
+	}
+	for _, member := range o {
+		if err := enc.WriteToken(jsontext.String(member.Name)); err != nil {
+			return nil, err
+		}
+		value, err := Marshal(member.Value)
+		if err != nil {
+			return nil, err
+		}
+		if err := enc.WriteValue(jsontext.Value(value)); err != nil {
+			return nil, err
+		}
+	}
+	if err := enc.WriteToken(jsontext.EndObject); err != nil {
+		return nil, err
+	}
+	return bytes.TrimSuffix(b.Bytes(), []byte("\n")), nil
+}
+
 func validateNumber(b []byte) error {
 	dec := jsontext.NewDecoder(bytes.NewReader(b))
 	tok, err := dec.ReadToken()
@@ -108,13 +141,13 @@ func readValue(dec *jsontext.Decoder) (any, error) {
 	}
 }
 
-func readObject(dec *jsontext.Decoder) (map[string]any, error) {
-	m := map[string]any{}
+func readObject(dec *jsontext.Decoder) (Object, error) {
+	var members Object
 	for {
 		switch dec.PeekKind() {
 		case '}':
 			_, err := dec.ReadToken()
-			return m, err
+			return members, err
 		case '"':
 		default:
 			if _, err := dec.ReadToken(); err != nil {
@@ -131,7 +164,7 @@ func readObject(dec *jsontext.Decoder) (map[string]any, error) {
 		if err != nil {
 			return nil, err
 		}
-		m[key] = value
+		members = append(members, Member{Name: key, Value: value})
 	}
 }
 
