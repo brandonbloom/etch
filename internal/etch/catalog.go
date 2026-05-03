@@ -1173,8 +1173,9 @@ Commands:
   etch section prepend note.md Status "new block"
 
 Section selectors accept either a title such as Status or an ATX heading such as ## Status.
-Repeated matching headings are ambiguous. Append/prepend trim payload boundary blank lines
-and use one blank line between non-empty block fragments.
+Repeated matching headings are ambiguous. Section payloads are Markdown block fragments:
+replace preserves existing boundary blank lines, and append/prepend use one blank line
+between non-empty fragments.
 `
 
 const tasksHelp = `Markdown task/list commands operate on exact source-normalized item text.

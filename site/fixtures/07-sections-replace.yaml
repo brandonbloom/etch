@@ -5,7 +5,7 @@ syntax: |-
   etch section replace <file> <heading> <<'EOF'
   ...
   EOF
-desc: Replace everything under a heading until the next heading of equal or higher level.
+desc: Replace everything under a heading, preserving surrounding blank-line style.
 example: |-
   etch section replace notes.md "## Summary" <<'EOF'
   Project on track. Next: May 15.

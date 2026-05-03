@@ -913,46 +913,74 @@ func TestEvalMarkdownSectionReplace(t *testing.T) {
 		want    string
 	}{
 		{
+			name:    "preserves blank boundaries around replacement",
+			heading: "## Status",
+			input:   "# Title\n\n## Status\n\nActive\n\n## Notes\nkeep\n",
+			content: "Done",
+			want:    "# Title\n\n## Status\n\nDone\n\n## Notes\nkeep\n",
+		},
+		{
+			name:    "trims replacement payload boundary blanks",
+			heading: "## Status",
+			input:   "# Title\n\n## Status\n\nActive\n\n## Notes\nkeep\n",
+			content: "\n\nDone\n\n",
+			want:    "# Title\n\n## Status\n\nDone\n\n## Notes\nkeep\n",
+		},
+		{
 			name:    "replaces body until next peer heading",
 			heading: "## Notes",
 			input:   "# Title\n\n## Notes\nold\n\n## Next\nkeep\n",
 			content: "new\nbody\n",
-			want:    "# Title\n\n## Notes\nnew\nbody\n## Next\nkeep\n",
+			want:    "# Title\n\n## Notes\nnew\nbody\n\n## Next\nkeep\n",
 		},
 		{
 			name:    "ignores fenced headings",
 			heading: "## Notes",
 			input:   "# Title\n\n```md\n## Notes\nold\n```\n\n## Notes\nreal\n\n## Next\nkeep\n",
 			content: "new\n",
-			want:    "# Title\n\n```md\n## Notes\nold\n```\n\n## Notes\nnew\n## Next\nkeep\n",
+			want:    "# Title\n\n```md\n## Notes\nold\n```\n\n## Notes\nnew\n\n## Next\nkeep\n",
 		},
 		{
 			name:    "ignores HTML block headings",
 			heading: "## Notes",
 			input:   "# Title\n\n<div>\n## Notes\nold\n</div>\n\n## Notes\nreal\n\n## Next\nkeep\n",
 			content: "new\n",
-			want:    "# Title\n\n<div>\n## Notes\nold\n</div>\n\n## Notes\nnew\n## Next\nkeep\n",
+			want:    "# Title\n\n<div>\n## Notes\nold\n</div>\n\n## Notes\nnew\n\n## Next\nkeep\n",
 		},
 		{
 			name:    "stops at setext heading",
 			heading: "## Notes",
 			input:   "# Title\n\n## Notes\nold\n\nNext\n----\nkeep\n",
 			content: "new\n",
-			want:    "# Title\n\n## Notes\nnew\nNext\n----\nkeep\n",
+			want:    "# Title\n\n## Notes\nnew\n\nNext\n----\nkeep\n",
 		},
 		{
 			name:    "matches closing ATX markers",
 			heading: "## Notes",
 			input:   "# Title\n\n## Notes ##\nold\n\n## Next\nkeep\n",
 			content: "new\n",
-			want:    "# Title\n\n## Notes ##\nnew\n## Next\nkeep\n",
+			want:    "# Title\n\n## Notes ##\nnew\n\n## Next\nkeep\n",
 		},
 		{
 			name:    "matches title-only heading",
 			heading: "Notes",
 			input:   "# Title\n\n## Notes\nold\n\n## Next\nkeep\n",
 			content: "new\n",
-			want:    "# Title\n\n## Notes\nnew\n## Next\nkeep\n",
+			want:    "# Title\n\n## Notes\nnew\n\n## Next\nkeep\n",
+		},
+		{
+			name:    "replacement uses file newline style",
+			heading: "Notes",
+			input:   "## Notes\r\n\r\nold\r\n\r\n## Next\r\nkeep\r\n",
+			content: "new\nline",
+			want:    "## Notes\r\n\r\nnew\r\nline\r\n\r\n## Next\r\nkeep\r\n",
+		},
+		{
+			name:    "blank replacement clears body",
+			heading: "Notes",
+			input:   "# Title\n\n## Notes\nold\n\n## Next\nkeep\n",
+			content: "\n \n",
+			want:    "# Title\n\n## Notes\n## Next\nkeep\n",
 		},
 	}
 	for _, tc := range tests {
@@ -968,6 +996,19 @@ func TestEvalMarkdownSectionReplace(t *testing.T) {
 				t.Fatalf("section replace output:\n--- got ---\n%q\n--- want ---\n%q", got, tc.want)
 			}
 		})
+	}
+}
+
+func TestEvalMarkdownSectionReplaceBlankNoopsOnEmptySection(t *testing.T) {
+	got, changed, err := evalMarkdownSection("note.md", "section replace", "Notes", "\n", []byte("## Notes"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if changed {
+		t.Fatalf("blank replacement changed empty section: %q", got)
+	}
+	if string(got) != "## Notes" {
+		t.Fatalf("section replace output = %q", got)
 	}
 }
 

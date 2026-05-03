@@ -188,14 +188,7 @@ func markdownSectionBody(raw []byte, section markdownSection, verb, content, new
 	needsHeadingNewline := len(prefix) > 0 && !bytes.HasSuffix(prefix, []byte("\n"))
 	switch verb {
 	case "section replace":
-		repl := content
-		if repl != "" && !strings.HasSuffix(repl, "\n") {
-			repl += "\n"
-		}
-		if repl != "" && needsHeadingNewline {
-			repl = newline + repl
-		}
-		return []byte(repl), nil
+		return replaceSectionBody(body, content, newline, needsHeadingNewline), nil
 	case "section append":
 		fragment, err := markdownBlockFragment(content, newline)
 		if err != nil {
@@ -213,6 +206,26 @@ func markdownSectionBody(raw []byte, section markdownSection, verb, content, new
 	default:
 		return nil, usagef("unknown section verb %s", verb)
 	}
+}
+
+func replaceSectionBody(existing []byte, content, newline string, needsHeadingNewline bool) []byte {
+	fragment := markdownBlockFragmentContent(content, newline)
+	if len(fragment) == 0 {
+		return nil
+	}
+	var out []byte
+	if needsHeadingNewline {
+		out = append(out, newline...)
+	}
+	if markdownBodyStartsWithBlankLine(existing) {
+		out = append(out, newline...)
+	}
+	out = append(out, fragment...)
+	out = append(out, newline...)
+	if markdownBodyEndsWithBlankLine(existing) {
+		out = append(out, newline...)
+	}
+	return out
 }
 
 func appendSectionBody(existing, fragment []byte, newline string, needsHeadingNewline bool) []byte {
@@ -258,6 +271,14 @@ func markdownNewline(raw []byte) string {
 }
 
 func markdownBlockFragment(content, newline string) ([]byte, error) {
+	fragment := markdownBlockFragmentContent(content, newline)
+	if len(fragment) == 0 {
+		return nil, usagef("section fragment must not be blank")
+	}
+	return fragment, nil
+}
+
+func markdownBlockFragmentContent(content, newline string) []byte {
 	s := strings.ReplaceAll(content, "\r\n", "\n")
 	s = strings.ReplaceAll(s, "\r", "\n")
 	lines := strings.Split(s, "\n")
@@ -269,9 +290,9 @@ func markdownBlockFragment(content, newline string) ([]byte, error) {
 		end--
 	}
 	if start == end {
-		return nil, usagef("section fragment must not be blank")
+		return nil
 	}
-	return []byte(strings.Join(lines[start:end], newline)), nil
+	return []byte(strings.Join(lines[start:end], newline))
 }
 
 func markdownBlankStringLine(line string) bool {
@@ -314,6 +335,39 @@ func trimLeadingMarkdownBlankLines(b []byte) []byte {
 		start = lineEnd
 	}
 	return b[len(b):]
+}
+
+func markdownBodyStartsWithBlankLine(b []byte) bool {
+	if len(b) == 0 {
+		return false
+	}
+	lineEnd := markdownLineEnd(b, 0)
+	contentEnd := lineEnd
+	if contentEnd > 0 && b[contentEnd-1] == '\n' {
+		contentEnd--
+		if contentEnd > 0 && b[contentEnd-1] == '\r' {
+			contentEnd--
+		}
+	}
+	return markdownBlankBytesLine(b[:contentEnd])
+}
+
+func markdownBodyEndsWithBlankLine(b []byte) bool {
+	if len(b) == 0 {
+		return false
+	}
+	end := len(b)
+	if b[end-1] == '\n' {
+		end--
+		if end > 0 && b[end-1] == '\r' {
+			end--
+		}
+	}
+	if end == 0 {
+		return true
+	}
+	lineStart := bytes.LastIndexByte(b[:end], '\n') + 1
+	return markdownBlankBytesLine(b[lineStart:end])
 }
 
 func markdownBlankBytesLine(line []byte) bool {

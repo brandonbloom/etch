@@ -91,17 +91,20 @@ future command exposes them as an explicit last-resort escape hatch.
 
 ## Block-Fragment Spacing
 
-- `section append` and `section prepend` treat `<content>` as a Markdown block
-  fragment.
+- Section commands treat `<content>` as a Markdown block fragment.
 - Etch normalizes line endings according to the target file's existing newline
   style.
-- Etch trims leading and trailing blank lines from the fragment and rejects a
-  blank-only fragment.
+- Etch trims leading and trailing blank lines from the fragment.
+- `section append` and `section prepend` reject a blank-only fragment;
+  `section replace` uses it to clear the section body.
 - Etch preserves interior bytes, including interior blank lines, indentation,
   list markers, code fences, and inline markup.
 - If the section body is non-empty, Etch trims trailing blank lines from the
   existing body for append and leading blank lines from the existing body for
   prepend.
+- For `section replace`, Etch preserves existing blank-line boundaries between
+  the heading and body, and between the body and following heading, when those
+  boundaries are present in the replaced section.
 - When both the existing section body and inserted fragment are non-empty, Etch
   separates them with exactly one blank line. In source terms, that means two
   newline sequences between the last nonblank line on one side and the first

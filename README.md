@@ -102,7 +102,7 @@ or `etch help` for a fuller reference.
 | `append <path.jsonl> <json-value>` | Append one compact JSON record to a JSONL or NDJSON log. |
 | `add <path> <selector> <value>` | Ensure an array contains a value. |
 | `remove <path> <selector> <value>` | Ensure an array does not contain a value. |
-| `section replace <path> <heading> <content>` | Replace the body under one Markdown heading. |
+| `section replace <path> <heading> <content>` | Replace one Markdown section body, preserving surrounding blank-line style. |
 | `section append <path> <heading> <content>` | Append a block fragment under one Markdown heading. |
 | `section prepend <path> <heading> <content>` | Prepend a block fragment under one Markdown heading. |
 | `task close <path> <text>` | Ensure a Markdown task is closed. |
@@ -330,7 +330,7 @@ writing the file back.
 
 ## Development
 
-See [DEVELOPMENT.md](DEVELOPMENT.md) for contributor workflow notes, including
+See [DEVELOPING.md](DEVELOPING.md) for contributor workflow notes, including
 the command-reference sync checklist.
 
 Run tests:
