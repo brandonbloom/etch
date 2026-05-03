@@ -1,0 +1,68 @@
+{{ define "main" }}
+{{ $reference := hugo.Data.reference }}
+{{ if not $reference.topics }}
+  {{ errorf "site/data/reference.json is missing or empty; run mise run site:verify before building the site" }}
+{{ end }}
+
+<article class="content reference-page">
+  <header class="reference-hero">
+    <h1>{{ .Title }}</h1>
+    <p>Generated from the same <code>etch help</code> topics available in the CLI.</p>
+  </header>
+
+  <nav class="reference-topic-nav" aria-label="Reference topics">
+    {{ range $reference.topics }}
+    <a href="#{{ .id }}">{{ .title }}</a>
+    {{ end }}
+  </nav>
+
+  <div class="reference-sections">
+    {{ range $reference.topics }}
+    <section class="reference-section" id="{{ .id }}">
+      <header class="reference-section-head">
+        <div class="reference-invocation">$ {{ .invocation }}</div>
+        <h2>{{ .title }}</h2>
+        {{ with .summary }}<p>{{ . | markdownify }}</p>{{ end }}
+      </header>
+
+      {{ range .blocks }}
+        {{ if eq .kind "paragraph" }}
+        <div class="reference-copy">{{ .text | markdownify }}</div>
+        {{ else if eq .kind "heading" }}
+        <h3 class="reference-block-heading">{{ .heading }}</h3>
+        {{ else if eq .kind "pre" }}
+        <pre class="reference-pre"><code>{{ .text }}</code></pre>
+        {{ else if eq .kind "command-table" }}
+        <div class="reference-table-wrap" aria-label="{{ .heading }}">
+          <table class="reference-command-table">
+            <thead>
+              <tr>
+                <th>Command</th>
+                <th>Class</th>
+                <th>Description</th>
+              </tr>
+            </thead>
+            <tbody>
+              {{ range .rows }}
+              <tr>
+                <td><code>{{ .signature }}</code></td>
+                <td><span class="command-class command-class-{{ .class | anchorize }}">{{ .class }}</span></td>
+                <td>{{ .description }}</td>
+              </tr>
+              {{ end }}
+            </tbody>
+          </table>
+        </div>
+        {{ else if eq .kind "topic-links" }}
+        <nav class="reference-related" aria-label="Related topics">
+          {{ range .links }}
+          <a href="#{{ .id }}">{{ .title }}</a>
+          {{ end }}
+        </nav>
+        {{ end }}
+      {{ end }}
+    </section>
+    {{ end }}
+  </div>
+</article>
+{{ end }}

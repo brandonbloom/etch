@@ -2,6 +2,7 @@ package etch
 
 import (
 	"bytes"
+	"encoding/json"
 	"strings"
 	"testing"
 )
@@ -60,6 +61,25 @@ func TestHelpAllThroughCLI(t *testing.T) {
 	}
 	if !strings.Contains(out.String(), "json set") {
 		t.Fatalf("runCLI(help --all) did not include plumbing commands:\n%s", out.String())
+	}
+}
+
+func TestHelpJSONThroughCLI(t *testing.T) {
+	var out, errb bytes.Buffer
+	code, err := runCLI([]string{"help", "--json"}, &out, &errb)
+	if err != nil || code != exitOK {
+		t.Fatalf("runCLI(help --json) code=%d err=%v stderr=%s", code, err, errb.String())
+	}
+
+	var reference HelpReference
+	if err := json.Unmarshal(out.Bytes(), &reference); err != nil {
+		t.Fatalf("help --json returned invalid JSON: %v\n%s", err, out.String())
+	}
+	if len(reference.Topics) == 0 {
+		t.Fatal("help --json returned no topics")
+	}
+	if reference.Topics[0].ID != "common-commands" || reference.Topics[0].Blocks[0].Kind != "command-table" {
+		t.Fatalf("unexpected first reference topic: %#v", reference.Topics[0])
 	}
 }
 

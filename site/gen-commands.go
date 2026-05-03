@@ -72,6 +72,7 @@ func main() {
 	fixturesDir := flag.String("fixtures", "site/fixtures", "fixtures directory")
 	output := flag.String("output", "site/data/commands.json", "output JSON file")
 	referenceOutput := flag.String("reference-output", "site/content/reference.md", "output Markdown file for CLI help reference")
+	referenceDataOutput := flag.String("reference-data-output", "site/data/reference.json", "output JSON file for CLI help reference")
 	flag.Parse()
 
 	abs, err := filepath.Abs(*etchBin)
@@ -161,54 +162,51 @@ func main() {
 		fatal("writing output: %v", err)
 	}
 
-	if err := writeReference(*etchBin, *referenceOutput); err != nil {
-		fatal("writing reference: %v", err)
+	referenceTopics, err := writeReferenceData(*etchBin, *referenceDataOutput)
+	if err != nil {
+		fatal("writing reference data: %v", err)
+	}
+	if err := writeReferenceContent(*referenceOutput); err != nil {
+		fatal("writing reference page: %v", err)
 	}
 
 	fmt.Fprintf(os.Stderr, "\nwrote %s (%d commands)\n", *output, len(commands))
+	fmt.Fprintf(os.Stderr, "wrote %s (%d topics)\n", *referenceDataOutput, referenceTopics)
 	fmt.Fprintf(os.Stderr, "wrote %s\n", *referenceOutput)
 }
 
-func writeReference(etchBin, output string) error {
-	topics := []struct {
-		Title string
-		Args  []string
-	}{
-		{Title: "Common Commands", Args: []string{"help"}},
-		{Title: "All Commands", Args: []string{"help", "--all"}},
-		{Title: "Model", Args: []string{"help", "model"}},
-		{Title: "Scripts", Args: []string{"help", "scripts"}},
-		{Title: "Selectors", Args: []string{"help", "selectors"}},
-		{Title: "Values", Args: []string{"help", "values"}},
-		{Title: "Fields", Args: []string{"help", "fields"}},
-		{Title: "Plans", Args: []string{"help", "plans"}},
-		{Title: "Security", Args: []string{"help", "security"}},
-		{Title: "Conflicts", Args: []string{"help", "conflicts"}},
-		{Title: "Addressing", Args: []string{"help", "addressing"}},
-		{Title: "Section", Args: []string{"help", "section"}},
-		{Title: "Tasks", Args: []string{"help", "tasks"}},
-		{Title: "Table And CSV", Args: []string{"help", "table"}},
+func writeReferenceData(etchBin, output string) (int, error) {
+	out, err := commandOutput("", etchBin, "help", "--json")
+	if err != nil {
+		return 0, err
+	}
+	if !json.Valid([]byte(out)) {
+		return 0, fmt.Errorf("etch help --json returned invalid JSON")
 	}
 
+	if err := os.MkdirAll(filepath.Dir(output), 0o755); err != nil {
+		return 0, fmt.Errorf("creating reference data dir: %w", err)
+	}
+	if err := os.WriteFile(output, []byte(out), 0o644); err != nil {
+		return 0, err
+	}
+
+	var reference struct {
+		Topics []struct{} `json:"topics"`
+	}
+	if err := json.Unmarshal([]byte(out), &reference); err != nil {
+		return 0, fmt.Errorf("counting reference topics: %w", err)
+	}
+	return len(reference.Topics), nil
+}
+
+func writeReferenceContent(output string) error {
 	var b strings.Builder
 	b.WriteString("---\n")
 	b.WriteString("title: Reference\n")
 	b.WriteString("description: CLI help topics generated from etch help.\n")
+	b.WriteString("layout: reference\n")
 	b.WriteString("---\n\n")
-	b.WriteString("This page is generated from `etch help` output by `mise run site:verify`.\n")
-
-	for _, topic := range topics {
-		out, err := commandOutput("", etchBin, topic.Args...)
-		if err != nil {
-			return err
-		}
-		b.WriteString("\n## ")
-		b.WriteString(topic.Title)
-		b.WriteString("\n\n")
-		b.WriteString("```text\n")
-		b.WriteString(strings.TrimRight(out, "\n"))
-		b.WriteString("\n```\n")
-	}
 
 	if err := os.MkdirAll(filepath.Dir(output), 0o755); err != nil {
 		return fmt.Errorf("creating reference dir: %w", err)

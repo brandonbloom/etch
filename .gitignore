@@ -3,5 +3,6 @@
 /site/public/
 /site/resources/
 /site/data/commands.json
+/site/data/reference.json
 /site/content/reference.md
 /site/.hugo_build.lock

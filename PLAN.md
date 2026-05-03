@@ -6,7 +6,7 @@
 
 # Documentation pass
 
-- [x] Generate website reference pages from CLI help topics.
+- [x] Generate navigable website reference pages from CLI help topics.
 - [x] Review/enhance/add help topics for the touched functionality.
 
 # Follow-up

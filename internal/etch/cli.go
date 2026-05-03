@@ -110,15 +110,26 @@ func runParsedCLI(opts GlobalOptions, rest []string, stdout, stderr io.Writer) (
 	case "help":
 		topic := ""
 		all := false
+		jsonHelp := false
 		for _, arg := range rest[1:] {
 			if arg == "--all" {
 				all = true
+				continue
+			}
+			if arg == "--json" {
+				jsonHelp = true
 				continue
 			}
 			if topic != "" {
 				return exitUsage, usagef("usage: etch help [--all] [topic]")
 			}
 			topic = arg
+		}
+		if jsonHelp {
+			if topic != "" || all {
+				return exitUsage, usagef("usage: etch help --json")
+			}
+			return exitOK, jsonOut(stdout, BuildHelpReference())
 		}
 		return exitOK, printHelp(stdout, topic, all)
 	case "version":
