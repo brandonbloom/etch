@@ -3,6 +3,7 @@ package etch
 import (
 	"bytes"
 	"encoding/csv"
+	"errors"
 	"strconv"
 	"strings"
 	"unicode/utf8"
@@ -83,6 +84,58 @@ func validateJSONLAppendBoundary(raw []byte) error {
 	lineStart := bytes.LastIndexByte(raw[:lineEnd], '\n') + 1
 	if len(bytes.Trim(raw[lineStart:lineEnd], " \t\r")) == 0 {
 		return failf("JSONL append boundary is blank")
+	}
+	return nil
+}
+
+func validateInferredOutput(path, format, verb string, out []byte) error {
+	raw, _ := trimUTF8BOM(out)
+	switch format {
+	case "json":
+		if !utf8.Valid(raw) {
+			return failf("%s would not be valid JSON after %s: invalid UTF-8", path, verb)
+		}
+		if _, err := decodeJSONSpans(raw); err != nil {
+			var parseErr *jsonInputParseError
+			if errors.As(err, &parseErr) {
+				return failf("%s would not be valid JSON after %s (parse error near offset %d)", path, verb, parseErr.offset)
+			}
+			return err
+		}
+	case "yaml":
+		if !utf8.Valid(raw) {
+			return failf("%s would not be valid YAML after %s: invalid UTF-8", path, verb)
+		}
+		if _, err := parseYAMLFile(raw); err != nil {
+			return failf("%s would not be valid YAML after %s: %v", path, verb, err)
+		}
+	case "jsonl":
+		if err := validateJSONLFile(raw); err != nil {
+			return failf("%s would not be valid JSONL after %s: %v", path, verb, err)
+		}
+	}
+	return nil
+}
+
+func validateJSONLFile(raw []byte) error {
+	if !utf8.Valid(raw) {
+		return failf("invalid UTF-8")
+	}
+	if err := validateJSONLAppendBoundary(raw); err != nil {
+		return err
+	}
+	if len(raw) == 0 {
+		return nil
+	}
+	lines := bytes.Split(raw, []byte{'\n'})
+	for i, line := range lines[:len(lines)-1] {
+		line = bytes.TrimSuffix(line, []byte{'\r'})
+		if len(bytes.Trim(line, " \t")) == 0 {
+			return failf("record %d is blank", i+1)
+		}
+		if _, err := jsonx.DecodeValue(line); err != nil {
+			return failf("record %d is not valid JSON", i+1)
+		}
 	}
 	return nil
 }

@@ -179,6 +179,7 @@ func randomRetryDuration(window retryWindow) time.Duration {
 
 func PlanOperations(w *Workspace, opts GlobalOptions, ops []Operation) (*Plan, error) {
 	files := map[string]fileChange{}
+	validations := map[string]inferredOutputValidation{}
 	planOps := make([]Operation, 0, len(ops))
 	mutating := false
 
@@ -193,10 +194,18 @@ func PlanOperations(w *Workspace, opts GlobalOptions, ops []Operation) (*Plan, e
 		if planned.Class != ClassGuard {
 			mutating = true
 		}
+		if validation, ok := inferredOutputValidationForOperation(planned); ok {
+			if _, exists := validations[validation.Path]; !exists {
+				validations[validation.Path] = validation
+			}
+		}
 		planOps = append(planOps, planned)
 	}
 
 	pruneUnchangedFiles(files)
+	if err := validateInferredOutputs(files, validations); err != nil {
+		return nil, err
+	}
 	changed := fileChangesChanged(files)
 	tree, err := w.computePlannedTreeOID(files)
 	if err != nil {
@@ -233,6 +242,60 @@ func PlanOperations(w *Workspace, opts GlobalOptions, ops []Operation) (*Plan, e
 	}
 	plan.Hash = planHash(plan)
 	return plan, nil
+}
+
+type inferredOutputValidation struct {
+	Path   string
+	Format string
+	Op     Operation
+}
+
+func inferredOutputValidationForOperation(op Operation) (inferredOutputValidation, bool) {
+	explicit := explicitStructuredFormat(op)
+	if explicit == "" {
+		return inferredOutputValidation{}, false
+	}
+	path := op.Target.Path
+	if path == "" {
+		path = op.Path
+	}
+	inferred := inferredStructuredFormat(path)
+	if inferred == "" || inferred == explicit {
+		return inferredOutputValidation{}, false
+	}
+	return inferredOutputValidation{Path: path, Format: inferred, Op: op}, true
+}
+
+func explicitStructuredFormat(op Operation) string {
+	if op.Kind == "structured" {
+		switch op.Format {
+		case "json", "yaml":
+			return op.Format
+		}
+	}
+	if op.Kind == "jsonl" && op.Verb == "jsonl append" {
+		return "jsonl"
+	}
+	return ""
+}
+
+func validateInferredOutputs(files map[string]fileChange, validations map[string]inferredOutputValidation) error {
+	for _, path := range sortedKeys(validations) {
+		validation := validations[path]
+		ch, ok := files[path]
+		if !ok || ch.AbsentAfter {
+			continue
+		}
+		err := validateInferredOutput(validation.Path, validation.Format, validation.Op.Verb, ch.After)
+		if err == nil {
+			continue
+		}
+		if validation.Op.Loc.Name != "" {
+			return errWithCode{code: classifyErr(err), err: fmt.Errorf("%s%s", validation.Op.Loc.Prefix(), err)}
+		}
+		return err
+	}
+	return nil
 }
 
 func pruneUnchangedFiles(files map[string]fileChange) {

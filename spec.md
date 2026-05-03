@@ -120,7 +120,7 @@ Two tiers:
 
 Global flags apply to invocation execution and must appear before the command path. Porcelain verbs infer file format from path extension (`.md` → markdown-with-optional-frontmatter, `.json` → JSON, `.jsonl`/`.ndjson` → newline-delimited JSON, `.yaml`/`.yml` → YAML, `.csv` → CSV). They cover the common cases and are what most scripts use. A porcelain command may have format-specific operands after the path; the decoder resolves the command prefix, reads the path, infers the format, and then validates the resolved operand schema.
 
-**Plumbing** commands are format-explicit subcommands (`json set`, `jsonl append`, `yaml set`, `frontmatter set`, `md section replace`). They have no inference and no surprises, suitable for scripts where the file extension might lie or where the porcelain heuristics would pick the wrong format.
+**Plumbing** commands are format-explicit subcommands (`json set`, `jsonl append`, `yaml set`, `frontmatter set`, `md section replace`). They choose their parser and writer directly, suitable for scripts where the file extension might lie or where the porcelain heuristics would pick the wrong format. If a format-explicit JSON, YAML, or JSONL command writes a path whose extension advertises a different Etch-supported structured format, Etch validates the final transaction bytes against the inferred format before committing. Unknown and extensionless paths are not guessed.
 
 The MVP verb surface is constrained by §3 (regular command shapes) and §10 (must fit in a dense help page). The committed MVP verb surface is mutating operations plus transaction guards: mutating verbs compute new file contents, and guards assert preconditions before those contents flow through the plan/commit/materialization pipeline.
 

@@ -158,7 +158,7 @@ func commandHelpTopic(all bool) HelpTopic {
 	if all {
 		blocks = append(blocks, HelpBlock{
 			Kind: "paragraph",
-			Text: "Format-explicit command prefixes select the parser and writer; they do not infer or validate the format from the file extension.",
+			Text: "Format-explicit command prefixes select the parser and writer. If the path extension advertises a different Etch-supported structured format, Etch validates the final bytes against the inferred format before committing.",
 		})
 	}
 	blocks = append(blocks, HelpBlock{
@@ -337,7 +337,8 @@ EOF`},
 			Summary:    "Porcelain commands infer formats from path extensions; plumbing commands make the format explicit.",
 			Aliases:    []string{"formats", "format", "json", "jsonl", "yaml", "frontmatter"},
 			Blocks: []HelpBlock{
-				{Kind: "paragraph", Text: "Porcelain commands infer .json, .jsonl/.ndjson, .yaml/.yml, .md/.markdown, and .csv behavior from the path. Format-explicit commands such as json set, yaml set, frontmatter set, jsonl append, md table, and csv row append skip inference."},
+				{Kind: "paragraph", Text: "Porcelain commands infer .json, .jsonl/.ndjson, .yaml/.yml, .md/.markdown, and .csv behavior from the path. Format-explicit commands such as json set, yaml set, frontmatter set, jsonl append, md table, and csv row append choose their parser and writer directly."},
+				{Kind: "paragraph", Text: "When a format-explicit JSON, YAML, or JSONL command writes a path whose extension advertises a different Etch-supported structured format, Etch validates the final bytes against the inferred format before committing. Unknown and extensionless paths are not guessed."},
 				{Kind: "paragraph", Text: "JSON and YAML structured commands share selector and value semantics. JSON edits preserve surrounding representation where possible. YAML and frontmatter edits preserve comments, key order, anchors, aliases, indentation, and scalar spelling where the parser can preserve them."},
 				{Kind: "paragraph", Text: "For Markdown paths, bare structured selectors target YAML frontmatter. If frontmatter is missing, set, append, and add can create it; delete and remove are no-ops when the final target is absent."},
 				{Kind: "paragraph", Text: "JSONL and NDJSON append has no selector. The value is always strict JSON, missing logs are treated as empty, and non-empty logs must end at a record boundary."},

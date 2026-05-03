@@ -990,9 +990,22 @@ func isCSVPath(path string) bool {
 	return strings.EqualFold(filepath.Ext(path), ".csv")
 }
 
-func defaultCreateContent(path string) string {
+func inferredStructuredFormat(path string) string {
 	switch {
 	case isJSONPath(path):
+		return "json"
+	case isYAMLPath(path):
+		return "yaml"
+	case isJSONLPath(path):
+		return "jsonl"
+	default:
+		return ""
+	}
+}
+
+func defaultCreateContent(path string) string {
+	switch inferredStructuredFormat(path) {
+	case "json":
 		return "{}"
 	default:
 		return ""
