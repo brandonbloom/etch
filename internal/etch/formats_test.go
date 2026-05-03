@@ -668,6 +668,20 @@ func TestYAMLDeleteLastNestedMapKeyLeavesParseableEmptyMap(t *testing.T) {
 	}
 }
 
+func TestYAMLRootSetStartsAtColumnZero(t *testing.T) {
+	dir := initRepo(t)
+	writeFile(t, dir, "config.yaml", "old: value\n")
+	commitAll(t, dir, "initial")
+
+	runOK(t, dir, "set", "config.yaml", "$", "--json", `{"replaced":"everything"}`)
+
+	got := testGit(t, dir, "show", "HEAD:config.yaml")
+	want := "replaced: everything\n"
+	if got != want {
+		t.Fatalf("YAML output:\n%s\nwant:\n%s", got, want)
+	}
+}
+
 func TestFrontmatterVerbMatrixPreservesRepresentation(t *testing.T) {
 	dir := initRepo(t)
 	writeFile(t, dir, "note.md", "---\n# metadata\ntitle: Old\ntags:\n  - a\nremove:\n  - x\n  - y\n---\n# Note\n")
@@ -711,6 +725,20 @@ func TestFrontmatterDeleteLastNestedMapKeyLeavesParseableEmptyMap(t *testing.T) 
 	}
 	if _, err := parseYAMLFile(fm); err != nil {
 		t.Fatalf("frontmatter YAML is not parseable: %v\n%s", err, got)
+	}
+}
+
+func TestFrontmatterRootSetStartsAtColumnZero(t *testing.T) {
+	dir := initRepo(t)
+	writeFile(t, dir, "note.md", "---\nold: value\n---\n# Note\n")
+	commitAll(t, dir, "initial")
+
+	runOK(t, dir, "frontmatter", "set", "note.md", "$", "--json", `{"replaced":"everything"}`)
+
+	got := testGit(t, dir, "show", "HEAD:note.md")
+	want := "---\nreplaced: everything\n---\n# Note\n"
+	if got != want {
+		t.Fatalf("frontmatter output:\n%s\nwant:\n%s", got, want)
 	}
 }
 

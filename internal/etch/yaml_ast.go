@@ -83,8 +83,8 @@ func mutateYAMLRoot(doc *ast.DocumentNode, verb string, value any) (bool, error)
 		if err != nil {
 			return false, err
 		}
+		placeYAMLNode(next, 1)
 		if doc.Body != nil {
-			placeYAMLNodeLike(next, doc.Body)
 			copyYAMLComment(next, doc.Body)
 		}
 		doc.Body = next
