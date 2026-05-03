@@ -162,6 +162,7 @@ func buildCommandSpecs() []commandSpec {
 		command("list add", "list add <path> <text> [--section <heading>] [--task] [--before <item>] [--after <item>]", "Add one Markdown list item.", ClassNonIdempotent, true, parseMarkdownTaskList("list add"), markdownListAddFlags...),
 		command("task add", "task add <path> <text> [--section <heading>] [--before <item>] [--after <item>]", "Add one open Markdown task.", ClassNonIdempotent, true, parseMarkdownTaskList("task add"), markdownTaskListFlags...),
 		command("create", "create <path> [<content>]", "Create a new file; omitted content uses an extension-aware default.", ClassIdempotent, true, parseCreate),
+		command("replace", "replace <path> <content>", "Replace an existing file's entire content.", ClassIdempotent, true, parseFileContentVerb("replace")),
 		command("move", "move <src> <dst>", "Move a file path.", ClassIdempotent, true, parseFileVerb("move")),
 		command("copy", "copy <src> <dst>", "Copy a file path.", ClassIdempotent, true, parseFileVerb("copy")),
 		command("exists", "exists <path>", "Guard that a path exists in the admitted input view.", ClassGuard, true, parsePathGuard("exists")),
@@ -331,6 +332,18 @@ func parseCreate(inv commandInvocation) ([]Operation, error) {
 	op.Verb, op.Kind, op.Class, op.Path, op.Value = "create", "file", spec.Class, args[0], value
 	op.Target = PlanTarget{Path: args[0]}
 	return parsedOperation(op)
+}
+
+func parseFileContentVerb(verb string) commandParser {
+	return func(inv commandInvocation) ([]Operation, error) {
+		spec, op, args := inv.Spec, inv.Op, inv.Args
+		if len(args) != 2 {
+			return nil, usagef("usage: etch %s", spec.Signature)
+		}
+		op.Verb, op.Kind, op.Class, op.Path, op.Value = verb, "file", spec.Class, args[0], args[1]
+		op.Target = PlanTarget{Path: args[0]}
+		return parsedOperation(op)
+	}
 }
 
 func parseFileVerb(verb string) commandParser {
@@ -906,15 +919,15 @@ func fillDescriptor(op *Operation) {
 		parts = append(parts, valuePreview(op.Value, op.ValueMode, 80))
 	} else if op.Value != "" && op.Kind != "file" {
 		parts = append(parts, valuePreview(op.Value, op.ValueMode, 80))
-	} else if op.Kind == "file" && (op.Verb == "create" || op.Verb == "copy" || op.Verb == "move") {
-		if op.Verb == "create" {
+	} else if op.Kind == "file" && (op.Verb == "create" || op.Verb == "replace" || op.Verb == "copy" || op.Verb == "move") {
+		if op.Verb == "create" || op.Verb == "replace" {
 			parts = append(parts, valuePreview(op.Value, op.ValueMode, 80))
 		} else {
 			parts = append(parts, op.Value)
 		}
 	}
 	op.Descriptor = strings.Join(parts, " ")
-	if (op.Kind == "structured" && op.Verb != "delete") || op.Value != "" {
+	if (op.Kind == "structured" && op.Verb != "delete") || op.Value != "" || (op.Kind == "file" && (op.Verb == "create" || op.Verb == "replace")) {
 		op.ValueHash = valueHash(*op)
 	}
 }

@@ -682,6 +682,62 @@ func TestYAMLRootSetStartsAtColumnZero(t *testing.T) {
 	}
 }
 
+func TestYAMLMultiLineStringUsesNaturalLiteralIndent(t *testing.T) {
+	dir := initRepo(t)
+	writeFile(t, dir, "config.yaml", "name: demo\n")
+	commitAll(t, dir, "initial")
+
+	runOK(t, dir, "set", "config.yaml", "description", "line1\nline2")
+
+	got := testGit(t, dir, "show", "HEAD:config.yaml")
+	want := "name: demo\ndescription: |-\n  line1\n  line2\n"
+	if got != want {
+		t.Fatalf("YAML output:\n%s\nwant:\n%s", got, want)
+	}
+}
+
+func TestYAMLMultiLineStringReplacementUsesNaturalLiteralIndent(t *testing.T) {
+	dir := initRepo(t)
+	writeFile(t, dir, "config.yaml", "description: old\n")
+	commitAll(t, dir, "initial")
+
+	runOK(t, dir, "set", "config.yaml", "description", "line1\nline2")
+
+	got := testGit(t, dir, "show", "HEAD:config.yaml")
+	want := "description: |-\n  line1\n  line2\n"
+	if got != want {
+		t.Fatalf("YAML output:\n%s\nwant:\n%s", got, want)
+	}
+}
+
+func TestYAMLNestedMultiLineStringUsesNaturalLiteralIndent(t *testing.T) {
+	dir := initRepo(t)
+	writeFile(t, dir, "config.yaml", "meta:\n  keep: true\n")
+	commitAll(t, dir, "initial")
+
+	runOK(t, dir, "set", "config.yaml", "meta.description", "line1\nline2")
+
+	got := testGit(t, dir, "show", "HEAD:config.yaml")
+	want := "meta:\n  keep: true\n  description: |-\n    line1\n    line2\n"
+	if got != want {
+		t.Fatalf("YAML output:\n%s\nwant:\n%s", got, want)
+	}
+}
+
+func TestYAMLNestedMultiLineStringReplacementUsesNaturalLiteralIndent(t *testing.T) {
+	dir := initRepo(t)
+	writeFile(t, dir, "config.yaml", "meta:\n  description: old\n")
+	commitAll(t, dir, "initial")
+
+	runOK(t, dir, "set", "config.yaml", "meta.description", "line1\nline2")
+
+	got := testGit(t, dir, "show", "HEAD:config.yaml")
+	want := "meta:\n  description: |-\n    line1\n    line2\n"
+	if got != want {
+		t.Fatalf("YAML output:\n%s\nwant:\n%s", got, want)
+	}
+}
+
 func TestFrontmatterVerbMatrixPreservesRepresentation(t *testing.T) {
 	dir := initRepo(t)
 	writeFile(t, dir, "note.md", "---\n# metadata\ntitle: Old\ntags:\n  - a\nremove:\n  - x\n  - y\n---\n# Note\n")
@@ -744,17 +800,29 @@ func TestFrontmatterRootSetStartsAtColumnZero(t *testing.T) {
 
 func TestFrontmatterMultilineStringUsesLiteralBlock(t *testing.T) {
 	dir := initRepo(t)
-	writeFile(t, dir, "note.md", "# Note\n")
+	writeFile(t, dir, "note.md", "---\ntitle: Note\n---\n# Note\n")
 	commitAll(t, dir, "initial")
 
-	runOK(t, dir, "set", "note.md", "body", "line one\nline two\n")
+	runOK(t, dir, "set", "note.md", "body", "line one\nline two")
 
 	mdOut := testGit(t, dir, "show", "HEAD:note.md")
-	if !strings.Contains(mdOut, "body: |") || !strings.Contains(mdOut, "  line one\n  line two\n") {
-		t.Fatalf("frontmatter did not use literal block scalar:\n%s", mdOut)
+	want := "---\ntitle: Note\nbody: |-\n  line one\n  line two\n---\n# Note\n"
+	if mdOut != want {
+		t.Fatalf("frontmatter output:\n%s\nwant:\n%s", mdOut, want)
 	}
-	if strings.Contains(mdOut, `line one\nline two`) {
-		t.Fatalf("frontmatter escaped newlines instead of using block content:\n%s", mdOut)
+}
+
+func TestFrontmatterMultilineStringReplacementUsesLiteralBlock(t *testing.T) {
+	dir := initRepo(t)
+	writeFile(t, dir, "note.md", "---\nbody: old\n---\n# Note\n")
+	commitAll(t, dir, "initial")
+
+	runOK(t, dir, "set", "note.md", "body", "line one\nline two")
+
+	mdOut := testGit(t, dir, "show", "HEAD:note.md")
+	want := "---\nbody: |-\n  line one\n  line two\n---\n# Note\n"
+	if mdOut != want {
+		t.Fatalf("frontmatter output:\n%s\nwant:\n%s", mdOut, want)
 	}
 }
 

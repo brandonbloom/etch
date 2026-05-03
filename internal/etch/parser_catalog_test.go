@@ -298,6 +298,7 @@ func TestIntrospectionDoesNotRequireGit(t *testing.T) {
 	}
 	for name, class := range map[string]CommandClass{
 		"set":                 ClassIdempotent,
+		"replace":             ClassIdempotent,
 		"append":              ClassNonIdempotent,
 		"jsonl append":        ClassNonIdempotent,
 		"exists":              ClassGuard,

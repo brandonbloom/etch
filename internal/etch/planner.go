@@ -303,6 +303,23 @@ func ensureFileState(w *Workspace, files map[string]fileChange, path string, req
 	return ch, res, nil
 }
 
+func ensureCreateDestinationState(w *Workspace, files map[string]fileChange, path string) (fileChange, ResolvedPath, error) {
+	res, err := w.Resolve(path, true, false)
+	if err != nil {
+		return fileChange{}, res, err
+	}
+	if ch, ok := files[res.Clean]; ok {
+		return ch, res, nil
+	}
+	before, mode, absent, err := w.ReadBase(res)
+	if err != nil {
+		return fileChange{}, res, err
+	}
+	ch := fileChange{Path: res.Clean, RepoPath: res.Repo, AbsPath: res.Abs, Before: before, After: append([]byte(nil), before...), Mode: mode, AbsentBefore: absent, AbsentAfter: absent}
+	files[res.Clean] = ch
+	return ch, res, nil
+}
+
 func setFileState(files map[string]fileChange, ch fileChange, after []byte, absent bool) (bool, fileChange) {
 	ch.After = after
 	ch.AbsentAfter = absent
@@ -342,21 +359,39 @@ func planGuard(w *Workspace, files map[string]fileChange, op Operation) (Operati
 func planFileOp(w *Workspace, files map[string]fileChange, op Operation) (Operation, bool, error) {
 	switch op.Verb {
 	case "create":
-		res, err := w.Resolve(op.Path, true, false)
+		ch, res, err := ensureCreateDestinationState(w, files, op.Path)
 		if err != nil {
 			return op, false, err
 		}
-		if existing, _, _, err := w.ExistsInAdmittedView(res); err != nil {
-			return op, false, err
-		} else if existing {
-			return op, false, failf("%s already exists", res.Clean)
-		}
-		ch := fileChange{Path: res.Clean, RepoPath: res.Repo, AbsPath: res.Abs, Before: nil, After: []byte(op.Value), Mode: "100644", AbsentBefore: true, AbsentAfter: false}
-		files[res.Clean] = ch
 		op.Path = res.Clean
 		op.Target = PlanTarget{Path: res.Clean}
+		desired := []byte(op.Value)
+		if !ch.AbsentAfter {
+			if bytes.Equal(ch.After, desired) {
+				op.Noop = true
+				fillDescriptor(&op)
+				return op, false, nil
+			}
+			return op, false, failf("%s already exists with different content", res.Clean)
+		}
+		ch.Mode = "100644"
+		changed, _ := setFileState(files, ch, desired, false)
 		fillDescriptor(&op)
-		return op, true, nil
+		return op, changed, nil
+	case "replace":
+		ch, res, err := ensureFileState(w, files, op.Path, true, false)
+		if err != nil {
+			return op, false, err
+		}
+		if !strings.HasPrefix(ch.Mode, "100") {
+			return op, false, failf("%s is not a regular file", res.Clean)
+		}
+		op.Path = res.Clean
+		op.Target = PlanTarget{Path: res.Clean}
+		changed, _ := setFileState(files, ch, []byte(op.Value), false)
+		op.Noop = !changed
+		fillDescriptor(&op)
+		return op, changed, nil
 	case "delete":
 		ch, res, err := ensureFileState(w, files, op.Path, false, false)
 		if err != nil {

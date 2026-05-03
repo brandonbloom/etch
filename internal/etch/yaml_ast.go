@@ -168,7 +168,7 @@ func mutateYAMLMapLeaf(m *ast.MappingNode, key string, verb string, value any) (
 			if m.IsFlowStyle {
 				setYAMLFlowStyle(next, true)
 			}
-			return true, replaceYAMLNode(&mv.Value, next)
+			return true, replaceYAMLMapValue(mv, next)
 		}
 		next, err := newYAMLValueNode(value)
 		if err != nil {
@@ -336,6 +336,7 @@ func setExistingYAMLPath(doc *ast.DocumentNode, parts []selectorPart, value any)
 	if err := path.ReplaceWithNode(tmp, next); err != nil {
 		return false, false, err
 	}
+	normalizeYAMLBlockScalarLike(doc.Body, next, next)
 	return true, true, nil
 }
 
@@ -481,6 +482,7 @@ func appendYAMLMapValue(m *ast.MappingNode, key string, value ast.Node) *ast.Map
 	keyCol := yamlMapKeyColumn(m)
 	placeYAMLNode(keyNode, keyCol)
 	placeYAMLNode(value, yamlMapValueColumn(keyCol, value))
+	normalizeYAMLBlockScalars(value, keyCol+1)
 	if m.IsFlowStyle {
 		setYAMLFlowStyle(value, true)
 	}
@@ -530,6 +532,14 @@ func replaceYAMLNode(nodep *ast.Node, next ast.Node) error {
 	return nil
 }
 
+func replaceYAMLMapValue(mv *ast.MappingValueNode, next ast.Node) error {
+	if err := replaceYAMLNode(&mv.Value, next); err != nil {
+		return err
+	}
+	normalizeYAMLBlockScalars(mv.Value, yamlMapValueContentIndent(mv))
+	return nil
+}
+
 func copyYAMLComment(dst, src ast.Node) {
 	if src == nil || dst == nil || dst.GetComment() != nil || src.GetComment() == nil {
 		return
@@ -550,6 +560,76 @@ func placeYAMLNode(node ast.Node, column int) {
 		return
 	}
 	node.AddColumn(column - node.GetToken().Position.Column)
+}
+
+func normalizeYAMLBlockScalarLike(root, child, next ast.Node) {
+	indent, ok := yamlBlockScalarContentIndent(root, child)
+	if !ok {
+		return
+	}
+	normalizeYAMLBlockScalars(next, indent)
+}
+
+func yamlBlockScalarContentIndent(root, child ast.Node) (int, bool) {
+	switch parent := ast.Parent(root, child).(type) {
+	case *ast.MappingValueNode:
+		return yamlMapValueContentIndent(parent), true
+	default:
+		return 0, false
+	}
+}
+
+func yamlMapValueContentIndent(mv *ast.MappingValueNode) int {
+	if mv == nil || mv.Key == nil || mv.Key.GetToken() == nil || mv.Key.GetToken().Position == nil {
+		return 2
+	}
+	return mv.Key.GetToken().Position.Column + 1
+}
+
+func normalizeYAMLBlockScalars(node ast.Node, contentIndent int) {
+	switch n := node.(type) {
+	case *ast.StringNode:
+		normalizeYAMLMultilineStringNode(n, contentIndent)
+	case *ast.LiteralNode:
+		normalizeYAMLLiteralBlockOrigin(n, contentIndent)
+	case *ast.AnchorNode:
+		normalizeYAMLBlockScalars(n.Value, contentIndent)
+	case *ast.TagNode:
+		normalizeYAMLBlockScalars(n.Value, contentIndent)
+	}
+}
+
+func normalizeYAMLMultilineStringNode(node *ast.StringNode, contentIndent int) {
+	if node == nil || node.Token == nil || node.Token.Position == nil {
+		return
+	}
+	if !strings.Contains(node.Value, "\n") && !strings.Contains(node.Value, "\r") {
+		return
+	}
+	node.Token.Position.Column = 1
+	node.Token.Position.IndentNum = contentIndent
+}
+
+func normalizeYAMLLiteralBlockOrigin(node *ast.LiteralNode, contentIndent int) {
+	if node == nil || node.Value == nil || node.Value.Token == nil {
+		return
+	}
+	value := node.Value.Value
+	if !strings.Contains(value, "\n") && !strings.Contains(value, "\r") {
+		return
+	}
+	lineBreak := "\n"
+	if strings.Contains(value, "\r\n") {
+		lineBreak = "\r\n"
+	} else if strings.Contains(value, "\r") {
+		lineBreak = "\r"
+	}
+	indent := strings.Repeat(" ", contentIndent)
+	lines := strings.Split(value, lineBreak)
+	for i := range lines {
+		lines[i] = indent + lines[i]
+	}
+	node.Value.Token.Origin = strings.Join(lines, lineBreak)
 }
 
 func yamlMapKeyColumn(m *ast.MappingNode) int {

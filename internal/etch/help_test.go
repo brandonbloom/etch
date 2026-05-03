@@ -29,7 +29,7 @@ func TestDefaultHelpTableExcludesPlumbing(t *testing.T) {
 			t.Fatalf("default help contains plumbing command %q:\n%s", hidden, text)
 		}
 	}
-	for _, shown := range []string{"set <path>", "table set", "section replace", "section append", "section prepend", "task close", "list add"} {
+	for _, shown := range []string{"set <path>", "table set", "section replace", "section append", "section prepend", "task close", "list add", "replace <path>"} {
 		if !strings.Contains(text, shown) {
 			t.Fatalf("default help missing porcelain command %q:\n%s", shown, text)
 		}

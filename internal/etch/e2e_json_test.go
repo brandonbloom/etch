@@ -474,6 +474,92 @@ func TestE2ECreateDefaultContent(t *testing.T) {
 	}
 }
 
+func TestE2ECreateNoopsWhenExistingContentMatches(t *testing.T) {
+	dir := initRepo(t)
+	writeFile(t, dir, "README.md", "# hi\n")
+	head := commitAll(t, dir, "initial")
+
+	_, errb, code, err := runCLIInDir(t, dir, "create", "README.md", "# hi\n")
+	if err != nil || code != exitOK {
+		t.Fatalf("runCLI code=%d err=%v stderr=%s", code, err, errb.String())
+	}
+	if !strings.Contains(errb.String(), "nothing to do") {
+		t.Fatalf("stderr = %s", errb.String())
+	}
+	if got := stringsTrim(testGit(t, dir, "rev-parse", "HEAD")); got != head {
+		t.Fatalf("idempotent create moved HEAD to %s", got)
+	}
+}
+
+func TestE2ECreateErrorsWhenExistingContentDiffers(t *testing.T) {
+	dir := initRepo(t)
+	writeFile(t, dir, "README.md", "# hi\n")
+	head := commitAll(t, dir, "initial")
+
+	_, errb, code, err := runCLIInDir(t, dir, "create", "README.md", "# bye\n")
+	if err == nil || code != exitFailure {
+		t.Fatalf("create unexpectedly succeeded code=%d stderr=%s", code, errb.String())
+	}
+	if !strings.Contains(err.Error(), "already exists with different content") {
+		t.Fatalf("error = %v", err)
+	}
+	if got := stringsTrim(testGit(t, dir, "rev-parse", "HEAD")); got != head {
+		t.Fatalf("failed create moved HEAD to %s", got)
+	}
+}
+
+func TestE2EReplaceFileContent(t *testing.T) {
+	dir := initRepo(t)
+	writeFile(t, dir, "note.txt", "old\n")
+	commitAll(t, dir, "initial")
+
+	_, errb, code, err := runCLIInDir(t, dir, "replace", "note.txt", "new\n")
+	if err != nil || code != exitOK {
+		t.Fatalf("replace code=%d err=%v stderr=%s", code, err, errb.String())
+	}
+	if got := testGit(t, dir, "show", "HEAD:note.txt"); got != "new\n" {
+		t.Fatalf("HEAD note.txt = %q", got)
+	}
+	wt, readErr := os.ReadFile(filepath.Join(dir, "note.txt"))
+	if readErr != nil || string(wt) != "new\n" {
+		t.Fatalf("worktree note.txt = %q err=%v", wt, readErr)
+	}
+}
+
+func TestE2EReplaceNoopsWhenContentMatches(t *testing.T) {
+	dir := initRepo(t)
+	writeFile(t, dir, "note.txt", "same\n")
+	head := commitAll(t, dir, "initial")
+
+	_, errb, code, err := runCLIInDir(t, dir, "replace", "note.txt", "same\n")
+	if err != nil || code != exitOK {
+		t.Fatalf("replace code=%d err=%v stderr=%s", code, err, errb.String())
+	}
+	if !strings.Contains(errb.String(), "nothing to do") {
+		t.Fatalf("stderr = %s", errb.String())
+	}
+	if got := stringsTrim(testGit(t, dir, "rev-parse", "HEAD")); got != head {
+		t.Fatalf("idempotent replace moved HEAD to %s", got)
+	}
+}
+
+func TestE2EReplaceMissingFileErrors(t *testing.T) {
+	dir := initRepo(t)
+	writeFile(t, dir, "README.md", "# hi\n")
+	head := commitAll(t, dir, "initial")
+
+	_, errb, code, err := runCLIInDir(t, dir, "replace", "missing.txt", "new\n")
+	if err == nil || code != exitFailure {
+		t.Fatalf("replace unexpectedly succeeded code=%d stderr=%s", code, errb.String())
+	}
+	if !strings.Contains(err.Error(), "missing.txt is missing") {
+		t.Fatalf("error = %v", err)
+	}
+	if got := stringsTrim(testGit(t, dir, "rev-parse", "HEAD")); got != head {
+		t.Fatalf("failed replace moved HEAD to %s", got)
+	}
+}
+
 func TestE2ECreateExtensionDefaults(t *testing.T) {
 	dir := initRepo(t)
 	writeFile(t, dir, "README.md", "# hi\n")

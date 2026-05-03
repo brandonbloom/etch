@@ -106,6 +106,7 @@ Porcelain commands infer the format from the file extension:
 | `list add <path> <text>` | Add one Markdown list item. |
 | `task add <path> <text>` | Add one open Markdown task. |
 | `create <path> [<content>]` | Create a file with explicit or extension-aware default content. |
+| `replace <path> <content>` | Replace an existing file's entire content. |
 | `move <src> <dst>` | Move a file path. |
 | `copy <src> <dst>` | Copy a file path. |
 | `exists <path>` | Guard that a path exists in the admitted input view. |
