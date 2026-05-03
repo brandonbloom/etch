@@ -9,6 +9,7 @@ import (
 	"github.com/goccy/go-yaml"
 	"github.com/goccy/go-yaml/ast"
 	"github.com/goccy/go-yaml/parser"
+	"github.com/goccy/go-yaml/token"
 )
 
 type yamlAliasSemantic struct {
@@ -39,6 +40,9 @@ func mutateYAMLFile(file *ast.File, selector, verb string, value any) (bool, err
 	} else if comments, ok := doc.Body.(*ast.CommentGroupNode); ok {
 		doc.Body = mustYAMLValueNode(map[string]any{})
 		_ = doc.Body.SetComment(comments)
+	}
+	if yamlNodeIsEmptyCollection(doc.Body) {
+		setYAMLFlowStyle(doc.Body, false)
 	}
 	if len(parts) == 0 {
 		return mutateYAMLRoot(doc, verb, value)
@@ -83,6 +87,7 @@ func mutateYAMLRoot(doc *ast.DocumentNode, verb string, value any) (bool, error)
 		if err != nil {
 			return false, err
 		}
+		copyYAMLScalarStyle(next, doc.Body)
 		placeYAMLNode(next, 1)
 		if doc.Body != nil {
 			copyYAMLComment(next, doc.Body)
@@ -329,6 +334,7 @@ func setExistingYAMLPath(doc *ast.DocumentNode, parts []selectorPart, value any)
 	if err != nil {
 		return false, false, err
 	}
+	copyYAMLScalarStyle(next, old)
 	copyYAMLComment(next, old)
 	if yamlNodeFlowParent(doc.Body, old) {
 		setYAMLFlowStyle(next, true)
@@ -527,6 +533,7 @@ func removeYAMLSequenceIndex(seq *ast.SequenceNode, idx int) {
 func replaceYAMLNode(nodep *ast.Node, next ast.Node) error {
 	old := *nodep
 	placeYAMLNodeLike(next, old)
+	copyYAMLScalarStyle(next, old)
 	copyYAMLComment(next, old)
 	*nodep = next
 	return nil
@@ -545,6 +552,36 @@ func copyYAMLComment(dst, src ast.Node) {
 		return
 	}
 	_ = dst.SetComment(src.GetComment())
+}
+
+func copyYAMLScalarStyle(dst, src ast.Node) {
+	dstString := yamlStringNode(dst)
+	srcString := yamlStringNode(src)
+	if dstString == nil || srcString == nil || dstString.Token == nil || srcString.Token == nil {
+		return
+	}
+	if strings.ContainsAny(dstString.Value, "\r\n") {
+		return
+	}
+	switch srcString.Token.Type {
+	case token.SingleQuoteType, token.DoubleQuoteType:
+		dstString.Token.Type = srcString.Token.Type
+		dstString.Token.CharacterType = srcString.Token.CharacterType
+		dstString.Token.Indicator = srcString.Token.Indicator
+	}
+}
+
+func yamlStringNode(node ast.Node) *ast.StringNode {
+	switch n := node.(type) {
+	case *ast.StringNode:
+		return n
+	case *ast.AnchorNode:
+		return yamlStringNode(n.Value)
+	case *ast.TagNode:
+		return yamlStringNode(n.Value)
+	default:
+		return nil
+	}
 }
 
 func placeYAMLNodeLike(node, old ast.Node) {

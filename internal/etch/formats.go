@@ -136,6 +136,9 @@ func evalFrontmatter(path, selector, verb string, value any, before []byte) ([]b
 	out = append(out, []byte("---\n")...)
 	out = append(out, yamlBytes...)
 	out = append(out, []byte("\n---\n")...)
+	if !had && len(body) > 0 && !markdownBodyStartsWithBlankLine(body) {
+		out = append(out, '\n')
+	}
 	out = append(out, body...)
 	out = withUTF8BOM(out, bom)
 	return out, changed || !bytes.Equal(out, before), nil

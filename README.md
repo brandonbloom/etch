@@ -282,6 +282,8 @@ JSONL and NDJSON append values are always strict JSON and do not use `--json`;
 missing JSONL targets are created as empty logs before appending.
 
 For Markdown paths, structured selectors target YAML frontmatter by default.
+When Etch creates a frontmatter block for an existing Markdown body, it keeps a
+blank line between the closing `---` and the body.
 Markdown address flags such as `--body`, `--section`, and `--task` switch
 `set` and `delete` to Dataview-style inline fields in the Markdown body.
 Task/list commands use `--section`, `--before`, and `--after` to address where
@@ -289,6 +291,9 @@ task and list mutations happen; `--before` and `--after` match list items, not
 arbitrary prose. Item matching ignores task/list markers, Dataview inline
 fields, numeric trailing reference-annotation links, and inline Markdown
 formatting.
+
+For `create <path>` without explicit content, JSON files default to `{}` and
+other paths default to empty content.
 
 ## Transaction Model
 

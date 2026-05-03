@@ -996,12 +996,8 @@ func defaultCreateContent(path string) string {
 	switch {
 	case isJSONPath(path):
 		return "{}"
-	case isYAMLPath(path):
-		return "{}\n"
-	case isJSONLPath(path), isMarkdownPath(path), isCSVPath(path):
-		return ""
 	default:
-		return "{}"
+		return ""
 	}
 }
 

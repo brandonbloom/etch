@@ -1,7 +1,7 @@
 cat: Files
 name: create
 syntax: "etch create <file> [<content>]"
-desc: Create a new file. Fails if the file already exists. Default content by extension.
+desc: Create a new file. Fails if the file already exists. JSON defaults to {}; other omitted content is empty.
 example: "etch create people/bob.md"
 file: people/bob.md
 args:

@@ -676,11 +676,12 @@ func TestE2ECreateExtensionDefaults(t *testing.T) {
 	commitAll(t, dir, "initial")
 
 	cases := map[string]string{
-		"config.yaml":  "{}\n",
+		"config.yaml":  "",
 		"events.jsonl": "",
 		"note.md":      "",
 		"data.csv":     "",
-		"plain.txt":    "{}",
+		"plain.txt":    "",
+		"mise.toml":    "",
 	}
 	for path, want := range cases {
 		var out, errb bytes.Buffer

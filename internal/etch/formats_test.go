@@ -308,6 +308,37 @@ func TestYAMLAndFrontmatterVerbs(t *testing.T) {
 	if !strings.HasPrefix(mdOut, "---\n") || !strings.Contains(mdOut, "status: draft") || !strings.Contains(mdOut, "- x") {
 		t.Fatalf("frontmatter output:\n%s", mdOut)
 	}
+	if !strings.Contains(mdOut, "---\n\n# Note\n") {
+		t.Fatalf("frontmatter output missing body separator:\n%s", mdOut)
+	}
+}
+
+func TestFrontmatterCreationSeparatesExistingBody(t *testing.T) {
+	dir := initRepo(t)
+	writeFile(t, dir, "note.md", "# Title\n\nBody\n")
+	commitAll(t, dir, "initial")
+
+	runOK(t, dir, "set", "note.md", "status", "new")
+
+	got := testGit(t, dir, "show", "HEAD:note.md")
+	want := "---\nstatus: new\n---\n\n# Title\n\nBody\n"
+	if got != want {
+		t.Fatalf("frontmatter output:\n%s\nwant:\n%s", got, want)
+	}
+}
+
+func TestFrontmatterCreationDoesNotAddExtraBodySeparator(t *testing.T) {
+	dir := initRepo(t)
+	writeFile(t, dir, "note.md", "\n# Title\n")
+	commitAll(t, dir, "initial")
+
+	runOK(t, dir, "set", "note.md", "status", "new")
+
+	got := testGit(t, dir, "show", "HEAD:note.md")
+	want := "---\nstatus: new\n---\n\n# Title\n"
+	if got != want {
+		t.Fatalf("frontmatter output:\n%s\nwant:\n%s", got, want)
+	}
 }
 
 func TestYAMLAndFrontmatterVerbsCreateMissingFiles(t *testing.T) {
@@ -330,6 +361,46 @@ func TestYAMLAndFrontmatterVerbsCreateMissingFiles(t *testing.T) {
 	otherOut := testGit(t, dir, "show", "HEAD:other.md")
 	if !strings.HasPrefix(otherOut, "---\n") || !strings.Contains(otherOut, "- x") {
 		t.Fatalf("frontmatter add output:\n%s", otherOut)
+	}
+}
+
+func TestYAMLSetEmptyRootUsesBlockStyle(t *testing.T) {
+	for _, tc := range []struct {
+		name   string
+		before string
+	}{
+		{name: "empty file", before: ""},
+		{name: "empty flow mapping", before: "{}\n"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			dir := initRepo(t)
+			writeFile(t, dir, "config.yaml", tc.before)
+			commitAll(t, dir, "initial")
+
+			runOK(t, dir, "set", "config.yaml", "foo", "bar")
+
+			got := testGit(t, dir, "show", "HEAD:config.yaml")
+			want := "foo: bar\n"
+			if got != want {
+				t.Fatalf("YAML output:\n%s\nwant:\n%s", got, want)
+			}
+		})
+	}
+}
+
+func TestYAMLSetPreservesQuotedStringStyle(t *testing.T) {
+	dir := initRepo(t)
+	writeFile(t, dir, "config.yaml", "version: \"1.0.0\"\nname: 'old'\nplain: old\n")
+	commitAll(t, dir, "initial")
+
+	runOK(t, dir, "set", "config.yaml", "version", "2.0.0")
+	runOK(t, dir, "set", "config.yaml", "name", "new")
+	runOK(t, dir, "set", "config.yaml", "plain", "new")
+
+	got := testGit(t, dir, "show", "HEAD:config.yaml")
+	want := "version: \"2.0.0\"\nname: 'new'\nplain: new\n"
+	if got != want {
+		t.Fatalf("YAML output:\n%s\nwant:\n%s", got, want)
 	}
 }
 
