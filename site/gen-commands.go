@@ -67,12 +67,18 @@ type Command struct {
 	Results []File  `json:"results,omitempty"`
 }
 
+type PromptData struct {
+	Bootstrap string `json:"bootstrap"`
+	Context   string `json:"context"`
+}
+
 func main() {
 	etchBin := flag.String("etch", "./bin/etch", "path to etch binary")
 	fixturesDir := flag.String("fixtures", "site/fixtures", "fixtures directory")
 	output := flag.String("output", "site/data/commands.json", "output JSON file")
 	referenceOutput := flag.String("reference-output", "site/content/reference.md", "output Markdown file for CLI help reference")
 	referenceDataOutput := flag.String("reference-data-output", "site/data/reference.json", "output JSON file for CLI help reference")
+	promptDataOutput := flag.String("prompt-data-output", "site/data/prompts.json", "output JSON file for CLI prompt snippets")
 	flag.Parse()
 
 	abs, err := filepath.Abs(*etchBin)
@@ -169,10 +175,14 @@ func main() {
 	if err := writeReferenceContent(*referenceOutput); err != nil {
 		fatal("writing reference page: %v", err)
 	}
+	if err := writePromptData(*etchBin, *promptDataOutput); err != nil {
+		fatal("writing prompt data: %v", err)
+	}
 
 	fmt.Fprintf(os.Stderr, "\nwrote %s (%d commands)\n", *output, len(commands))
 	fmt.Fprintf(os.Stderr, "wrote %s (%d topics)\n", *referenceDataOutput, referenceTopics)
 	fmt.Fprintf(os.Stderr, "wrote %s\n", *referenceOutput)
+	fmt.Fprintf(os.Stderr, "wrote %s\n", *promptDataOutput)
 }
 
 func writeReferenceData(etchBin, output string) (int, error) {
@@ -212,6 +222,31 @@ func writeReferenceContent(output string) error {
 		return fmt.Errorf("creating reference dir: %w", err)
 	}
 	return os.WriteFile(output, []byte(b.String()), 0o644)
+}
+
+func writePromptData(etchBin, output string) error {
+	bootstrap, err := commandOutput("", etchBin, "prompt")
+	if err != nil {
+		return err
+	}
+	context, err := commandOutput("", etchBin, "prompt", "--context")
+	if err != nil {
+		return err
+	}
+	if strings.TrimSpace(bootstrap) == "" || strings.TrimSpace(context) == "" {
+		return fmt.Errorf("etch prompt returned empty output")
+	}
+
+	out, err := json.MarshalIndent(PromptData{Bootstrap: bootstrap, Context: context}, "", "  ")
+	if err != nil {
+		return fmt.Errorf("marshaling prompt JSON: %w", err)
+	}
+	out = append(out, '\n')
+
+	if err := os.MkdirAll(filepath.Dir(output), 0o755); err != nil {
+		return fmt.Errorf("creating prompt data dir: %w", err)
+	}
+	return os.WriteFile(output, out, 0o644)
 }
 
 func commandOutput(dir, name string, args ...string) (string, error) {

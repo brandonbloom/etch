@@ -4,5 +4,6 @@
 /site/resources/
 /site/data/commands.json
 /site/data/reference.json
+/site/data/prompts.json
 /site/content/reference.md
 /site/.hugo_build.lock

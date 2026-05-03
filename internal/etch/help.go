@@ -59,7 +59,7 @@ Global flags:
   --version              print version and exit
 
 Use "etch help" for common commands, "etch help scripts" for batch scripts,
-or "etch help --all" for advanced commands too.
+"etch help --all" for advanced commands, or "etch prompt" for agent setup.
 `
 
 const (
@@ -69,7 +69,7 @@ const (
 	helpGroupFamilies   = "Command Families"
 	helpGroupExecution  = "Execution and Safety"
 	helpCommandSummary  = "etch mutates structured files and commits each successful mutating invocation."
-	helpGlobalTopicText = "model, invocation, scripts, selectors, values, formats, addressing, fields, files, guards, section, tasks, table, plans, commits, security, conflicts"
+	helpGlobalTopicText = "model, invocation, prompts, scripts, selectors, values, formats, addressing, fields, files, guards, section, tasks, table, plans, commits, security, conflicts"
 )
 
 func printHelp(w io.Writer, topic string, all bool) error {
@@ -178,7 +178,13 @@ func commandHelpTopic(all bool) HelpTopic {
 }
 
 func helpCommandRows(all bool) []HelpCommandRow {
-	var rows []HelpCommandRow
+	rows := []HelpCommandRow{
+		{
+			Signature:   "prompt [--context|--bootstrap]",
+			Class:       ClassIntrospection,
+			Description: "Print agent setup or durable context prompts.",
+		},
+	}
 	for _, v := range verbCatalog() {
 		if !v.Canonical || (!all && isPlumbingVerb(v)) {
 			continue
@@ -196,6 +202,7 @@ func helpTopicLinks() []HelpTopicLink {
 	return []HelpTopicLink{
 		{Title: "Model", ID: "model"},
 		{Title: "Invocation", ID: "invocation"},
+		{Title: "Prompts", ID: "prompts"},
 		{Title: "Scripts", ID: "scripts"},
 		{Title: "Selectors", ID: "selectors"},
 		{Title: "Values", ID: "values"},
@@ -246,6 +253,22 @@ func namedHelpTopics() []HelpTopic {
 				{Kind: "paragraph", Text: "Existing source paths must be tracked by default. --untracked admits untracked source paths under the same CWD boundary; those paths become tracked if the invocation commits."},
 				{Kind: "paragraph", Text: "--plan emits canonical JSON and --dry-run emits a git-am-compatible patch preview without side effects. --no-checkout skips post-commit checkout synchronization. --retries controls optimistic ref-CAS retry attempts."},
 				{Kind: "paragraph", Text: "--message replaces the generated commit message. --subject-prefix, --subject-suffix, --body-prefix, and --body-suffix modify generated messages and are mutually exclusive with --message."},
+			},
+		},
+		{
+			ID:         "prompts",
+			Title:      "Prompts",
+			Group:      helpGroupBasics,
+			Invocation: "etch help prompts",
+			Summary:    "etch prompt prints agent-facing Markdown. By default it prints a one-shot bootstrap prompt; --context prints durable instructions for future agent context.",
+			Aliases:    []string{"prompts", "prompt"},
+			Blocks: []HelpBlock{
+				{Kind: "heading", Heading: "Commands"},
+				{Kind: "pre", Text: `  etch prompt
+  etch prompt --bootstrap
+  etch prompt --context`},
+				{Kind: "paragraph", Text: "etch prompt has no side effects. The default bootstrap prompt is meant to start an agent, such as codex \"$(etch prompt)\" or claude \"$(etch prompt)\", so the agent can install durable etch guidance into this repository's agent instructions."},
+				{Kind: "paragraph", Text: "etch prompt --context prints the durable guidance directly. Add that text to AGENTS.md, CLAUDE.md, or another project instruction file when you want future agents to know when and how to use etch."},
 			},
 		},
 		{

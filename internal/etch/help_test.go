@@ -8,7 +8,7 @@ import (
 )
 
 func TestHelpTopicsSnapshotSmoke(t *testing.T) {
-	for _, topic := range []string{"", "model", "invocation", "scripts", "selectors", "values", "formats", "fields", "files", "guards", "plans", "commits", "security", "conflicts", "addressing", "markdown", "section", "tasks", "table", "csv"} {
+	for _, topic := range []string{"", "model", "invocation", "prompts", "prompt", "scripts", "selectors", "values", "formats", "fields", "files", "guards", "plans", "commits", "security", "conflicts", "addressing", "markdown", "section", "tasks", "table", "csv"} {
 		var out bytes.Buffer
 		if err := printHelp(&out, topic, false); err != nil {
 			t.Fatalf("help %q: %v", topic, err)
@@ -30,7 +30,7 @@ func TestDefaultHelpTableExcludesPlumbing(t *testing.T) {
 			t.Fatalf("default help contains plumbing command %q:\n%s", hidden, text)
 		}
 	}
-	for _, shown := range []string{"set <path>", "table set", "section replace", "section append", "section prepend", "task close", "list add", "replace <path>"} {
+	for _, shown := range []string{"prompt [--context|--bootstrap]", "set <path>", "table set", "section replace", "section append", "section prepend", "task close", "list add", "replace <path>"} {
 		if !strings.Contains(text, shown) {
 			t.Fatalf("default help missing porcelain command %q:\n%s", shown, text)
 		}
@@ -115,6 +115,49 @@ func TestShortHelpMentionsCoreFlags(t *testing.T) {
 			t.Fatalf("short help missing %s", want)
 		}
 	}
+	if !strings.Contains(shortHelp, "etch prompt") {
+		t.Fatalf("short help missing prompt guidance:\n%s", shortHelp)
+	}
+}
+
+func TestPromptThroughCLI(t *testing.T) {
+	var out, errb bytes.Buffer
+	code, err := runCLI([]string{"prompt"}, &out, &errb)
+	if err != nil || code != exitOK {
+		t.Fatalf("prompt code=%d err=%v stderr=%s", code, err, errb.String())
+	}
+	text := out.String()
+	for _, want := range []string{"# etch Bootstrap Prompt", "etch prompt --context", "# etch Agent Context"} {
+		if !strings.Contains(text, want) {
+			t.Fatalf("prompt output missing %q:\n%s", want, text)
+		}
+	}
+
+	out.Reset()
+	errb.Reset()
+	code, err = runCLI([]string{"prompt", "--context"}, &out, &errb)
+	if err != nil || code != exitOK {
+		t.Fatalf("prompt --context code=%d err=%v stderr=%s", code, err, errb.String())
+	}
+	text = out.String()
+	for _, want := range []string{"# etch Agent Context", "etch help --all", "conflicts"} {
+		if !strings.Contains(text, want) {
+			t.Fatalf("prompt --context output missing %q:\n%s", want, text)
+		}
+	}
+	if strings.Contains(text, "# etch Bootstrap Prompt") {
+		t.Fatalf("prompt --context included bootstrap wrapper:\n%s", text)
+	}
+	if len(text) > 2400 {
+		t.Fatalf("prompt --context should stay terse, got %d bytes:\n%s", len(text), text)
+	}
+
+	out.Reset()
+	errb.Reset()
+	code, err = runCLI([]string{"prompt", "--context", "--bootstrap"}, &out, &errb)
+	if err == nil || code != exitUsage {
+		t.Fatalf("prompt conflicting flags code=%d err=%v stdout=%s stderr=%s", code, err, out.String(), errb.String())
+	}
 }
 
 func TestScriptsHelpIncludesQuotingExamples(t *testing.T) {
@@ -156,6 +199,18 @@ func TestShellCompletionThroughCLI(t *testing.T) {
 	for _, want := range []string{"--plan\n", "-n\n", "--subject-prefix\n", "--body-suffix\n"} {
 		if !strings.Contains(out.String(), want) {
 			t.Fatalf("flag completion missing %q:\n%s", want, out.String())
+		}
+	}
+
+	out.Reset()
+	errb.Reset()
+	code, err = runCLI([]string{"prompt", "-", "--generate-shell-completion"}, &out, &errb)
+	if err != nil || code != exitOK {
+		t.Fatalf("prompt flag completion code=%d err=%v stderr=%s", code, err, errb.String())
+	}
+	for _, want := range []string{"--context\n", "--bootstrap\n"} {
+		if !strings.Contains(out.String(), want) {
+			t.Fatalf("prompt flag completion missing %q:\n%s", want, out.String())
 		}
 	}
 }

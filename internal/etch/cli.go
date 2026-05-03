@@ -132,6 +132,28 @@ func runParsedCLI(opts GlobalOptions, rest []string, stdout, stderr io.Writer) (
 			return exitOK, jsonOut(stdout, BuildHelpReference())
 		}
 		return exitOK, printHelp(stdout, topic, all)
+	case "prompt":
+		contextPrompt := false
+		bootstrapPrompt := false
+		for _, arg := range rest[1:] {
+			switch arg {
+			case "--context":
+				contextPrompt = true
+			case "--bootstrap":
+				bootstrapPrompt = true
+			default:
+				return exitUsage, usagef("usage: etch prompt [--context|--bootstrap]")
+			}
+		}
+		if contextPrompt && bootstrapPrompt {
+			return exitUsage, usagef("usage: etch prompt [--context|--bootstrap]")
+		}
+		if contextPrompt {
+			fmt.Fprint(stdout, agentContextText())
+			return exitOK, nil
+		}
+		fmt.Fprint(stdout, agentBootstrapText())
+		return exitOK, nil
 	case "version":
 		if len(rest) != 1 {
 			return exitUsage, usagef("usage: etch version")
@@ -248,6 +270,7 @@ func commandCompletions(args []string) []string {
 func commandCompletionPaths() [][]string {
 	paths := [][]string{
 		{"help"},
+		{"prompt"},
 		{"run"},
 		{"verbs"},
 		{"version"},
@@ -278,6 +301,9 @@ func completionPathHasPrefix(path, prefix []string) bool {
 }
 
 func commandLocalFlagCompletions(args []string) []string {
+	if len(args) == 1 && args[0] == "prompt" {
+		return []string{"--context", "--bootstrap"}
+	}
 	match, ok := matchCommandSpec(args)
 	if !ok {
 		return nil
