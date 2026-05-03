@@ -89,6 +89,30 @@ func TestDecodeAssignmentSetExpandsOperations(t *testing.T) {
 	}
 }
 
+func TestDecodeStructuredCommandsRecordFormat(t *testing.T) {
+	tests := []struct {
+		name string
+		args []string
+		want string
+	}{
+		{name: "porcelain", args: []string{"set", "state.json", "status", "complete"}, want: "infer"},
+		{name: "json plumbing", args: []string{"json", "set", "state.yaml", "status", "complete"}, want: "json"},
+		{name: "yaml plumbing", args: []string{"yaml", "set", "state.json", "status", "complete"}, want: "yaml"},
+		{name: "frontmatter plumbing", args: []string{"frontmatter", "set", "note.txt", "status", "complete"}, want: "frontmatter"},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			op, err := DecodeOperation(Statement{Tokens: tc.args})
+			if err != nil {
+				t.Fatal(err)
+			}
+			if op.Format != tc.want {
+				t.Fatalf("format = %q, want %q; op=%#v", op.Format, tc.want, op)
+			}
+		})
+	}
+}
+
 func TestDecodeAssignmentSetRejectsDuplicateTargets(t *testing.T) {
 	if _, err := DecodeOperations(Statement{Tokens: []string{"set", "state.json", "a=1", "$.a=2"}}); err == nil {
 		t.Fatal("duplicate assignment targets succeeded")

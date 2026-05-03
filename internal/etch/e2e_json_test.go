@@ -68,6 +68,82 @@ func TestE2EInvalidJSONInputErrorIsUserFacing(t *testing.T) {
 	}
 }
 
+func TestE2EStructuredPlumbingFormatOverridesExtension(t *testing.T) {
+	t.Run("json plumbing writes JSON to yaml extension", func(t *testing.T) {
+		dir := initRepo(t)
+		writeFile(t, dir, "data.yaml", `{"status":"open"}`+"\n")
+		commitAll(t, dir, "initial")
+
+		_, errb, code, err := runCLIInDir(t, dir, "json", "set", "data.yaml", "status", "complete")
+		if err != nil || code != exitOK {
+			t.Fatalf("runCLI code=%d err=%v stderr=%s", code, err, errb.String())
+		}
+		if got := testGit(t, dir, "show", "HEAD:data.yaml"); got != `{"status":"complete"}`+"\n" {
+			t.Fatalf("HEAD data.yaml = %q", got)
+		}
+	})
+
+	t.Run("yaml plumbing writes YAML to json extension", func(t *testing.T) {
+		dir := initRepo(t)
+		writeFile(t, dir, "data.json", "status: open\n")
+		commitAll(t, dir, "initial")
+
+		_, errb, code, err := runCLIInDir(t, dir, "yaml", "set", "data.json", "status", "complete")
+		if err != nil || code != exitOK {
+			t.Fatalf("runCLI code=%d err=%v stderr=%s", code, err, errb.String())
+		}
+		if got := testGit(t, dir, "show", "HEAD:data.json"); got != "status: complete\n" {
+			t.Fatalf("HEAD data.json = %q", got)
+		}
+	})
+
+	t.Run("json plumbing seeds missing yaml extension as JSON", func(t *testing.T) {
+		dir := initRepo(t)
+		writeFile(t, dir, "README.md", "# hi\n")
+		commitAll(t, dir, "initial")
+
+		_, errb, code, err := runCLIInDir(t, dir, "json", "set", "generated.yaml", "status", "complete")
+		if err != nil || code != exitOK {
+			t.Fatalf("runCLI code=%d err=%v stderr=%s", code, err, errb.String())
+		}
+		if got := testGit(t, dir, "show", "HEAD:generated.yaml"); !strings.Contains(got, `"status":"complete"`) && !strings.Contains(got, `"status": "complete"`) {
+			t.Fatalf("HEAD generated.yaml = %q", got)
+		}
+	})
+
+	t.Run("yaml plumbing seeds missing json extension as YAML", func(t *testing.T) {
+		dir := initRepo(t)
+		writeFile(t, dir, "README.md", "# hi\n")
+		commitAll(t, dir, "initial")
+
+		_, errb, code, err := runCLIInDir(t, dir, "yaml", "set", "generated.json", "status", "complete")
+		if err != nil || code != exitOK {
+			t.Fatalf("runCLI code=%d err=%v stderr=%s", code, err, errb.String())
+		}
+		got := testGit(t, dir, "show", "HEAD:generated.json")
+		if !strings.Contains(got, "status: complete") || strings.Contains(got, `"status"`) {
+			t.Fatalf("HEAD generated.json = %q", got)
+		}
+	})
+
+	t.Run("json plumbing rejects non-json yaml extension content", func(t *testing.T) {
+		dir := initRepo(t)
+		writeFile(t, dir, "data.yaml", "status: open\n")
+		head := commitAll(t, dir, "initial")
+
+		_, errb, code, err := runCLIInDir(t, dir, "json", "set", "data.yaml", "status", "complete")
+		if err == nil || code != exitFailure {
+			t.Fatalf("runCLI code=%d err=%v stderr=%s", code, err, errb.String())
+		}
+		if !strings.Contains(err.Error(), "data.yaml is not valid JSON") {
+			t.Fatalf("error = %v", err)
+		}
+		if got := stringsTrim(testGit(t, dir, "rev-parse", "HEAD")); got != head {
+			t.Fatalf("failed JSON plumbing edit moved HEAD to %s", got)
+		}
+	})
+}
+
 func TestE2EJSONLAppendCommitsAndMaterializes(t *testing.T) {
 	dir := initRepo(t)
 	writeFile(t, dir, "events.jsonl", `{"kind":"base"}`+"\n")

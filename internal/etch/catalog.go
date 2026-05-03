@@ -617,6 +617,7 @@ func splitAssignmentItem(item string) (assignmentItem, error) {
 
 func decodeStructured(op Operation, format, verb string, args structuredValueArgs) (Operation, error) {
 	op.Verb, op.Kind, op.Path, op.Value, op.ValueMode = verb, "structured", args.Path, args.Value, args.Mode
+	op.Format = format
 	if verb == "append" {
 		op.Class = ClassNonIdempotent
 	} else {

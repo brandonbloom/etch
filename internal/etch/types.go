@@ -90,6 +90,7 @@ type Operation struct {
 	Verb       string          `json:"verb"`
 	Kind       string          `json:"-"`
 	Class      CommandClass    `json:"-"`
+	Format     string          `json:"-"`
 	Raw        []string        `json:"-"`
 	Loc        SourceLoc       `json:"-"`
 	Path       string          `json:"-"`
