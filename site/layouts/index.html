@@ -1,0 +1,14 @@
+{{ define "main" }}
+<div class="hero">
+  <h1>etch</h1>
+  <p class="tagline">Precise file mutations, automatic commits.<br>Built for agents working against git repos.</p>
+  <div class="actions">
+    <a href="{{ "quickstart/" | relURL }}" class="primary">Quickstart</a>
+    <a href="{{ "guide/" | relURL }}" class="secondary">Read the guide</a>
+  </div>
+</div>
+
+<section class="content">
+  {{ .Content }}
+</section>
+{{ end }}

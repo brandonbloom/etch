@@ -1,0 +1,6 @@
+cat: Files
+name: copy
+syntax: "etch copy <src> <dst>"
+desc: Copy a file path.
+example: "etch copy templates/default.md tasks/new-task.md"
+verify: false

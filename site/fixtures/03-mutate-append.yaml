@@ -1,0 +1,18 @@
+cat: Mutate
+name: append
+syntax: "etch append <file> <selector> <value>"
+desc: Append a value to an array. Not idempotent — always adds.
+example: "etch append log.json entries --json '{\"event\":\"sync\"}'"
+file: log.json
+before: |
+  {
+    "entries": [
+      {"event": "start"}
+    ]
+  }
+args:
+  - append
+  - log.json
+  - entries
+  - --json
+  - '{"event":"sync"}'

@@ -1,0 +1,16 @@
+cat: Mutate
+name: delete
+syntax: |-
+  etch delete <file> <selector>
+  etch delete <file>
+desc: Delete a key from structured data, or delete an entire file.
+example: "etch delete config.yaml old_key"
+file: config.yaml
+before: |
+  db_host: localhost
+  old_key: unused
+  timeout: 30
+args:
+  - delete
+  - config.yaml
+  - old_key

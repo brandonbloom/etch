@@ -26,7 +26,11 @@ func evalStructuredBytes(path, part, selector, verb, rawValue string, valueMode 
 		}
 		return evalFrontmatter(path, selector, verb, value, before)
 	case isJSONPath(path):
-		return evalJSON(selector, verb, rawValue, valueMode, before)
+		out, changed, err := evalJSON(selector, verb, rawValue, valueMode, before)
+		if err != nil {
+			return nil, false, pathJSONInputParseError(path, err)
+		}
+		return out, changed, nil
 	case isYAMLPath(path):
 		value, err := parseStructuredValue(rawValue, valueMode)
 		if err != nil {

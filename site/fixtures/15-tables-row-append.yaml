@@ -1,0 +1,16 @@
+cat: Tables
+name: table row append
+syntax: "etch table row append <file> '<row-json>'"
+desc: Append a row to a CSV or Markdown pipe table.
+example: "etch table row append data.csv '{\"id\":\"4\",\"status\":\"open\",\"owner\":\"dave\"}'"
+file: data.csv
+before: |
+  id,status,owner
+  1,done,alice
+  2,closed,bob
+args:
+  - table
+  - row
+  - append
+  - data.csv
+  - '{"id":"4","status":"open","owner":"dave"}'

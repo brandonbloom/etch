@@ -1,0 +1,27 @@
+cat: Sections
+name: section replace
+syntax: |-
+  etch section replace <file> <heading> <content>
+  etch section replace <file> <heading> <<'EOF'
+  ...
+  EOF
+desc: Replace everything under a heading until the next heading of equal or higher level.
+example: |-
+  etch section replace notes.md "## Summary" <<'EOF'
+  Project on track. Next: May 15.
+  EOF
+file: notes.md
+before: |
+  ## Summary
+
+  Old summary here.
+
+  ## Details
+
+  Some details.
+args:
+  - section
+  - replace
+  - notes.md
+  - "## Summary"
+  - "Project on track. Next: May 15."

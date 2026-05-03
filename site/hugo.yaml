@@ -1,0 +1,31 @@
+baseURL: https://brandonbloom.github.io/etch/
+locale: en-us
+title: etch
+enableRobotsTXT: true
+
+menu:
+  main:
+    - name: Guide
+      url: /guide/
+      weight: 1
+    - name: Cheatsheet
+      url: /cheatsheet/
+      weight: 2
+    - name: Quickstart
+      url: /quickstart/
+      weight: 3
+    - name: GitHub
+      url: https://github.com/brandonbloom/etch
+      weight: 4
+      params:
+        external: true
+
+markup:
+  highlight:
+    noClasses: false
+  goldmark:
+    renderer:
+      unsafe: true
+
+params:
+  description: Precise file mutations, automatic commits. Built for agents working against git repos.

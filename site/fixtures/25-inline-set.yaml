@@ -1,0 +1,20 @@
+cat: Inline fields
+name: set (inline)
+syntax: |-
+  etch set <file> <field> <value> --task <text>
+  etch set <file> <field> <value> --section <heading> --tail
+desc: Set Dataview-style inline fields in Markdown body text. Use --task or --section to target location.
+example: 'etch set tasks/todo.md done "2026-05-02" --task "Send follow-up"'
+file: tasks/todo.md
+before: |
+  ## Actions
+
+  - [ ] Send follow-up
+  - [ ] Review draft
+args:
+  - set
+  - tasks/todo.md
+  - done
+  - "2026-05-02"
+  - --task
+  - "Send follow-up"

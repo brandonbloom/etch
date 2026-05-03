@@ -34,6 +34,40 @@ func TestE2EJSONSetCommitsAndMaterializes(t *testing.T) {
 	}
 }
 
+func TestE2EInvalidJSONInputErrorIsUserFacing(t *testing.T) {
+	tests := []struct {
+		name  string
+		input string
+	}{
+		{name: "syntax", input: "not json\n"},
+		{name: "trailing data", input: "{} true\n"},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			dir := initRepo(t)
+			writeFile(t, dir, "state.json", tc.input)
+			head := commitAll(t, dir, "initial")
+
+			_, errb, code, err := runCLIInDir(t, dir, "set", "state.json", "status", "complete")
+			if err == nil || code != exitFailure {
+				t.Fatalf("runCLI code=%d err=%v stderr=%s", code, err, errb.String())
+			}
+			msg := err.Error()
+			if !strings.Contains(msg, "state.json is not valid JSON (parse error near offset ") {
+				t.Fatalf("error = %v", err)
+			}
+			for _, internal := range []string{"jsontext", "invalid character", "literal null", "trailing data"} {
+				if strings.Contains(msg, internal) {
+					t.Fatalf("error leaked parser detail %q: %v", internal, err)
+				}
+			}
+			if got := stringsTrim(testGit(t, dir, "rev-parse", "HEAD")); got != head {
+				t.Fatalf("failed JSON edit moved HEAD to %s", got)
+			}
+		})
+	}
+}
+
 func TestE2EJSONLAppendCommitsAndMaterializes(t *testing.T) {
 	dir := initRepo(t)
 	writeFile(t, dir, "events.jsonl", `{"kind":"base"}`+"\n")

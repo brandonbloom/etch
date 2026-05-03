@@ -1,0 +1,134 @@
+{{ define "main" }}
+<article class="content">
+  <h1>Quickstart</h1>
+  <p>Copy this into your project's <code>CLAUDE.md</code> (or equivalent agent instructions file) to get etch working immediately.</p>
+
+  <h2>1. Install</h2>
+  <pre><code>go install github.com/brandonbloom/etch/cmd/etch@latest</code></pre>
+
+  <h2>2. Allow-list (Claude Code)</h2>
+  <p>Add to <code>.claude/settings.json</code>:</p>
+  <pre><code>{
+  "permissions": {
+    "allow": [
+      "Bash(etch *)"
+    ]
+  }
+}</code></pre>
+
+  <h2>3. Seed prompt</h2>
+  <p>Add this to your project's <code>CLAUDE.md</code>:</p>
+
+  <div class="copy-wrap">
+    <button class="copy-btn" onclick="copyPrompt(this)">Copy</button>
+    <pre id="seed-prompt"><code># etch — structured file mutations
+
+Use `etch` for all mechanical edits to data files (JSON, YAML, Markdown,
+JSONL, CSV) in this repo. Do not construct patches or use sed/awk for
+these operations. Each etch invocation auto-commits.
+
+## When to use etch
+
+- Setting/deleting frontmatter fields or JSON/YAML keys
+- Appending to arrays or JSONL logs
+- Replacing/appending to Markdown sections
+- Opening/closing task checkboxes
+- Adding list or task items
+- Table operations (set cells, add/delete rows and columns)
+- Creating, moving, or copying files
+
+## Key commands
+
+```
+etch set &lt;file&gt; &lt;selector&gt; &lt;value&gt;         # set a field
+etch delete &lt;file&gt; &lt;selector&gt;               # delete a field
+etch append &lt;file&gt; &lt;selector&gt; &lt;value&gt;      # append to array
+etch add &lt;file&gt; &lt;selector&gt; &lt;value&gt;         # idempotent array add
+etch remove &lt;file&gt; &lt;selector&gt; &lt;value&gt;      # idempotent array remove
+etch section replace &lt;file&gt; &lt;heading&gt; &lt;&lt;EOF  # replace section body
+etch section append &lt;file&gt; &lt;heading&gt; &lt;&lt;EOF   # append to section
+etch task close &lt;file&gt; &lt;text&gt;               # check off a task
+etch task open &lt;file&gt; &lt;text&gt;                # uncheck a task
+etch task add &lt;file&gt; &lt;text&gt;                 # add a new task
+etch list add &lt;file&gt; &lt;text&gt;                 # add a list item
+etch create &lt;file&gt;                          # create a new file
+etch append &lt;file.jsonl&gt; '{"key":"value"}'  # append JSONL record
+```
+
+## Multi-operation transactions
+
+Group operations into a single atomic commit:
+
+```
+etch run - &lt;&lt;'SCRIPT'
+set tasks/review.md status complete
+set tasks/review.md completed "2026-05-02"
+section append journal/today.md "## Log" &lt;&lt;EOF
+- Completed review task
+EOF
+SCRIPT
+```
+
+## Values
+
+Values are strings by default. Use `--json` for non-string types:
+
+```
+etch set f.json count --json 42
+etch set f.json enabled --json true
+etch set f.json tags --json '["a","b"]'
+```
+
+Or use assignment syntax for multiple fields:
+
+```
+etch set f.json status=done priority:=1
+```
+
+## Inline fields (Markdown)
+
+Target Dataview-style inline fields with address flags:
+
+```
+etch set task.md done "2026-05-02" --task "Send follow-up"
+etch set page.md status "reviewed" --section "## Notes" --tail
+```
+
+## Reference
+
+Run `etch help` for full documentation. Key topics:
+`etch help model` `etch help selectors` `etch help values`
+`etch help fields` `etch help scripts` `etch help plans`</code></pre>
+  </div>
+
+  <h2>What this gives you</h2>
+
+  <ul>
+    <li>The agent uses etch instead of patches for mechanical edits — fewer tokens, fewer errors</li>
+    <li>Every mutation is an atomic git commit with an auto-generated message</li>
+    <li>Multiple agents can work on the same repo concurrently (optimistic locking with automatic retry)</li>
+    <li>No network, no process spawning, no filesystem escapes — safe to allow-list</li>
+  </ul>
+
+  <h2>Customize for your repo</h2>
+
+  <p>The seed prompt above is generic. You can tailor it by adding:</p>
+  <ul>
+    <li><strong>File conventions</strong> — which directories hold what, expected frontmatter fields</li>
+    <li><strong>Preferred operations</strong> — if the agent should always use scripts for multi-step updates</li>
+    <li><strong>Guard patterns</strong> — e.g. "always check <code>etch contains</code> before mutating status fields"</li>
+  </ul>
+
+</article>
+
+<script>
+function copyPrompt(btn) {
+  const pre = document.getElementById('seed-prompt');
+  const text = pre.textContent;
+  navigator.clipboard.writeText(text).then(() => {
+    btn.textContent = 'Copied!';
+    setTimeout(() => { btn.textContent = 'Copy'; }, 2000);
+  });
+}
+</script>
+{{ end }}

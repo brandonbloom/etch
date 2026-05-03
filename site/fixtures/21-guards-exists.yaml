@@ -1,0 +1,6 @@
+cat: Guards
+name: exists
+syntax: "etch exists <file>"
+desc: Assert that a path exists. Guards never commit. Use in scripts to gate mutations.
+example: "etch exists state.json"
+verify: false

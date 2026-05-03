@@ -1,0 +1,18 @@
+cat: Tables
+name: table column add
+syntax: "etch table column add <file> <col> [--default <val>]"
+desc: Add a new column with an optional default value.
+example: "etch table column add data.csv priority --default medium"
+file: data.csv
+before: |
+  id,status
+  1,open
+  2,closed
+args:
+  - table
+  - column
+  - add
+  - data.csv
+  - priority
+  - --default
+  - medium

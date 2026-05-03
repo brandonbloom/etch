@@ -1,0 +1,16 @@
+cat: Tasks
+name: task close
+syntax: "etch task close <file> <text>"
+desc: Check off a task checkbox. Matches by text content.
+example: 'etch task close tasks/sprint.md "Write tests"'
+file: tasks/sprint.md
+before: |
+  ## In progress
+
+  - [ ] Write tests
+  - [ ] Review PR
+args:
+  - task
+  - close
+  - tasks/sprint.md
+  - "Write tests"

@@ -1,0 +1,19 @@
+cat: Mutate
+name: set
+syntax: |-
+  etch set <file> <selector> <value>
+  etch set <file> <sel>=<val> <sel>:=<json> ...
+desc: Set one or more structured values. Strings by default; use --json or := for typed values.
+example: "etch set state.json status=complete priority:=1"
+file: state.json
+before: |
+  {
+    "status": "open",
+    "priority": 0,
+    "labels": ["agent"]
+  }
+args:
+  - set
+  - state.json
+  - status=complete
+  - "priority:=1"

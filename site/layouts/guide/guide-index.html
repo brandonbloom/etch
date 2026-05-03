@@ -1,0 +1,15 @@
+{{ define "main" }}
+<article class="content">
+  <h1>Guide</h1>
+  <p>Learn when and how to use etch.</p>
+
+  <div class="guide-nav">
+    {{ range .Pages.ByWeight }}
+    <a href="{{ .RelPermalink }}">
+      <span class="nav-title">{{ .Title }}</span>
+      {{ with .Description }}<span class="nav-desc">{{ . }}</span>{{ end }}
+    </a>
+    {{ end }}
+  </div>
+</article>
+{{ end }}

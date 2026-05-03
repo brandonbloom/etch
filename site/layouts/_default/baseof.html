@@ -1,0 +1,31 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>{{ if not .IsHome }}{{ .Title }} | {{ end }}etch</title>
+  <meta name="description" content="{{ with .Description }}{{ . }}{{ else }}{{ .Site.Params.description }}{{ end }}">
+  {{ $style := resources.Get "css/style.css" | minify }}
+  <link rel="stylesheet" href="{{ $style.RelPermalink }}">
+</head>
+<body>
+  <nav class="nav">
+    <div class="container nav-inner">
+      <a href="{{ .Site.Home.RelPermalink }}" class="nav-logo">etch</a>
+      <div class="nav-links">
+        {{ range .Site.Menus.main }}
+        <a href="{{ .URL | relURL }}"{{ with .Params.external }} target="_blank" rel="noopener"{{ end }}{{ if $.IsMenuCurrent "main" . }} class="active"{{ end }}>{{ .Name }}</a>
+        {{ end }}
+      </div>
+    </div>
+  </nav>
+  <main class="container">
+    {{ block "main" . }}{{ end }}
+  </main>
+  <footer class="footer">
+    <div class="container">
+      <p>etch is open-source software. <a href="https://github.com/brandonbloom/etch">GitHub</a></p>
+    </div>
+  </footer>
+</body>
+</html>

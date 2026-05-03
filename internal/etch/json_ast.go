@@ -2,10 +2,10 @@ package etch
 
 import (
 	"bytes"
+	"encoding/json/jsontext"
+	"errors"
 	"fmt"
 	"unicode/utf8"
-
-	"encoding/json/jsontext"
 
 	"github.com/brandonbloom/etch/internal/jsonx"
 )
@@ -18,6 +18,35 @@ type jsonNode struct {
 	End     int
 	Members []jsonMember
 	Elems   []*jsonNode
+}
+
+type jsonInputParseError struct {
+	offset int64
+	err    error
+}
+
+func (e *jsonInputParseError) Error() string { return e.err.Error() }
+
+func (e *jsonInputParseError) Unwrap() error { return e.err }
+
+func jsonInputParseErrorAt(err error, fallbackOffset int64) error {
+	offset := fallbackOffset
+	var syntactic *jsontext.SyntacticError
+	if errors.As(err, &syntactic) {
+		offset = syntactic.ByteOffset
+	}
+	return &jsonInputParseError{offset: offset, err: err}
+}
+
+func pathJSONInputParseError(path string, err error) error {
+	var parseErr *jsonInputParseError
+	if !errors.As(err, &parseErr) {
+		return err
+	}
+	if path == "" {
+		path = "JSON input"
+	}
+	return failf("%s is not valid JSON (parse error near offset %d)", path, parseErr.offset)
 }
 
 type jsonMember struct {
@@ -66,10 +95,10 @@ func decodeJSONSpans(raw []byte) (*jsonNode, error) {
 	}
 	node, err := d.decodeValue()
 	if err != nil {
-		return nil, err
+		return nil, jsonInputParseErrorAt(err, d.dec.InputOffset())
 	}
-	if skipJSONWhitespace(raw, int(d.dec.InputOffset())) != len(raw) {
-		return nil, failf("JSON input contains trailing data")
+	if trailing := skipJSONWhitespace(raw, int(d.dec.InputOffset())); trailing != len(raw) {
+		return nil, jsonInputParseErrorAt(fmt.Errorf("trailing data"), int64(trailing))
 	}
 	return node, nil
 }

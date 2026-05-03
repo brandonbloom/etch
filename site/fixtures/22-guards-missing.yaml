@@ -1,0 +1,6 @@
+cat: Guards
+name: missing
+syntax: "etch missing <file>"
+desc: Assert that a path does not exist.
+example: "etch missing state.json"
+verify: false

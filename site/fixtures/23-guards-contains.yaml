@@ -1,0 +1,6 @@
+cat: Guards
+name: contains
+syntax: "etch contains <file> <literal>"
+desc: Assert that file bytes contain a literal string.
+example: "etch contains state.json open"
+verify: false

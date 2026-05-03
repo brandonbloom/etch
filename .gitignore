@@ -1,2 +1,6 @@
 /bin/
 /.cache/
+/site/public/
+/site/resources/
+/site/data/commands.json
+/site/.hugo_build.lock

@@ -1,0 +1,24 @@
+cat: Sections
+name: section prepend
+syntax: |-
+  etch section prepend <file> <heading> <content>
+  etch section prepend <file> <heading> <<'EOF'
+  ...
+  EOF
+desc: Prepend content at the start of a section, right after the heading.
+example: |-
+  etch section prepend journal.md "## Log" <<'EOF'
+  - 08:00 Early check-in
+  EOF
+file: journal.md
+before: |
+  ## Log
+
+  - 09:00 Morning review
+  - 10:00 Standup
+args:
+  - section
+  - prepend
+  - journal.md
+  - "## Log"
+  - "- 08:00 Early check-in"

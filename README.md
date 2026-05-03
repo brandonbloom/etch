@@ -341,7 +341,8 @@ Project layout:
 | `cmd/etch-validate` | Validation harness over fixture repositories. |
 | `internal/etch` | Parser, catalog, planner, Git backend, materializer, and format evaluators. |
 | `spec.md` | Design and behavior specification. |
-| `docs/` | Explainer site, deployed to GitHub Pages. |
+| `docs/proposals/` | Design decision documents. |
+| `site/` | Hugo site, built with `go tool hugo --source site`. |
 | `mise.toml` | Project environment and build task. |
 
 Useful local commands:

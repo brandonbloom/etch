@@ -1,0 +1,22 @@
+cat: Scripts
+name: run
+syntax: |-
+  etch run <script>
+  etch run - <<'SCRIPT'
+  ...
+  SCRIPT
+desc: Execute a batch of commands as one atomic commit. All-or-nothing — if any operation fails, no commit. No shell expansions.
+example: |-
+  etch run - <<'SCRIPT'
+  contains state.json open
+  set state.json status complete
+  SCRIPT
+file: state.json
+before: |
+  {"status":"open"}
+args:
+  - run
+  - "-"
+stdin: |
+  contains state.json open
+  set state.json status complete

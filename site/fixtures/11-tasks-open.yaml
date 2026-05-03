@@ -1,0 +1,16 @@
+cat: Tasks
+name: task open
+syntax: "etch task open <file> <text>"
+desc: Uncheck a task checkbox. Creates the task if a destination is addressed.
+example: 'etch task open tasks/sprint.md "Review PR"'
+file: tasks/sprint.md
+before: |
+  ## Done
+
+  - [x] Write tests
+  - [x] Review PR
+args:
+  - task
+  - open
+  - tasks/sprint.md
+  - "Review PR"

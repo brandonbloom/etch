@@ -1,0 +1,15 @@
+cat: Mutate
+name: remove
+syntax: "etch remove <file> <selector> <value>"
+desc: Ensure an array does not contain a value. No-op if absent.
+example: "etch remove config.json features dark-mode"
+file: config.json
+before: |
+  {
+    "features": ["dark-mode", "notifications"]
+  }
+args:
+  - remove
+  - config.json
+  - features
+  - dark-mode

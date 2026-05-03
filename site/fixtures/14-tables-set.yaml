@@ -1,0 +1,17 @@
+cat: Tables
+name: table set
+syntax: "etch table set <file> <range> <value>"
+desc: Set one or more table cells. Range selects rows and columns.
+example: "etch table set data.csv all,status done"
+file: data.csv
+before: |
+  id,status,owner
+  1,open,alice
+  2,closed,bob
+  3,open,carol
+args:
+  - table
+  - set
+  - data.csv
+  - all,status
+  - done

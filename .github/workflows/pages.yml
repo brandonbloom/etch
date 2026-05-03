@@ -3,7 +3,7 @@ name: Deploy to GitHub Pages
 on:
   push:
     branches: [main]
-    paths: [docs/**]
+    paths: [site/**]
 
 permissions:
   actions: read
@@ -22,7 +22,12 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - run: cp -r docs _site
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+      - run: go tool hugo --source site --minify
       - uses: actions/upload-pages-artifact@v3
+        with:
+          path: site/public
       - id: deployment
         uses: actions/deploy-pages@v4

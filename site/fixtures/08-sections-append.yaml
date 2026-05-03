@@ -1,0 +1,31 @@
+cat: Sections
+name: section append
+syntax: |-
+  etch section append <file> <heading> <content>
+  etch section append <file> <heading> <<'EOF'
+  ...
+  EOF
+desc: Append content at the end of a section, before the next heading.
+example: |-
+  etch section append journal.md "## Log" <<'EOF'
+  - 10:00 Standup
+  EOF
+file: journal.md
+before: |
+  ---
+  date: "2026-05-02"
+  ---
+
+  ## Log
+
+  - 09:00 Morning review
+
+  ## Notes
+
+  Remember to follow up.
+args:
+  - section
+  - append
+  - journal.md
+  - "## Log"
+  - "- 10:00 Standup"
