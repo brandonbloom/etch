@@ -33,6 +33,25 @@ type File struct {
 	Content string  `yaml:"content,omitempty" json:"-"`
 	Before  *string `json:"before"`
 	After   *string `json:"after"`
+	Stat    Stat    `json:"stat"`
+	Diff    []Diff  `json:"diff,omitempty"`
+}
+
+type Stat struct {
+	Status string `json:"status"`
+	Adds   int    `json:"adds"`
+	Dels   int    `json:"dels"`
+	Label  string `json:"label"`
+	AddBar string `json:"add_bar,omitempty"`
+	DelBar string `json:"del_bar,omitempty"`
+}
+
+type Diff struct {
+	Type       string `json:"type"`
+	BeforeLine int    `json:"before_line,omitempty"`
+	AfterLine  int    `json:"after_line,omitempty"`
+	Marker     string `json:"marker"`
+	Text       string `json:"text"`
 }
 
 type Command struct {
@@ -111,10 +130,6 @@ func main() {
 			beforePtr = results[0].Before
 			afterPtr = results[0].After
 		}
-		var allResults []File
-		if len(results) > 1 {
-			allResults = results
-		}
 
 		fmt.Fprintf(os.Stderr, " ok\n")
 		commands = append(commands, Command{
@@ -127,7 +142,7 @@ func main() {
 			Before:  beforePtr,
 			After:   afterPtr,
 			Commit:  &commitMsg,
-			Results: allResults,
+			Results: results,
 		})
 	}
 
@@ -245,7 +260,10 @@ func verify(etchBin string, f *Fixture) (results []File, commitMsg string, err e
 		if before == nil && after == nil {
 			return nil, "", fmt.Errorf("result file %s is missing before and after", path)
 		}
-		results = append(results, File{Path: path, Before: before, After: after})
+		file := File{Path: path, Before: before, After: after}
+		file.Diff = diffLines(before, after)
+		file.Stat = diffStat(before, after, file.Diff)
+		results = append(results, file)
 	}
 
 	msgOut, err := gitOutput(tmp, "log", "-1", "--format=%s")
@@ -273,6 +291,132 @@ func gitOutput(dir string, args ...string) (string, error) {
 		return "", fmt.Errorf("git %s: %w", strings.Join(args, " "), err)
 	}
 	return string(out), nil
+}
+
+func diffLines(before, after *string) []Diff {
+	beforeLines := splitLines(before)
+	afterLines := splitLines(after)
+	switch {
+	case before == nil:
+		return allLines("add", "+", afterLines, false)
+	case after == nil:
+		return allLines("del", "-", beforeLines, true)
+	}
+
+	m, n := len(beforeLines), len(afterLines)
+	lcs := make([][]int, m+1)
+	for i := range lcs {
+		lcs[i] = make([]int, n+1)
+	}
+	for i := m - 1; i >= 0; i-- {
+		for j := n - 1; j >= 0; j-- {
+			if beforeLines[i] == afterLines[j] {
+				lcs[i][j] = lcs[i+1][j+1] + 1
+			} else if lcs[i+1][j] >= lcs[i][j+1] {
+				lcs[i][j] = lcs[i+1][j]
+			} else {
+				lcs[i][j] = lcs[i][j+1]
+			}
+		}
+	}
+
+	var rows []Diff
+	i, j := 0, 0
+	for i < m && j < n {
+		switch {
+		case beforeLines[i] == afterLines[j]:
+			rows = append(rows, Diff{Type: "eq", BeforeLine: i + 1, AfterLine: j + 1, Marker: " ", Text: beforeLines[i]})
+			i++
+			j++
+		case lcs[i+1][j] >= lcs[i][j+1]:
+			rows = append(rows, Diff{Type: "del", BeforeLine: i + 1, Marker: "-", Text: beforeLines[i]})
+			i++
+		default:
+			rows = append(rows, Diff{Type: "add", AfterLine: j + 1, Marker: "+", Text: afterLines[j]})
+			j++
+		}
+	}
+	for ; i < m; i++ {
+		rows = append(rows, Diff{Type: "del", BeforeLine: i + 1, Marker: "-", Text: beforeLines[i]})
+	}
+	for ; j < n; j++ {
+		rows = append(rows, Diff{Type: "add", AfterLine: j + 1, Marker: "+", Text: afterLines[j]})
+	}
+	return rows
+}
+
+func allLines(typ, marker string, lines []string, before bool) []Diff {
+	rows := make([]Diff, 0, len(lines))
+	for i, line := range lines {
+		row := Diff{Type: typ, Marker: marker, Text: line}
+		if before {
+			row.BeforeLine = i + 1
+		} else {
+			row.AfterLine = i + 1
+		}
+		rows = append(rows, row)
+	}
+	return rows
+}
+
+func splitLines(s *string) []string {
+	if s == nil || *s == "" {
+		return nil
+	}
+	return strings.Split(*s, "\n")
+}
+
+func diffStat(before, after *string, rows []Diff) Stat {
+	stat := Stat{}
+	switch {
+	case before == nil:
+		stat.Status = "created"
+	case after == nil:
+		stat.Status = "deleted"
+	default:
+		stat.Status = "modified"
+	}
+	for _, row := range rows {
+		switch row.Type {
+		case "add":
+			stat.Adds++
+		case "del":
+			stat.Dels++
+		}
+	}
+	total := stat.Adds + stat.Dels
+	if total == 0 {
+		if stat.Status == "created" {
+			stat.Label = "created empty file"
+		} else if stat.Status == "deleted" {
+			stat.Label = "deleted empty file"
+		} else {
+			stat.Label = "unchanged"
+		}
+		return stat
+	}
+	pieces := []string{}
+	if stat.Adds > 0 {
+		pieces = append(pieces, fmt.Sprintf("+%d", stat.Adds))
+		stat.AddBar = statBar("+", stat.Adds)
+	}
+	if stat.Dels > 0 {
+		pieces = append(pieces, fmt.Sprintf("-%d", stat.Dels))
+		stat.DelBar = statBar("-", stat.Dels)
+	}
+	lineWord := "lines"
+	if total == 1 {
+		lineWord = "line"
+	}
+	stat.Label = fmt.Sprintf("%d %s (%s)", total, lineWord, strings.Join(pieces, " "))
+	return stat
+}
+
+func statBar(ch string, count int) string {
+	if count > 24 {
+		return strings.Repeat(ch, 24) + "..."
+	}
+	return strings.Repeat(ch, count)
 }
 
 func fatal(format string, args ...any) {

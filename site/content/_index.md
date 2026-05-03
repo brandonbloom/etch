@@ -2,15 +2,11 @@
 title: etch
 ---
 
-## The problem
-
-Agents do mechanical edits through general-purpose patch tools: construct a diff, apply it, hope the whitespace is right, stage the file, write a commit message. Each step burns tokens and introduces failure modes. Hallucinated diffs. Off-by-one line numbers. Quoting mistakes.
-
-The edits themselves are boringly predictable: *set this frontmatter field, delete that YAML key, replace this markdown section, append to that list.* For structured, mechanical mutations on known formats, a diff is the wrong level of abstraction.
-
 ## What etch does
 
-etch is a small CLI for mechanical mutations to text and data files. It knows about a fixed set of formats --- Markdown, JSON, JSONL/NDJSON, YAML, CSV --- and a fixed set of operations on them. Every successful mutating call becomes a git commit.
+etch turns small structured changes into one command and one commit.
+
+It edits structured text by intent: set a field, replace a section, close a task, update a table, append a log. Every successful mutating call writes the file and commits the result.
 
 <pre class="demo"><span class="dim"># Mark a task as complete in a markdown file</span>
 <span class="prompt">$</span> etch set tasks/onboarding.md status complete
@@ -18,13 +14,27 @@ etch is a small CLI for mechanical mutations to text and data files. It knows ab
 <span class="dim">[main a1f9c3e] etch set tasks/onboarding.md status</span>
 <span class="dim"> 1 file changed, 1 insertion(+), 1 deletion(-)</span></pre>
 
-One command. The frontmatter field is updated and the result is committed. No patch construction, no staging, no commit message to write.
+One command. The frontmatter field is updated, the resulting bytes are written, and git history gets a deterministic, reviewable commit. No patch construction, no staging, no commit message to write.
 
-## Designed for agent home directories
+## Built for snapshot-style knowledge repos
 
-A new kind of repository is emerging: the **agent home directory**. Not a codebase that ships to production, but a git-backed knowledge store where agents and humans collaborate on structured data. Personal knowledge bases, task trackers, CRM directories, config-as-data repos.
+etch is for repos where small commits are the operating model: agent home directories, personal and team wikis, markdown task trackers, people/CRM directories, and config-as-data repos.
 
-In these repos, git is the database engine. Commits are the transaction log. Every small mutation should be its own commit, because git history *is* the audit trail. etch makes this workflow reliable and token-efficient.
+In these repos, git is the audit log. Every meaningful mutation should be small, explicit, and committed.
+
+etch supports common knowledge-repo formats including Markdown, JSON, JSONL/NDJSON, YAML, and CSV, with focused operations for fields, sections, tasks, lists, tables, files, and append-only logs.
+
+## One operation instead of a tool choreography
+
+Without etch, an agent usually has to inspect the file, construct an edit, apply it, inspect again, stage, inspect git state, and commit. Even when everything goes right, that is more tool calls than the actual change deserves. When it goes wrong, the agent is debugging patches instead of editing knowledge.
+
+etch collapses the edit, verification surface, and commit into the operation itself.
+
+## Concurrent by design
+
+Multiple agents and humans can work in the same repo without a lock server. etch reads committed HEAD, plans the edit, commits with compare-and-swap, and retries if another writer moved the branch.
+
+Everyone keeps rolling forward through git history.
 
 ## Install
 

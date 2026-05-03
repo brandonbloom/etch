@@ -5,20 +5,21 @@ enableRobotsTXT: true
 
 menu:
   main:
-    - name: Guide
-      url: /guide/
+    - name: Overview
+      url: /
       weight: 1
-    - name: Cheatsheet
-      url: /cheatsheet/
-      weight: 2
     - name: Quickstart
       url: /quickstart/
+      weight: 2
+    - name: Cheatsheet
+      url: /cheatsheet/
       weight: 3
     - name: GitHub
       url: https://github.com/brandonbloom/etch
       weight: 4
       params:
         external: true
+        icon: github
 
 markup:
   highlight:
@@ -28,4 +29,4 @@ markup:
       unsafe: true
 
 params:
-  description: Precise file mutations, automatic commits. Built for agents working against git repos.
+  description: Structured edits for git-backed knowledge.

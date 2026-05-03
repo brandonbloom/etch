@@ -25,6 +25,9 @@ jobs:
       - uses: actions/setup-go@v5
         with:
           go-version-file: go.mod
+      - run: mkdir -p ./bin
+      - run: go build -o ./bin/ ./cmd/...
+      - run: go run site/gen-commands.go
       - run: go tool hugo --source site --minify
       - uses: actions/upload-pages-artifact@v3
         with:

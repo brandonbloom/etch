@@ -78,6 +78,29 @@ body {
   transition: color 0.15s;
 }
 .nav-links a:hover, .nav-links a.active { color: var(--fg); }
+.nav-icon-link {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 22px;
+  height: 22px;
+}
+.nav-icon {
+  width: 18px;
+  height: 18px;
+  fill: currentColor;
+}
+.sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
+}
 
 /* Content */
 main { padding: 48px 0 80px; }
@@ -101,6 +124,11 @@ main { padding: 48px 0 80px; }
   margin-bottom: 8px;
 }
 .content p { margin-bottom: 16px; }
+.content .note {
+  margin-top: -8px;
+  font-size: 0.86rem;
+  color: var(--fg-dim);
+}
 .content a { color: var(--accent); text-decoration-color: var(--accent); }
 .content a:hover { color: var(--accent-hover); }
 .content ul, .content ol {
@@ -133,6 +161,7 @@ pre code { background: none; padding: 0; font-size: inherit; }
 
 /* Copy button */
 .copy-wrap { position: relative; }
+.copy-wrap pre { padding-right: 72px; }
 .copy-btn {
   position: absolute;
   top: 8px;
@@ -148,6 +177,40 @@ pre code { background: none; padding: 0; font-size: inherit; }
   transition: background 0.15s, color 0.15s;
 }
 .copy-btn:hover { background: var(--fg-dim); color: var(--bg); }
+
+/* Quickstart */
+.agent-config-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 16px;
+  align-items: stretch;
+  margin: 12px 0 36px;
+}
+.agent-config {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--surface);
+  padding: 16px;
+}
+.agent-config h3 {
+  margin-top: 0;
+}
+.agent-config p {
+  margin-bottom: 12px;
+}
+.agent-config .copy-wrap {
+  min-width: 0;
+  flex: 1;
+  display: flex;
+}
+.agent-config pre {
+  min-width: 0;
+  flex: 1;
+  margin-bottom: 0;
+}
 
 /* Hero (landing page) */
 .hero {
@@ -212,14 +275,30 @@ pre code { background: none; padding: 0; font-size: inherit; }
   overflow: hidden;
   margin-top: 8px;
 }
+.browser-static {
+  --cheatsheet-catbar-height: 46px;
+  overflow: visible;
+}
 .browser-cats {
   display: flex;
-  flex-wrap: wrap;
+  flex-wrap: nowrap;
   gap: 0;
+  overflow-x: auto;
+  scrollbar-width: none;
   border-bottom: 1px solid var(--border);
+  border-radius: 8px 8px 0 0;
   background: var(--surface);
 }
+.browser-cats::-webkit-scrollbar { display: none; }
+.browser-static .browser-cats {
+  position: sticky;
+  top: 0;
+  z-index: 30;
+  box-shadow: 0 1px 0 var(--border);
+}
 .cat-btn {
+  flex: 0 0 auto;
+  display: block;
   background: none;
   border: none;
   border-bottom: 2px solid transparent;
@@ -229,13 +308,35 @@ pre code { background: none; padding: 0; font-size: inherit; }
   font-weight: 600;
   color: var(--fg-dim);
   cursor: pointer;
+  text-decoration: none;
   transition: color 0.15s, border-color 0.15s;
 }
 .cat-btn:hover { color: var(--fg); }
 .cat-btn.active { color: var(--accent); border-bottom-color: var(--accent); }
 
-.browser-cat-desc {
+.browser-category {
+  scroll-margin-top: 150px;
+}
+.browser-category + .browser-category {
+  border-top: 1px solid var(--border);
+}
+.browser-category-chrome {
+  position: sticky;
+  top: var(--cheatsheet-catbar-height);
+  z-index: 20;
+  background: var(--bg);
+  border-bottom: 1px solid var(--border);
+}
+.browser-category-head {
   padding: 18px 24px 8px;
+}
+.browser-category-head h2 {
+  margin: 0 0 4px;
+  font-size: 1rem;
+  color: var(--accent);
+}
+.browser-category-head p {
+  margin: 0;
   font-size: 0.85rem;
   color: var(--fg-dim);
 }
@@ -246,9 +347,11 @@ pre code { background: none; padding: 0; font-size: inherit; }
   gap: 4px;
   width: fit-content;
   max-width: calc(100% - 48px);
-  margin: 0 24px 18px;
+  margin: 0 24px;
+  padding-bottom: 18px;
 }
 .cmd-btn {
+  display: inline-block;
   background: var(--code-bg);
   border: 1px solid var(--border);
   border-radius: 4px;
@@ -257,6 +360,7 @@ pre code { background: none; padding: 0; font-size: inherit; }
   font-size: 0.78rem;
   color: var(--fg-dim);
   cursor: pointer;
+  text-decoration: none;
   transition: background 0.15s, color 0.15s, border-color 0.15s;
 }
 .cmd-btn:hover { border-color: var(--accent); color: var(--fg); }
@@ -267,12 +371,26 @@ pre code { background: none; padding: 0; font-size: inherit; }
 }
 
 .browser-detail {
-  border-top: 1px solid var(--border);
-  padding: 20px;
-  min-height: 200px;
+  padding: 20px 24px 24px;
 }
 .detail-empty { color: var(--fg-dim); font-size: 0.9rem; text-align: center; padding: 48px 0; }
 
+.command-detail {
+  scroll-margin-top: 190px;
+  padding-bottom: 28px;
+  margin-bottom: 28px;
+  border-bottom: 1px solid var(--border);
+}
+.command-detail:last-child {
+  padding-bottom: 0;
+  margin-bottom: 0;
+  border-bottom: none;
+}
+.command-detail:target .detail-name {
+  text-decoration: underline;
+  text-decoration-thickness: 2px;
+  text-underline-offset: 4px;
+}
 .detail-head { margin-bottom: 20px; }
 .detail-name {
   font-family: var(--font-mono);
@@ -460,34 +578,6 @@ pre code { background: none; padding: 0; font-size: inherit; }
 .diff-hl-del { background: var(--diff-del-hl); border-radius: 2px; }
 .diff-hl-add { background: var(--diff-add-hl); border-radius: 2px; }
 
-/* Guide nav */
-.guide-nav {
-  display: flex;
-  flex-direction: column;
-  gap: 16px;
-  margin-top: 16px;
-}
-.guide-nav a {
-  display: block;
-  padding: 16px;
-  background: var(--surface);
-  border: 1px solid var(--border);
-  border-radius: 6px;
-  text-decoration: none;
-  transition: border-color 0.15s;
-}
-.guide-nav a:hover { border-color: var(--accent); }
-.guide-nav a .nav-title {
-  font-weight: 600;
-  color: var(--fg);
-  display: block;
-  margin-bottom: 2px;
-}
-.guide-nav a .nav-desc {
-  font-size: 0.88rem;
-  color: var(--fg-dim);
-}
-
 /* Section nav (prev/next) */
 .section-nav {
   display: flex;
@@ -520,4 +610,5 @@ pre code { background: none; padding: 0; font-size: inherit; }
   .hero h1 { font-size: 2.2rem; }
   .nav-links { gap: 16px; }
   .nav-links a { font-size: 0.82rem; }
+  .agent-config-grid { grid-template-columns: 1fr; }
 }

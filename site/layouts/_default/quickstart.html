@@ -1,26 +1,57 @@
 {{ define "main" }}
 <article class="content">
   <h1>Quickstart</h1>
-  <p>Copy this into your project's <code>CLAUDE.md</code> (or equivalent agent instructions file) to get etch working immediately.</p>
+  <p>Install etch, allow-list the command, then copy the seed prompt into your agent instructions file.</p>
 
   <h2>1. Install</h2>
-  <pre><code>go install github.com/brandonbloom/etch/cmd/etch@latest</code></pre>
+  <div class="copy-wrap">
+    <button class="copy-btn" onclick="copyBlock(this)">Copy</button>
+    <pre><code>go install github.com/brandonbloom/etch/cmd/etch@latest</code></pre>
+  </div>
 
-  <h2>2. Allow-list (Claude Code)</h2>
-  <p>Add to <code>.claude/settings.json</code>:</p>
-  <pre><code>{
+  <h2>2. Allow-list</h2>
+  <p>Add etch to your agent's command allow-list.</p>
+  <p class="note">etch is designed to be safe for agents to invoke with any arguments: it is scoped to the current git repo and every mutation becomes a commit.</p>
+
+  <div class="agent-config-grid">
+    <section class="agent-config">
+      <h3>Claude Code</h3>
+      <p>Add to <code>.claude/settings.json</code>:</p>
+      <div class="copy-wrap">
+        <button class="copy-btn" onclick="copyBlock(this)">Copy</button>
+        <pre><code>{
   "permissions": {
     "allow": [
       "Bash(etch *)"
     ]
   }
 }</code></pre>
+      </div>
+    </section>
+
+    <section class="agent-config">
+      <h3>Codex</h3>
+      <p>Add to <code>.codex/rules/etch.rules</code>:</p>
+      <div class="copy-wrap">
+        <button class="copy-btn" onclick="copyBlock(this)">Copy</button>
+        <pre><code>prefix_rule(
+    pattern = ["etch"],
+    decision = "allow",
+    justification = "Use etch in this snapshot-style repo",
+    match = [
+        "etch set notes.md status done",
+        "etch table row insert data.csv --after id=1 '{\"id\":\"2\"}'",
+    ],
+)</code></pre>
+      </div>
+    </section>
+  </div>
 
   <h2>3. Seed prompt</h2>
-  <p>Add this to your project's <code>CLAUDE.md</code>:</p>
+  <p>Add this to your project's <code>CLAUDE.md</code> or <code>AGENTS.md</code>:</p>
 
   <div class="copy-wrap">
-    <button class="copy-btn" onclick="copyPrompt(this)">Copy</button>
+    <button class="copy-btn" onclick="copyBlock(this)">Copy</button>
     <pre id="seed-prompt"><code># etch — structured file mutations
 
 Use `etch` for all mechanical edits to data files (JSON, YAML, Markdown,
@@ -40,19 +71,19 @@ these operations. Each etch invocation auto-commits.
 ## Key commands
 
 ```
-etch set &lt;file&gt; &lt;selector&gt; &lt;value&gt;         # set a field
-etch delete &lt;file&gt; &lt;selector&gt;               # delete a field
-etch append &lt;file&gt; &lt;selector&gt; &lt;value&gt;      # append to array
-etch add &lt;file&gt; &lt;selector&gt; &lt;value&gt;         # idempotent array add
-etch remove &lt;file&gt; &lt;selector&gt; &lt;value&gt;      # idempotent array remove
-etch section replace &lt;file&gt; &lt;heading&gt; &lt;&lt;EOF  # replace section body
-etch section append &lt;file&gt; &lt;heading&gt; &lt;&lt;EOF   # append to section
-etch task close &lt;file&gt; &lt;text&gt;               # check off a task
-etch task open &lt;file&gt; &lt;text&gt;                # uncheck a task
-etch task add &lt;file&gt; &lt;text&gt;                 # add a new task
-etch list add &lt;file&gt; &lt;text&gt;                 # add a list item
-etch create &lt;file&gt;                          # create a new file
-etch append &lt;file.jsonl&gt; '{"key":"value"}'  # append JSONL record
+etch set &lt;file&gt; &lt;selector&gt; &lt;value&gt;               # set a field
+etch delete &lt;file&gt; &lt;selector&gt;                    # delete a field
+etch append &lt;file&gt; &lt;selector&gt; &lt;value&gt;            # append to array
+etch add &lt;file&gt; &lt;selector&gt; &lt;value&gt;               # idempotent array add
+etch remove &lt;file&gt; &lt;selector&gt; &lt;value&gt;            # idempotent array remove
+etch section replace &lt;file&gt; &lt;heading&gt; &lt;content&gt;  # replace section body
+etch section append &lt;file&gt; &lt;heading&gt; &lt;content&gt;   # append to section
+etch task close &lt;file&gt; &lt;text&gt;                    # check off a task
+etch task open &lt;file&gt; &lt;text&gt;                     # uncheck a task
+etch task add &lt;file&gt; &lt;text&gt;                      # add a new task
+etch list add &lt;file&gt; &lt;text&gt;                      # add a list item
+etch create &lt;file&gt;                               # create a new file
+etch append &lt;file.jsonl&gt; '{"key":"value"}'       # append JSONL record
 ```
 
 ## Multi-operation transactions
@@ -122,8 +153,8 @@ Run `etch help` for full documentation. Key topics:
 </article>
 
 <script>
-function copyPrompt(btn) {
-  const pre = document.getElementById('seed-prompt');
+function copyBlock(btn) {
+  const pre = btn.closest('.copy-wrap').querySelector('pre');
   const text = pre.textContent;
   navigator.clipboard.writeText(text).then(() => {
     btn.textContent = 'Copied!';

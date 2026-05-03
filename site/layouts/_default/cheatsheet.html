@@ -1,421 +1,117 @@
 {{ define "main" }}
+{{ $commands := hugo.Data.commands }}
+{{ if not $commands }}
+  {{ errorf "site/data/commands.json is missing or empty; run mise run site:verify before building the site" }}
+{{ end }}
+{{ $catDescs := dict
+  "Mutate" "Set, delete, append, add, and remove values in structured files."
+  "JSONL" "Append-only operations on newline-delimited JSON logs."
+  "Sections" "Replace, append, or prepend content under Markdown headings."
+  "Tasks" "Open, close, and add task checkboxes and list items in Markdown."
+  "Tables" "Set cells, insert/delete rows, and add/rename/delete columns in CSV and Markdown pipe tables."
+  "Files" "Create, replace, move, and copy files."
+  "Guards" "Assert conditions without committing. Use in scripts to gate mutations."
+  "Scripts" "Run multiple commands as one atomic transaction."
+  "Inline fields" "Set Dataview-style inline fields in Markdown body text."
+}}
+{{ $cats := slice }}
+{{ range $commands }}
+  {{ if not (in $cats .cat) }}
+    {{ $cats = $cats | append .cat }}
+  {{ end }}
+{{ end }}
+
 <article class="content">
   <h1>Cheatsheet</h1>
 
-  <div class="browser">
-    <div class="browser-cats" id="cats"></div>
-    <div class="browser-cat-desc" id="cat-desc"></div>
-    <div class="browser-cmds" id="cmds"></div>
-    <div class="browser-detail" id="detail">
-      <div class="detail-empty">Select a command to see its syntax, usage, and a live diff.</div>
-    </div>
+  <div class="browser browser-static">
+    <nav class="browser-cats" aria-label="Command categories">
+      {{ range $cats }}
+      <a class="cat-btn" href="#cat-{{ anchorize . }}">{{ . }}</a>
+      {{ end }}
+    </nav>
+
+    {{ range $cats }}
+    {{ $cat := . }}
+    {{ $catCommands := where $commands "cat" $cat }}
+    <section class="browser-category" id="cat-{{ anchorize $cat }}">
+      <div class="browser-category-chrome">
+        <div class="browser-category-head">
+          <h2>{{ $cat }}</h2>
+          <p>{{ index $catDescs $cat }}</p>
+        </div>
+        <nav class="browser-cmds" aria-label="{{ $cat }} commands">
+          {{ range $catCommands }}
+          <a class="cmd-btn" href="#cmd-{{ anchorize .name }}">{{ .name }}</a>
+          {{ end }}
+        </nav>
+      </div>
+
+      <div class="browser-detail">
+        {{ range $catCommands }}
+        {{ $cmd := . }}
+        <section class="command-detail" id="cmd-{{ anchorize .name }}">
+          <div class="detail-head">
+            <h3 class="detail-name">{{ .name }}</h3>
+            <div class="detail-desc">{{ .desc }}</div>
+          </div>
+
+          <div class="detail-section">
+            <div class="detail-label">Syntax</div>
+            <pre class="detail-pre">{{ .syntax }}</pre>
+          </div>
+
+          <div class="detail-section">
+            <div class="detail-label">Example</div>
+            <pre class="detail-pre detail-example"><span class="prompt">$</span> {{ .example }}</pre>
+          </div>
+
+          {{ with .results }}
+          <div class="detail-section">
+            <div class="commit-preview">
+              <div class="detail-label">Commit</div>
+              <div class="commit-message">{{ $cmd.commit }}</div>
+              <div class="diff-stat-list">
+                {{ range . }}
+                <div class="diff-stat-row">
+                  <span class="diff-stat-file">{{ .file }}</span>
+                  <span class="diff-stat-count">{{ .stat.label }}</span>
+                  <span class="diff-stat-bars">
+                    {{ with .stat.add_bar }}<span class="diff-stat-add">{{ . }}</span>{{ end }}{{ with .stat.del_bar }}<span class="diff-stat-del">{{ . }}</span>{{ end }}
+                  </span>
+                </div>
+                {{ end }}
+              </div>
+            </div>
+
+            {{ range . }}
+              {{ if gt (len $cmd.results) 1 }}
+              <div class="diff-result-label">{{ .file }}</div>
+              {{ end }}
+              <div class="diff-view">
+                {{ if .diff }}
+                <table class="diff-table">
+                  {{ range .diff }}
+                  <tr class="diff-{{ .type }}">
+                    <td class="diff-ln">{{ with .before_line }}{{ . }}{{ end }}</td>
+                    <td class="diff-ln">{{ with .after_line }}{{ . }}{{ end }}</td>
+                    <td class="diff-marker">{{ .marker }}</td>
+                    <td class="diff-code">{{ .text }}</td>
+                  </tr>
+                  {{ end }}
+                </table>
+                {{ else }}
+                <div class="diff-empty-file">{{ .stat.label }}</div>
+                {{ end }}
+              </div>
+            {{ end }}
+          </div>
+          {{ end }}
+        </section>
+        {{ end }}
+      </div>
+    </section>
+    {{ end }}
   </div>
 </article>
-
-<script>
-var COMMANDS = {{ hugo.Data.commands }};
-
-var CAT_DESCS = {
-  "Mutate": "Set, delete, append, add, and remove values in structured files.",
-  "JSONL": "Append-only operations on newline-delimited JSON logs.",
-  "Sections": "Replace, append, or prepend content under Markdown headings.",
-  "Tasks": "Open, close, and add task checkboxes and list items in Markdown.",
-  "Tables": "Set cells, insert/delete rows, and add/rename/delete columns in CSV and Markdown pipe tables.",
-  "Files": "Create, replace, move, and copy files.",
-  "Guards": "Assert conditions without committing. Use in scripts to gate mutations.",
-  "Scripts": "Run multiple commands as one atomic transaction.",
-  "Inline fields": "Set Dataview-style inline fields in Markdown body text."
-};
-
-var CATS = [];
-COMMANDS.forEach(function(c) { if (CATS.indexOf(c.cat) === -1) CATS.push(c.cat); });
-
-var currentCat = CATS[0];
-var currentCmd = null;
-var diffMode = 'inline';
-
-function slug(s) {
-  return s.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/(^-|-$)/g, '');
-}
-
-function render() {
-  var catsEl = document.getElementById('cats');
-  catsEl.innerHTML = CATS.map(function(cat) {
-    return '<button class="cat-btn' + (cat === currentCat ? ' active' : '') + '" onclick="selectCat(\'' + esc(cat) + '\')">' + esc(cat) + '</button>';
-  }).join('');
-
-  var descEl = document.getElementById('cat-desc');
-  descEl.textContent = CAT_DESCS[currentCat] || '';
-
-  var cmdsEl = document.getElementById('cmds');
-  var filtered = COMMANDS.filter(function(c) { return c.cat === currentCat; });
-  cmdsEl.innerHTML = filtered.map(function(c) {
-    var idx = COMMANDS.indexOf(c);
-    return '<button class="cmd-btn' + (c === currentCmd ? ' active' : '') + '" onclick="selectCmd(' + idx + ')">' + esc(c.name) + '</button>';
-  }).join('');
-
-  renderDetail();
-  updateHash();
-}
-
-function renderDetail() {
-  var el = document.getElementById('detail');
-  if (!currentCmd) {
-    el.innerHTML = '<div class="detail-empty">Select a command to see its syntax, usage, and a live diff.</div>';
-    return;
-  }
-  var c = currentCmd;
-  var html = '';
-  html += '<div class="detail-head">';
-  html += '<div class="detail-name" id="' + slug(c.name) + '">' + esc(c.name) + '</div>';
-  html += '<div class="detail-desc">' + esc(c.desc) + '</div>';
-  html += '</div>';
-  html += '<div class="detail-section"><div class="detail-label">Syntax</div><pre class="detail-pre">' + esc(c.syntax) + '</pre></div>';
-  html += '<div class="detail-section"><div class="detail-label">Example</div><pre class="detail-pre detail-example"><span class="prompt">$</span> ' + esc(c.example) + '</pre></div>';
-
-  var results = commandResults(c);
-  if (results.length > 0) {
-    html += '<div class="detail-section">';
-    html += renderCommitPreview(c, results);
-
-    results.forEach(function(result) {
-      if (results.length > 1) {
-        html += '<div class="diff-result-label">' + esc(result.file) + '</div>';
-      }
-      html += '<div class="diff-view">' + renderResult(result) + '</div>';
-    });
-    html += '</div>';
-  }
-
-  el.innerHTML = html;
-}
-
-function selectCat(cat) {
-  currentCat = cat;
-  var filtered = COMMANDS.filter(function(c) { return c.cat === cat; });
-  currentCmd = filtered[0] || null;
-  render();
-}
-
-function selectCmd(idx) {
-  currentCmd = COMMANDS[idx];
-  currentCat = currentCmd.cat;
-  render();
-}
-
-function setDiffMode(mode) {
-  diffMode = mode;
-  renderDetail();
-}
-
-function updateHash() {
-  if (currentCmd) {
-    var h = '#' + slug(currentCmd.name);
-    if (location.hash !== h) history.replaceState(null, '', h);
-  }
-}
-
-function loadFromHash() {
-  var h = location.hash.replace('#', '');
-  if (!h) return false;
-  for (var i = 0; i < COMMANDS.length; i++) {
-    if (slug(COMMANDS[i].name) === h) {
-      currentCmd = COMMANDS[i];
-      currentCat = currentCmd.cat;
-      return true;
-    }
-  }
-  return false;
-}
-
-function commandResults(c) {
-  if (c.results && c.results.length > 0) {
-    return c.results.map(normalizeResult);
-  }
-  if (c.file && (c.before !== null || c.after !== null)) {
-    return [normalizeResult({ file: c.file, before: c.before, after: c.after })];
-  }
-  return [];
-}
-
-function renderCommitPreview(c, results) {
-  var html = '<div class="commit-preview">';
-  html += '<div class="commit-preview-head">';
-  html += '<div>';
-  html += '<div class="detail-label">Commit</div>';
-  html += '<div class="commit-message">' + esc(c.commit || 'No commit') + '</div>';
-  html += '</div>';
-  if (results.some(function(r) { return r.before !== null && r.after !== null; })) {
-    html += renderDiffToggle();
-  }
-  html += '</div>';
-  html += '<div class="diff-stat-list">';
-  results.forEach(function(result) {
-    var stat = diffStat(result);
-    html += '<div class="diff-stat-row">';
-    html += '<span class="diff-stat-file">' + esc(result.file) + '</span>';
-    html += '<span class="diff-stat-count">' + esc(statLabel(stat)) + '</span>';
-    html += '<span class="diff-stat-bars">' + statBars(stat) + '</span>';
-    html += '</div>';
-  });
-  html += '</div>';
-  html += '</div>';
-  return html;
-}
-
-function renderDiffToggle() {
-  var html = '<div class="diff-toggle">';
-  html += '<button class="toggle-btn' + (diffMode === 'inline' ? ' active' : '') + '" onclick="setDiffMode(\'inline\')">Inline</button>';
-  html += '<button class="toggle-btn' + (diffMode === 'side' ? ' active' : '') + '" onclick="setDiffMode(\'side\')">Side-by-side</button>';
-  html += '</div>';
-  return html;
-}
-
-function normalizeResult(r) {
-  return {
-    file: r.file,
-    before: typeof r.before === 'undefined' ? null : r.before,
-    after: typeof r.after === 'undefined' ? null : r.after
-  };
-}
-
-function splitLines(s) {
-  if (s === '') return [];
-  return s.split('\n');
-}
-
-function diffStat(result) {
-  var beforeLines = result.before === null ? [] : splitLines(result.before);
-  var afterLines = result.after === null ? [] : splitLines(result.after);
-  if (result.before === null) {
-    return { status: 'created', adds: afterLines.length, dels: 0 };
-  }
-  if (result.after === null) {
-    return { status: 'deleted', adds: 0, dels: beforeLines.length };
-  }
-  var ops = diffLines(beforeLines, afterLines);
-  var adds = 0, dels = 0;
-  for (var i = 0; i < ops.length; i++) {
-    if (ops[i].type === 'add') adds++;
-    if (ops[i].type === 'del') dels++;
-  }
-  return { status: adds || dels ? 'modified' : 'unchanged', adds: adds, dels: dels };
-}
-
-function statLabel(stat) {
-  var total = stat.adds + stat.dels;
-  if (total === 0) return stat.status === 'created' ? 'created empty file' : stat.status;
-  var pieces = [];
-  if (stat.adds) pieces.push('+' + stat.adds);
-  if (stat.dels) pieces.push('-' + stat.dels);
-  return total + ' ' + (total === 1 ? 'line' : 'lines') + ' (' + pieces.join(' ') + ')';
-}
-
-function statBars(stat) {
-  return repeatStat('+', stat.adds, 'diff-stat-add') + repeatStat('-', stat.dels, 'diff-stat-del');
-}
-
-function repeatStat(ch, count, cls) {
-  if (count <= 0) return '';
-  var shown = Math.min(count, 24);
-  var text = new Array(shown + 1).join(ch);
-  if (count > shown) text += '...';
-  return '<span class="' + cls + '">' + esc(text) + '</span>';
-}
-
-function renderResult(result) {
-  if (result.before === null && result.after === '') {
-    return renderEmptyFile('created empty file');
-  }
-  if (result.before === '' && result.after === null) {
-    return renderEmptyFile('deleted empty file');
-  }
-  if (result.before === null) {
-    return renderAllAdd(splitLines(result.after));
-  }
-  if (result.after === null) {
-    return renderAllDel(splitLines(result.before));
-  }
-  var beforeLines = splitLines(result.before);
-  var afterLines = splitLines(result.after);
-  if (diffMode === 'side') {
-    return renderSideBySide(beforeLines, afterLines);
-  }
-  return renderInline(beforeLines, afterLines);
-}
-
-function renderEmptyFile(label) {
-  return '<div class="diff-empty-file">' + esc(label) + '</div>';
-}
-
-function renderAllAdd(lines) {
-  if (lines.length === 0) return renderEmptyFile('created empty file');
-  var html = '<table class="diff-table">';
-  for (var i = 0; i < lines.length; i++) {
-    html += '<tr class="diff-add"><td class="diff-ln">' + (i+1) + '</td><td class="diff-marker">+</td><td class="diff-code">' + esc(lines[i]) + '</td></tr>';
-  }
-  return html + '</table>';
-}
-
-function renderAllDel(lines) {
-  if (lines.length === 0) return renderEmptyFile('deleted empty file');
-  var html = '<table class="diff-table">';
-  for (var i = 0; i < lines.length; i++) {
-    html += '<tr class="diff-del"><td class="diff-ln">' + (i+1) + '</td><td class="diff-marker">-</td><td class="diff-code">' + esc(lines[i]) + '</td></tr>';
-  }
-  return html + '</table>';
-}
-
-function diffLines(before, after) {
-  var m = before.length, n = after.length;
-  var max = m + n;
-  var size = 2 * max + 1;
-  var v = new Array(size).fill(0);
-  var offset = max;
-  var trace = [];
-  var done = false;
-
-  for (var d = 0; d <= max && !done; d++) {
-    trace.push(v.slice());
-    for (var k = -d; k <= d; k += 2) {
-      var x;
-      if (k === -d || (k !== d && v[offset + k - 1] < v[offset + k + 1])) {
-        x = v[offset + k + 1];
-      } else {
-        x = v[offset + k - 1] + 1;
-      }
-      var y = x - k;
-      while (x < m && y < n && before[x] === after[y]) { x++; y++; }
-      v[offset + k] = x;
-      if (x >= m && y >= n) { done = true; break; }
-    }
-  }
-
-  var ops = [];
-  var x = m, y = n;
-  for (var d = trace.length - 1; d >= 0; d--) {
-    var snap = trace[d];
-    var k = x - y;
-    var startX, startY;
-    if (d === 0) {
-      startX = 0; startY = 0;
-    } else {
-      var prevK;
-      if (k === -d || (k !== d && snap[offset + k - 1] < snap[offset + k + 1])) {
-        prevK = k + 1;
-      } else {
-        prevK = k - 1;
-      }
-      startX = snap[offset + prevK];
-      startY = startX - prevK;
-    }
-    while (x > startX && y > startY) {
-      x--; y--;
-      ops.unshift({ type: 'equal', before: before[x], after: after[y] });
-    }
-    if (d > 0) {
-      if (x > startX) { x--; ops.unshift({ type: 'del', before: before[x] }); }
-      else if (y > startY) { y--; ops.unshift({ type: 'add', after: after[y] }); }
-    }
-  }
-  return ops;
-}
-
-function esc(s) {
-  if (s === null || typeof s === 'undefined') return '';
-  return String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
-}
-
-function highlightWord(oldStr, newStr, delCls, addCls) {
-  var a = oldStr, b = newStr;
-  var pre = 0;
-  while (pre < a.length && pre < b.length && a[pre] === b[pre]) pre++;
-  var suf = 0;
-  while (suf < a.length - pre && suf < b.length - pre && a[a.length - 1 - suf] === b[b.length - 1 - suf]) suf++;
-  var aEnd = a.length - suf, bEnd = b.length - suf;
-  var aHtml = esc(a.substring(0, pre));
-  if (aEnd > pre) aHtml += '<span class="' + delCls + '">' + esc(a.substring(pre, aEnd)) + '</span>';
-  aHtml += esc(a.substring(aEnd));
-  var bHtml = esc(b.substring(0, pre));
-  if (bEnd > pre) bHtml += '<span class="' + addCls + '">' + esc(b.substring(pre, bEnd)) + '</span>';
-  bHtml += esc(b.substring(bEnd));
-  return { del: aHtml, add: bHtml };
-}
-
-function renderInline(before, after) {
-  var ops = diffLines(before, after);
-  var html = '<table class="diff-table">';
-  var bNum = 0, aNum = 0;
-  for (var i = 0; i < ops.length; i++) {
-    var op = ops[i];
-    if (op.type === 'equal') {
-      bNum++; aNum++;
-      html += '<tr class="diff-eq"><td class="diff-ln">' + bNum + '</td><td class="diff-ln">' + aNum + '</td><td class="diff-marker"> </td><td class="diff-code">' + esc(op.before) + '</td></tr>';
-    } else if (op.type === 'del' && i + 1 < ops.length && ops[i + 1].type === 'add') {
-      var next = ops[i + 1];
-      var hl = highlightWord(op.before, next.after, 'diff-hl-del', 'diff-hl-add');
-      bNum++;
-      html += '<tr class="diff-del"><td class="diff-ln">' + bNum + '</td><td class="diff-ln"></td><td class="diff-marker">-</td><td class="diff-code">' + hl.del + '</td></tr>';
-      aNum++; i++;
-      html += '<tr class="diff-add"><td class="diff-ln"></td><td class="diff-ln">' + aNum + '</td><td class="diff-marker">+</td><td class="diff-code">' + hl.add + '</td></tr>';
-    } else if (op.type === 'del') {
-      bNum++;
-      html += '<tr class="diff-del"><td class="diff-ln">' + bNum + '</td><td class="diff-ln"></td><td class="diff-marker">-</td><td class="diff-code">' + esc(op.before) + '</td></tr>';
-    } else {
-      aNum++;
-      html += '<tr class="diff-add"><td class="diff-ln"></td><td class="diff-ln">' + aNum + '</td><td class="diff-marker">+</td><td class="diff-code">' + esc(op.after) + '</td></tr>';
-    }
-  }
-  return html + '</table>';
-}
-
-function renderSideBySide(before, after) {
-  var ops = diffLines(before, after);
-  var left = [], right = [];
-  var bNum = 0, aNum = 0;
-  for (var i = 0; i < ops.length; i++) {
-    var op = ops[i];
-    if (op.type === 'equal') {
-      bNum++; aNum++;
-      left.push({ num: bNum, cls: 'diff-eq', html: esc(op.before) });
-      right.push({ num: aNum, cls: 'diff-eq', html: esc(op.after) });
-    } else if (op.type === 'del' && i + 1 < ops.length && ops[i + 1].type === 'add') {
-      var next = ops[i + 1];
-      var hl = highlightWord(op.before, next.after, 'diff-hl-del', 'diff-hl-add');
-      bNum++;
-      left.push({ num: bNum, cls: 'diff-del', html: hl.del });
-      aNum++; i++;
-      right.push({ num: aNum, cls: 'diff-add', html: hl.add });
-    } else if (op.type === 'del') {
-      bNum++;
-      left.push({ num: bNum, cls: 'diff-del', html: esc(op.before) });
-      right.push({ num: '', cls: 'diff-empty', html: '' });
-    } else {
-      aNum++;
-      left.push({ num: '', cls: 'diff-empty', html: '' });
-      right.push({ num: aNum, cls: 'diff-add', html: esc(op.after) });
-    }
-  }
-  var html = '<div class="diff-side"><table class="diff-table diff-table-left">';
-  for (var i = 0; i < left.length; i++) {
-    html += '<tr class="' + left[i].cls + '"><td class="diff-ln">' + left[i].num + '</td><td class="diff-code">' + left[i].html + '</td></tr>';
-  }
-  html += '</table><table class="diff-table diff-table-right">';
-  for (var i = 0; i < right.length; i++) {
-    html += '<tr class="' + right[i].cls + '"><td class="diff-ln">' + right[i].num + '</td><td class="diff-code">' + right[i].html + '</td></tr>';
-  }
-  return html + '</table></div>';
-}
-
-document.addEventListener('DOMContentLoaded', function() {
-  if (!loadFromHash()) {
-    currentCmd = COMMANDS[0];
-  }
-  render();
-});
-
-window.addEventListener('hashchange', function() {
-  if (loadFromHash()) render();
-});
-</script>
 {{ end }}
