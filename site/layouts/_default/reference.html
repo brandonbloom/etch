@@ -49,6 +49,7 @@
         {{ else if eq .kind "pre" }}
         <pre class="reference-pre"><code>{{ .text }}</code></pre>
         {{ else if eq .kind "command-table" }}
+        <h3 class="reference-block-heading">{{ .heading }}</h3>
         <div class="reference-table-wrap" aria-label="{{ .heading }}">
           <table class="reference-command-table">
             <thead>
@@ -61,7 +62,13 @@
             <tbody>
               {{ range .rows }}
               <tr>
-                <td><code>{{ .signature }}</code></td>
+                <td>
+                  {{ if .topic_id }}
+                  <a class="reference-command-link" href="#{{ .topic_id }}"><code>{{ .signature }}</code></a>
+                  {{ else }}
+                  <code>{{ .signature }}</code>
+                  {{ end }}
+                </td>
                 <td><span class="command-class command-class-{{ .class | anchorize }}">{{ .class }}</span></td>
                 <td>{{ .description }}</td>
               </tr>

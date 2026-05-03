@@ -290,6 +290,10 @@ main { padding: 48px 0 80px; }
   padding: 0;
   white-space: normal;
 }
+.reference-command-link {
+  text-decoration-color: color-mix(in srgb, var(--accent), transparent 45%);
+  text-underline-offset: 2px;
+}
 .command-class {
   display: inline-block;
   border: 1px solid var(--border);

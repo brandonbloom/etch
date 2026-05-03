@@ -97,11 +97,11 @@ func command(path, signature, description string, class CommandClass, canonical 
 
 func structuredCommands(f structuredCommandFamily) []commandSpec {
 	return []commandSpec{
-		command(f.Format+" set", f.Format+" set <path> <selector> <value>|<selector=value>...", "Set "+f.ValueDescription+".", ClassIdempotent, true, parseStructured(f.Format, "set"), "--json"),
+		command(f.Format+" set", f.Format+" set <path> <selector> [--json] <value>|<selector=value>...", "Set "+f.ValueDescription+".", ClassIdempotent, true, parseStructured(f.Format, "set"), "--json"),
 		command(f.Format+" delete", f.Format+" delete <path> <selector>", f.DeleteDescription, ClassIdempotent, true, parseStructured(f.Format, "delete")),
-		command(f.Format+" append", f.Format+" append <path> <selector> <value|--json value>", "Append to a "+f.Sequence+".", ClassNonIdempotent, true, parseStructured(f.Format, "append"), "--json"),
-		command(f.Format+" add", f.Format+" add <path> <selector> <value|--json value>", "Ensure a "+f.Sequence+" contains a value.", ClassIdempotent, true, parseStructured(f.Format, "add"), "--json"),
-		command(f.Format+" remove", f.Format+" remove <path> <selector> <value|--json value>", "Remove matching values from a "+f.Sequence+".", ClassIdempotent, true, parseStructured(f.Format, "remove"), "--json"),
+		command(f.Format+" append", f.Format+" append <path> <selector> [--json] <value>", "Append to a "+f.Sequence+".", ClassNonIdempotent, true, parseStructured(f.Format, "append"), "--json"),
+		command(f.Format+" add", f.Format+" add <path> <selector> [--json] <value>", "Ensure a "+f.Sequence+" contains a value.", ClassIdempotent, true, parseStructured(f.Format, "add"), "--json"),
+		command(f.Format+" remove", f.Format+" remove <path> <selector> [--json] <value>", "Remove matching values from a "+f.Sequence+".", ClassIdempotent, true, parseStructured(f.Format, "remove"), "--json"),
 	}
 }
 
@@ -147,11 +147,11 @@ func commandSpecs() []commandSpec {
 
 func buildCommandSpecs() []commandSpec {
 	specs := []commandSpec{
-		command("set", "set <path> <selector> <value>|<selector=value>...", "Set JSON/YAML/frontmatter or Markdown inline fields.", ClassIdempotent, true, parsePorcelainStructured("set"), markdownSetFlags...),
+		command("set", "set <path> <selector> [--json] <value>|<selector=value>...", "Set JSON/YAML/frontmatter or Markdown inline fields.", ClassIdempotent, true, parsePorcelainStructured("set"), markdownSetFlags...),
 		command("delete", "delete <path> [<selector>]", "Delete a file or selected JSON/YAML/frontmatter/inline-field value.", ClassIdempotent, true, parseDelete, markdownDeleteFlags...),
-		command("append", "append <path> <selector> <value|--json value>|<path.jsonl> <json-value>", "Append a value to an array, or a JSONL record to .jsonl/.ndjson.", ClassNonIdempotent, true, parsePorcelainAppend, "--json"),
-		command("add", "add <path> <selector> <value|--json value>", "Ensure an array contains a value.", ClassIdempotent, true, parsePorcelainStructured("add"), "--json"),
-		command("remove", "remove <path> <selector> <value|--json value>", "Ensure an array does not contain a value.", ClassIdempotent, true, parsePorcelainStructured("remove"), "--json"),
+		command("append", "append <path> <selector> [--json] <value>|<path.jsonl> <json-value>", "Append a value to an array, or a JSONL record to .jsonl/.ndjson.", ClassNonIdempotent, true, parsePorcelainAppend, "--json"),
+		command("add", "add <path> <selector> [--json] <value>", "Ensure an array contains a value.", ClassIdempotent, true, parsePorcelainStructured("add"), "--json"),
+		command("remove", "remove <path> <selector> [--json] <value>", "Ensure an array does not contain a value.", ClassIdempotent, true, parsePorcelainStructured("remove"), "--json"),
 		command("section replace", "section replace <path> <heading> <content>", "Replace the body under one Markdown heading.", ClassIdempotent, true, parseSection("replace")),
 		command("section append", "section append <path> <heading> <content>", "Append a block fragment under one Markdown heading.", ClassNonIdempotent, true, parseSection("append")),
 		command("section prepend", "section prepend <path> <heading> <content>", "Prepend a block fragment under one Markdown heading.", ClassNonIdempotent, true, parseSection("prepend")),
@@ -394,7 +394,7 @@ func parsePorcelainStructured(verb string) commandParser {
 				return nil, usagef("assignment items are only accepted by set")
 			}
 		}
-		valueArgs, err := parseStructuredValueArgs(verb, args)
+		valueArgs, err := parseStructuredValueArgs(inv.Spec.Signature, args)
 		if err != nil {
 			return nil, err
 		}
@@ -428,7 +428,7 @@ func parseStructured(format, verb string) commandParser {
 				return nil, usagef("assignment items are only accepted by set")
 			}
 		}
-		valueArgs, err := parseStructuredValueArgs(spec.name(), args)
+		valueArgs, err := parseStructuredValueArgs(spec.Signature, args)
 		if err != nil {
 			return nil, err
 		}
@@ -524,7 +524,7 @@ func parseTable(format string, tablePath ...string) commandParser {
 	}
 }
 
-func parseStructuredValueArgs(command string, args []string) (structuredValueArgs, error) {
+func parseStructuredValueArgs(signature string, args []string) (structuredValueArgs, error) {
 	switch {
 	case len(args) == 3:
 		if args[2] == "--json" {
@@ -536,7 +536,7 @@ func parseStructuredValueArgs(command string, args []string) (structuredValueArg
 	case len(args) == 4 && args[3] == "--json":
 		return structuredValueArgs{Path: args[0], Selector: args[1], Value: args[2], Mode: ValueModeJSON}, nil
 	default:
-		return structuredValueArgs{}, usagef("usage: etch %s <path> <selector> <value>", command)
+		return structuredValueArgs{}, usagef("usage: etch %s", signature)
 	}
 }
 

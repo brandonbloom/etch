@@ -32,6 +32,7 @@ type HelpCommandRow struct {
 	Signature   string       `json:"signature"`
 	Class       CommandClass `json:"class"`
 	Description string       `json:"description"`
+	TopicID     string       `json:"topic_id,omitempty"`
 }
 
 type HelpTopicLink struct {
@@ -68,6 +69,7 @@ const (
 	helpGroupData       = "Data and Addressing"
 	helpGroupFamilies   = "Command Families"
 	helpGroupExecution  = "Execution and Safety"
+	helpGroupAppendix   = "Appendix"
 	helpCommandSummary  = "etch mutates structured files and commits each successful mutating invocation."
 	helpGlobalTopicText = "model, invocation, prompts, scripts, selectors, values, formats, addressing, fields, files, guards, section, tasks, table, plans, commits, security, conflicts"
 )
@@ -119,9 +121,9 @@ func writeHelpBlock(w io.Writer, block HelpBlock) {
 func BuildHelpReference() HelpReference {
 	topics := []HelpTopic{
 		commandHelpTopic(false),
-		commandHelpTopic(true),
 	}
 	topics = append(topics, namedHelpTopics()...)
+	topics = append(topics, commandHelpTopic(true))
 	return HelpReference{Topics: topics}
 }
 
@@ -138,23 +140,17 @@ func helpTopicByName(name string) (HelpTopic, bool) {
 
 func commandHelpTopic(all bool) HelpTopic {
 	title := "Common Commands"
+	group := helpGroupCommands
 	invocation := "etch help"
-	heading := "Common commands"
 	linksText := helpGlobalTopicText + ". Use --all for advanced commands."
 	if all {
 		title = "Command Index"
+		group = helpGroupAppendix
 		invocation = "etch help --all"
-		heading = "Commands"
 		linksText = helpGlobalTopicText
 	}
 
-	blocks := []HelpBlock{
-		{
-			Kind:    "command-table",
-			Heading: heading,
-			Rows:    helpCommandRows(all),
-		},
-	}
+	blocks := helpCommandBlocks(all)
 	if all {
 		blocks = append(blocks, HelpBlock{
 			Kind: "paragraph",
@@ -170,32 +166,206 @@ func commandHelpTopic(all bool) HelpTopic {
 	return HelpTopic{
 		ID:         referenceID(title),
 		Title:      title,
-		Group:      helpGroupCommands,
+		Group:      group,
 		Invocation: invocation,
 		Summary:    helpCommandSummary,
 		Blocks:     blocks,
 	}
 }
 
-func helpCommandRows(all bool) []HelpCommandRow {
-	rows := []HelpCommandRow{
+type helpCommandRowEntry struct {
+	Name string
+	Row  HelpCommandRow
+}
+
+type helpCommandGroup struct {
+	Heading string
+	Names   []string
+}
+
+func helpCommandBlocks(all bool) []HelpBlock {
+	entries := helpCommandRowEntries(all)
+	rowsByName := make(map[string]HelpCommandRow, len(entries))
+	for _, entry := range entries {
+		rowsByName[entry.Name] = entry.Row
+	}
+
+	var blocks []HelpBlock
+	used := make(map[string]bool, len(entries))
+	for _, group := range helpCommandGroups(all) {
+		var rows []HelpCommandRow
+		for _, name := range group.Names {
+			row, ok := rowsByName[name]
+			if !ok {
+				continue
+			}
+			rows = append(rows, row)
+			used[name] = true
+		}
+		if len(rows) == 0 {
+			continue
+		}
+		blocks = append(blocks, HelpBlock{
+			Kind:    "command-table",
+			Heading: group.Heading,
+			Rows:    rows,
+		})
+	}
+
+	var other []HelpCommandRow
+	for _, entry := range entries {
+		if used[entry.Name] {
+			continue
+		}
+		other = append(other, entry.Row)
+	}
+	if len(other) > 0 {
+		blocks = append(blocks, HelpBlock{
+			Kind:    "command-table",
+			Heading: "Other commands",
+			Rows:    other,
+		})
+	}
+	return blocks
+}
+
+func helpCommandRowEntries(all bool) []helpCommandRowEntry {
+	entries := []helpCommandRowEntry{
 		{
-			Signature:   "prompt [--context|--bootstrap]",
-			Class:       ClassIntrospection,
-			Description: "Print agent setup or durable context prompts.",
+			Name: "prompt",
+			Row: HelpCommandRow{
+				Signature:   "prompt [--context|--bootstrap]",
+				Class:       ClassIntrospection,
+				Description: "Print agent setup or durable context prompts.",
+				TopicID:     helpCommandTopicID("prompt"),
+			},
 		},
 	}
 	for _, v := range verbCatalog() {
 		if !v.Canonical || (!all && isPlumbingVerb(v)) {
 			continue
 		}
-		rows = append(rows, HelpCommandRow{
-			Signature:   v.Signature,
-			Class:       v.Class,
-			Description: v.Description,
+		entries = append(entries, helpCommandRowEntry{
+			Name: v.Name,
+			Row: HelpCommandRow{
+				Signature:   v.Signature,
+				Class:       v.Class,
+				Description: v.Description,
+				TopicID:     helpCommandTopicID(v.Name),
+			},
 		})
 	}
-	return rows
+	return entries
+}
+
+func helpCommandTopicID(name string) string {
+	switch {
+	case name == "prompt":
+		return "prompts"
+	case name == "delete":
+		return "selectors"
+	case name == "set" || name == "append" || name == "add" || name == "remove":
+		return "values"
+	case strings.HasPrefix(name, "section ") || strings.HasPrefix(name, "md section "):
+		return "sections"
+	case strings.HasPrefix(name, "task ") || strings.HasPrefix(name, "list "):
+		return "tasks"
+	case strings.HasPrefix(name, "table ") || strings.HasPrefix(name, "csv ") || strings.HasPrefix(name, "md table "):
+		return "tables-and-csv"
+	case name == "create" || name == "replace" || name == "move" || name == "copy":
+		return "files"
+	case name == "exists" || name == "missing" || name == "contains":
+		return "guards"
+	case strings.HasPrefix(name, "json ") || strings.HasPrefix(name, "jsonl ") || strings.HasPrefix(name, "yaml ") || strings.HasPrefix(name, "frontmatter "):
+		return "formats"
+	default:
+		return ""
+	}
+}
+
+func helpCommandGroups(all bool) []helpCommandGroup {
+	groups := []helpCommandGroup{
+		{
+			Heading: "Core structured edits",
+			Names:   []string{"set", "delete", "append", "add", "remove"},
+		},
+		{
+			Heading: "Markdown sections and lists",
+			Names:   []string{"section replace", "section append", "section prepend", "task close", "task open", "task add", "list add"},
+		},
+		{
+			Heading: "Tables",
+			Names: []string{
+				"table set",
+				"table row append",
+				"table row insert",
+				"table row delete",
+				"table column add",
+				"table column rename",
+				"table column delete",
+			},
+		},
+		{
+			Heading: "Files",
+			Names:   []string{"create", "replace", "move", "copy"},
+		},
+		{
+			Heading: "Guards",
+			Names:   []string{"exists", "missing", "contains"},
+		},
+		{
+			Heading: "Agent setup",
+			Names:   []string{"prompt"},
+		},
+	}
+	if !all {
+		return groups
+	}
+	return append(groups,
+		helpCommandGroup{
+			Heading: "Advanced structured formats",
+			Names: []string{
+				"json set",
+				"json delete",
+				"json append",
+				"json add",
+				"json remove",
+				"yaml set",
+				"yaml delete",
+				"yaml append",
+				"yaml add",
+				"yaml remove",
+				"frontmatter set",
+				"frontmatter delete",
+				"frontmatter append",
+				"frontmatter add",
+				"frontmatter remove",
+			},
+		},
+		helpCommandGroup{
+			Heading: "Advanced logs and Markdown",
+			Names:   []string{"jsonl append", "md section replace", "md section append", "md section prepend"},
+		},
+		helpCommandGroup{
+			Heading: "Advanced table formats",
+			Names: []string{
+				"csv set",
+				"csv row append",
+				"csv row insert",
+				"csv row delete",
+				"csv column add",
+				"csv column rename",
+				"csv column delete",
+				"md table set",
+				"md table row append",
+				"md table row insert",
+				"md table row delete",
+				"md table column add",
+				"md table column rename",
+				"md table column delete",
+			},
+		},
+	)
 }
 
 func helpTopicLinks() []HelpTopicLink {
@@ -374,8 +544,9 @@ EOF`},
 				{Kind: "paragraph", Text: `Section selectors accept either a title such as "Status" or an ATX heading such as "## Status".
 Title-only selectors search all ATX heading levels; ATX selectors include the heading level.`},
 				{Kind: "paragraph", Text: `List-item selectors normalize away the list marker, task checkbox, surrounding whitespace,
-and Dataview inline field annotations. Inline Markdown remains source text, so "**Buy milk**"
-matches "**Buy milk**", not "Buy milk".`},
+Dataview inline field annotations, and trailing numeric reference-annotation links.
+Markdown inline syntax is rendered to normalized item text, so "**Buy milk**" and
+"[Buy milk](https://example.com)" both match "Buy milk".`},
 				{Kind: "paragraph", Text: "Item type filters are task, plain, numbered, and bullet. Repeated filters combine across\nindependent axes, such as task+numbered. Contradictory filters fail before planning."},
 				{Kind: "paragraph", Text: "Placement flags such as --section, --before, and --after identify where Markdown list and task commands operate. --before and --after match list items, not arbitrary prose."},
 			},

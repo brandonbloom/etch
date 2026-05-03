@@ -81,11 +81,158 @@ func TestHelpJSONThroughCLI(t *testing.T) {
 	if reference.Topics[0].ID != "common-commands" || reference.Topics[0].Blocks[0].Kind != "command-table" {
 		t.Fatalf("unexpected first reference topic: %#v", reference.Topics[0])
 	}
+	if got := reference.Topics[len(reference.Topics)-1].ID; got != "command-index" {
+		t.Fatalf("command index should be last reference topic, got %q", got)
+	}
+	if got := reference.Topics[len(reference.Topics)-1].Group; got != helpGroupAppendix {
+		t.Fatalf("command index should be in bottom nav group %q, got %q", helpGroupAppendix, got)
+	}
 	for _, topic := range reference.Topics {
 		if topic.Group == "" {
 			t.Fatalf("reference topic missing group: %#v", topic)
 		}
 	}
+}
+
+func TestHelpCommandTablesUseWorkflowOrder(t *testing.T) {
+	reference := BuildHelpReference()
+	common := reference.Topics[0]
+	gotHeadings := strings.Join(commandTableHeadings(common), "\n")
+	wantHeadings := strings.Join([]string{
+		"Core structured edits",
+		"Markdown sections and lists",
+		"Tables",
+		"Files",
+		"Guards",
+		"Agent setup",
+	}, "\n")
+	if gotHeadings != wantHeadings {
+		t.Fatalf("common command headings mismatch:\nwant:\n%s\n\ngot:\n%s", wantHeadings, gotHeadings)
+	}
+
+	commonSignatures := commandTableSignatures(common)
+	assertSignatureBefore(t, commonSignatures, "remove <path>", "section replace <path>")
+	assertSignatureBefore(t, commonSignatures, "list add <path>", "table set <path>")
+	assertSignatureBefore(t, commonSignatures, "table column delete <path>", "create <path>")
+	assertSignatureBefore(t, commonSignatures, "copy <src>", "exists <path>")
+	assertSignatureBefore(t, commonSignatures, "contains <path>", "prompt [--context|--bootstrap]")
+
+	all := topicByID(t, reference, "command-index")
+	allHeadings := strings.Join(commandTableHeadings(all), "\n")
+	for _, want := range []string{
+		"Advanced structured formats",
+		"Advanced logs and Markdown",
+		"Advanced table formats",
+	} {
+		if !strings.Contains(allHeadings, want) {
+			t.Fatalf("help --all headings missing %q:\n%s", want, allHeadings)
+		}
+	}
+
+	allSignatures := commandTableSignatures(all)
+	assertSignatureBefore(t, allSignatures, "prompt [--context|--bootstrap]", "json set <path>")
+	assertSignatureBefore(t, allSignatures, "frontmatter remove <path>", "jsonl append <path>")
+	assertSignatureBefore(t, allSignatures, "md section prepend <path>", "csv set <path>")
+}
+
+func TestHelpCommandRowsLinkToReferenceTopics(t *testing.T) {
+	reference := BuildHelpReference()
+	common := topicByID(t, reference, "common-commands")
+	assertCommandTopic(t, common, "set <path>", "values")
+	assertCommandTopic(t, common, "delete <path>", "selectors")
+	assertCommandTopic(t, common, "section replace <path>", "sections")
+	assertCommandTopic(t, common, "task close <path>", "tasks")
+	assertCommandTopic(t, common, "table set <path>", "tables-and-csv")
+	assertCommandTopic(t, common, "create <path>", "files")
+	assertCommandTopic(t, common, "exists <path>", "guards")
+	assertCommandTopic(t, common, "prompt [--context|--bootstrap]", "prompts")
+
+	all := topicByID(t, reference, "command-index")
+	assertCommandTopic(t, all, "json set <path>", "formats")
+	assertCommandTopic(t, all, "jsonl append <path>", "formats")
+	assertCommandTopic(t, all, "md section replace <path>", "sections")
+	assertCommandTopic(t, all, "csv set <path>", "tables-and-csv")
+	assertCommandTopic(t, all, "md table set <path>", "tables-and-csv")
+}
+
+func topicByID(t *testing.T, reference HelpReference, id string) HelpTopic {
+	t.Helper()
+	for _, topic := range reference.Topics {
+		if topic.ID == id {
+			return topic
+		}
+	}
+	t.Fatalf("missing topic %q", id)
+	return HelpTopic{}
+}
+
+func commandTableHeadings(topic HelpTopic) []string {
+	var headings []string
+	for _, block := range topic.Blocks {
+		if block.Kind == "command-table" {
+			headings = append(headings, block.Heading)
+		}
+	}
+	return headings
+}
+
+func commandTableSignatures(topic HelpTopic) []string {
+	var signatures []string
+	for _, block := range topic.Blocks {
+		if block.Kind != "command-table" {
+			continue
+		}
+		for _, row := range block.Rows {
+			signatures = append(signatures, row.Signature)
+		}
+	}
+	return signatures
+}
+
+func assertCommandTopic(t *testing.T, topic HelpTopic, signaturePrefix, wantTopicID string) {
+	t.Helper()
+	row, ok := commandRow(topic, signaturePrefix)
+	if !ok {
+		t.Fatalf("missing command row %q in topic %q", signaturePrefix, topic.ID)
+	}
+	if row.TopicID != wantTopicID {
+		t.Fatalf("command row %q topic ID mismatch: want %q got %q", row.Signature, wantTopicID, row.TopicID)
+	}
+}
+
+func commandRow(topic HelpTopic, signaturePrefix string) (HelpCommandRow, bool) {
+	for _, block := range topic.Blocks {
+		if block.Kind != "command-table" {
+			continue
+		}
+		for _, row := range block.Rows {
+			if strings.HasPrefix(row.Signature, signaturePrefix) {
+				return row, true
+			}
+		}
+	}
+	return HelpCommandRow{}, false
+}
+
+func assertSignatureBefore(t *testing.T, signatures []string, beforePrefix, afterPrefix string) {
+	t.Helper()
+	before := signatureIndex(signatures, beforePrefix)
+	after := signatureIndex(signatures, afterPrefix)
+	if before == -1 || after == -1 {
+		t.Fatalf("missing signatures %q or %q in:\n%s", beforePrefix, afterPrefix, strings.Join(signatures, "\n"))
+	}
+	if before >= after {
+		t.Fatalf("%q should come before %q in:\n%s", beforePrefix, afterPrefix, strings.Join(signatures, "\n"))
+	}
+}
+
+func signatureIndex(signatures []string, prefix string) int {
+	for i, signature := range signatures {
+		if strings.HasPrefix(signature, prefix) {
+			return i
+		}
+	}
+	return -1
 }
 
 func TestHelpFlagIsShortReference(t *testing.T) {
@@ -104,7 +251,7 @@ func TestHelpFlagIsShortReference(t *testing.T) {
 	if err != nil || code != exitOK {
 		t.Fatalf("runCLI(help) code=%d err=%v stderr=%s", code, err, errb.String())
 	}
-	if out.String() == shortHelp || !strings.Contains(out.String(), "Common commands:") {
+	if out.String() == shortHelp || !strings.Contains(out.String(), "Core structured edits:") {
 		t.Fatalf("help did not produce long help:\n%s", out.String())
 	}
 }

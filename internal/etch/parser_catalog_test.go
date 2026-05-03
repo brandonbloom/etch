@@ -133,6 +133,28 @@ func TestDecodeStructuredJSONFlagBeforeOrAfterValue(t *testing.T) {
 	}
 }
 
+func TestStructuredUsageMentionsJSONFlag(t *testing.T) {
+	for _, tokens := range [][]string{
+		{"append", "state.json", "items"},
+		{"add", "state.json", "items"},
+		{"remove", "state.json", "items"},
+		{"json", "append", "state.json", "items"},
+		{"yaml", "add", "state.yaml", "items"},
+		{"frontmatter", "remove", "note.md", "items"},
+	} {
+		t.Run(strings.Join(tokens, " "), func(t *testing.T) {
+			_, err := DecodeOperation(Statement{Tokens: tokens})
+			if err == nil {
+				t.Fatal("DecodeOperation unexpectedly succeeded")
+			}
+			msg := err.Error()
+			if !strings.Contains(msg, "usage: etch") || !strings.Contains(msg, "[--json] <value>") {
+				t.Fatalf("usage error missing --json value shape: %v", err)
+			}
+		})
+	}
+}
+
 func TestDecodeAssignmentSetRejectsDuplicateTargets(t *testing.T) {
 	if _, err := DecodeOperations(Statement{Tokens: []string{"set", "state.json", "a=1", "$.a=2"}}); err == nil {
 		t.Fatal("duplicate assignment targets succeeded")

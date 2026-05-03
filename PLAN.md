@@ -22,7 +22,7 @@
 
 - [x] Externalize the adopter report into proposal docs.
 - [x] Review [format prefix safety](docs/proposals/format-prefix-safety.md).
-- [ ] Review [help and usage polish](docs/proposals/help-and-usage-polish.md).
+- [x] Review [help and usage polish](docs/proposals/help-and-usage-polish.md).
 - [ ] Review [site adoption readiness](docs/proposals/site-adoption-readiness.md).
 - [ ] Decide the implementation order after proposal review.
 

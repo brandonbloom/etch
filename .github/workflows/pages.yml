@@ -4,8 +4,13 @@ on:
   push:
     branches: [main]
     paths:
-      - site/**
       - .github/workflows/pages.yml
+      - cmd/**
+      - internal/**
+      - site/**
+      - go.mod
+      - go.sum
+      - mise.toml
 
 permissions:
   actions: read

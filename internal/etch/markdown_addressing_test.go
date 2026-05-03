@@ -168,6 +168,20 @@ func TestMarkdownListItemsNormalizeAndClassify(t *testing.T) {
 	}
 }
 
+func TestNormalizeMarkdownItemTextForHelpExamples(t *testing.T) {
+	tests := map[string]string{
+		`- [ ] **Buy milk**`:                                                   "Buy milk",
+		`- [ ] Read [docs](https://example.com)`:                               "Read docs",
+		"- [ ] Buy groceries [[62]](https://example.com) [due:: 2026-05-03]":   "Buy groceries",
+		"- [ ] Review `inline code` and *emphasis* [^63](https://example.com)": "Review inline code and emphasis",
+	}
+	for source, want := range tests {
+		if got := normalizeMarkdownItemText(source); got != want {
+			t.Fatalf("normalizeMarkdownItemText(%q) = %q, want %q", source, got, want)
+		}
+	}
+}
+
 func TestResolveMarkdownItemIgnoresTrailingReferenceAnnotationLinks(t *testing.T) {
 	raw := []byte(strings.Join([]string{
 		"- [ ] Send follow-up [[62]](https://notes.granola.ai/d/57b65c7f-note) [63](https://notes.granola.ai/d/other)",
