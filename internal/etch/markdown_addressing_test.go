@@ -60,7 +60,7 @@ func TestMarkdownPlacementFromFlags(t *testing.T) {
 		t.Fatalf("placement = %#v", got)
 	}
 
-	if _, err := markdownPlacementFromFlags(true, false, "", "anchor"); err == nil || !strings.Contains(err.Error(), "mutually exclusive") {
+	if _, err := markdownPlacementFromFlags(true, false, "", "anchor"); err == nil || err.Error() != "--head and --after are mutually exclusive" {
 		t.Fatalf("conflicting placement err = %v", err)
 	}
 }

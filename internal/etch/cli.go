@@ -36,7 +36,7 @@ func runCLIAt(cwd string, args []string, stdout, stderr io.Writer) (exitCode, er
 	cmd := &cli.Command{
 		Name:                          "etch",
 		Usage:                         "mechanical mutations to text and data files",
-		UsageText:                     "etch [--plan|-n|--dry-run] [flags] <verb> [args...]",
+		UsageText:                     "etch [flags] <command> [args...]",
 		Writer:                        stdout,
 		ErrWriter:                     stderr,
 		HideHelpCommand:               true,

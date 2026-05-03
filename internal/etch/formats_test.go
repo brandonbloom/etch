@@ -1090,6 +1090,47 @@ func TestCSVTableVerbs(t *testing.T) {
 	}
 }
 
+func TestTableColumnDeleteMissingIsNoop(t *testing.T) {
+	tests := []struct {
+		name    string
+		path    string
+		content string
+		args    []string
+	}{
+		{
+			name:    "csv",
+			path:    "data.csv",
+			content: "id,status\n1,open\n",
+			args:    []string{"table", "column", "delete", "data.csv", "owner"},
+		},
+		{
+			name:    "markdown",
+			path:    "note.md",
+			content: "## Inventory\n\n| id | status |\n| --- | --- |\n| 1 | open |\n",
+			args:    []string{"table", "column", "delete", "note.md", "## Inventory", "owner"},
+		},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			dir := initRepo(t)
+			writeFile(t, dir, tc.path, tc.content)
+			head := commitAll(t, dir, "initial")
+
+			var out, errb bytes.Buffer
+			code, err := runCLIAt(dir, tc.args, &out, &errb)
+			if err != nil || code != exitOK {
+				t.Fatalf("etch %v code=%d err=%v stdout=%s stderr=%s", tc.args, code, err, out.String(), errb.String())
+			}
+			if !strings.Contains(errb.String(), "nothing to do") {
+				t.Fatalf("stderr = %s", errb.String())
+			}
+			if got := stringsTrim(testGit(t, dir, "rev-parse", "HEAD")); got != head {
+				t.Fatalf("missing column delete moved HEAD to %s", got)
+			}
+		})
+	}
+}
+
 func TestMarkdownTableVerbs(t *testing.T) {
 	dir := initRepo(t)
 	writeFile(t, dir, "note.md", "## Inventory\n\n| sku | status |\n| --- | --- |\n| A1 | open |\n")

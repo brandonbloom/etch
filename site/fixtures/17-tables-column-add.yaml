@@ -1,7 +1,7 @@
 cat: Tables
 name: table column add
 syntax: "etch table column add <file> [<scope> [<table>]] <column> [--after <column>] [--default <value>]"
-desc: Add a new column with an optional default value.
+desc: Ensure a column exists, using an optional default value when creating it.
 example: "etch table column add data.csv priority --default medium"
 file: data.csv
 before: |

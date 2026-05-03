@@ -85,9 +85,13 @@ etch --plan set state.json status complete
 etch --dry-run set state.json status complete
 ```
 
-## Core Commands
+## Common Commands
 
-Porcelain commands infer the format from the file extension:
+Global flags such as `--plan` and `--dry-run` appear before the command path.
+
+Common commands infer the format from the file extension. This table is a quick
+orientation; see the [command cheatsheet](https://brandonbloom.github.io/etch/cheatsheet/)
+or `etch help` for a fuller reference.
 
 | Command | Description |
 | --- | --- |
@@ -121,13 +125,15 @@ Table commands infer CSV or Markdown table behavior:
 | `table row append <path> ... <row-json>` | Append a row. |
 | `table row insert <path> ... (--before <row>\|--after <row>) <row-json>` | Insert a row. |
 | `table row delete <path> ... <row>` | Delete rows. |
-| `table column add <path> ... <column> [--after <column>] [--default <value>]` | Add a column. |
+| `table column add <path> ... <column> [--after <column>] [--default <value>]` | Ensure a column exists. |
 | `table column rename <path> ... <old-column> <new-column>` | Rename a column. |
-| `table column delete <path> ... <column>` | Delete a column. |
+| `table column delete <path> ... <column>` | Ensure a column is absent. |
 
-Use `etch help --all` to see format-explicit plumbing commands such as
+Use `etch help --all` to see advanced format-explicit commands such as
 `json set`, `jsonl append`, `yaml set`, `frontmatter set`,
-`md section replace`, and `csv row append`.
+`md section replace`, and `csv row append`. Format-explicit command prefixes
+select the parser and writer; they do not infer or validate the format from the
+file extension.
 
 For machine-readable command metadata:
 
@@ -257,12 +263,13 @@ $["key.with.dots"]
 Unsupported selector forms include wildcards, recursive descent, slices,
 filters, unions, functions, and negative indexes.
 
-Structured values are strings by default. Use `--json` to parse one following
-token as a strict JSON value.
+Structured values are strings by default. Use `--json` immediately before or
+after a value to parse it as strict JSON.
 
 ```text
 etch set state.json status complete
 etch set state.json count --json 12
+etch set state.json count 12 --json
 etch append state.json events --json '{"status":"done"}'
 etch append events.jsonl '{"status":"done"}'
 ```
@@ -322,6 +329,9 @@ Markdown, and CSV inputs may include a UTF-8 BOM; `etch` preserves it when
 writing the file back.
 
 ## Development
+
+See [DEVELOPMENT.md](DEVELOPMENT.md) for contributor workflow notes, including
+the command-reference sync checklist.
 
 Run tests:
 

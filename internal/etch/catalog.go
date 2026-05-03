@@ -113,9 +113,9 @@ func tableCommands(f tableCommandFamily) []commandSpec {
 		tableCommand(f, "row append", "<row-json>", "Append a "+f.Row+".", ClassNonIdempotent, parseTable(f.Format, "row", "append")),
 		tableCommand(f, "row insert", "(--before <row>|--after <row>) <row-json>", "Insert a "+f.Row+".", ClassNonIdempotent, parseTable(f.Format, "row", "insert"), "--before", "--after"),
 		tableCommand(f, "row delete", "<row>", "Delete "+f.Rows+".", ClassIdempotent, parseTable(f.Format, "row", "delete")),
-		tableCommand(f, "column add", "<column> [--after <column>] [--default <value>]", "Add a "+f.Column+".", ClassIdempotent, parseTable(f.Format, "column", "add"), "--after", "--default"),
+		tableCommand(f, "column add", "<column> [--after <column>] [--default <value>]", "Ensure a "+f.Column+" exists.", ClassIdempotent, parseTable(f.Format, "column", "add"), "--after", "--default"),
 		tableCommand(f, "column rename", "<old-column> <new-column>", "Rename a "+f.Column+".", ClassIdempotent, parseTable(f.Format, "column", "rename")),
-		tableCommand(f, "column delete", "<column>", "Delete a "+f.Column+".", ClassIdempotent, parseTable(f.Format, "column", "delete")),
+		tableCommand(f, "column delete", "<column>", "Ensure a "+f.Column+" is absent.", ClassIdempotent, parseTable(f.Format, "column", "delete")),
 	}
 }
 
@@ -535,6 +535,8 @@ func parseStructuredValueArgs(command string, args []string) (structuredValueArg
 		return structuredValueArgs{Path: args[0], Selector: args[1], Value: args[2], Mode: ValueModeString}, nil
 	case len(args) == 4 && args[2] == "--json":
 		return structuredValueArgs{Path: args[0], Selector: args[1], Value: args[3], Mode: ValueModeJSON}, nil
+	case len(args) == 4 && args[3] == "--json":
+		return structuredValueArgs{Path: args[0], Selector: args[1], Value: args[2], Mode: ValueModeJSON}, nil
 	default:
 		return structuredValueArgs{}, usagef("usage: etch %s <path> <selector> <value>", command)
 	}
@@ -1003,10 +1005,12 @@ func defaultCreateContent(path string) string {
 	}
 }
 
-const shortHelp = `usage: etch [flags] <verb> [args...]
+const shortHelp = `usage: etch [flags] <command> [args...]
        etch run [script]
 
-Core flags:
+Global flags must appear before the command path.
+
+Global flags:
   --plan                 emit canonical JSON plan
   -n, --dry-run          emit git-am-compatible patch preview
   --no-checkout          commit without materializing touched paths
@@ -1020,8 +1024,8 @@ Core flags:
   --allow-empty          permit empty commit for mutating invocations
   --version              print version and exit
 
-Use "etch help" for the porcelain verb table, "etch help scripts" for batch scripts,
-or "etch help --all" for plumbing commands too.
+Use "etch help" for common commands, "etch help scripts" for batch scripts,
+or "etch help --all" for advanced commands too.
 `
 
 func printHelp(w io.Writer, topic string, all bool) error {
@@ -1032,7 +1036,7 @@ func printHelp(w io.Writer, topic string, all bool) error {
 		if all {
 			fmt.Fprintln(w, "Commands:")
 		} else {
-			fmt.Fprintln(w, "Porcelain commands:")
+			fmt.Fprintln(w, "Common commands:")
 		}
 		for _, v := range verbCatalog() {
 			if !v.Canonical || (!all && isPlumbingVerb(v)) {
@@ -1042,9 +1046,11 @@ func printHelp(w io.Writer, topic string, all bool) error {
 		}
 		fmt.Fprintln(w)
 		if all {
+			fmt.Fprintln(w, "Format-explicit command prefixes select the parser and writer; they do not infer or validate the format from the file extension.")
+			fmt.Fprintln(w)
 			fmt.Fprint(w, "Topics: model, scripts, selectors, values, fields, plans, security, conflicts, addressing, section, tasks, table, csv\n")
 		} else {
-			fmt.Fprint(w, "Topics: model, scripts, selectors, values, fields, plans, security, conflicts, addressing, section, tasks, table, csv. Use --all for plumbing commands.\n")
+			fmt.Fprint(w, "Topics: model, scripts, selectors, values, fields, plans, security, conflicts, addressing, section, tasks, table, csv. Use --all for advanced commands.\n")
 		}
 	case "scripts":
 		fmt.Fprint(w, scriptsHelp)
@@ -1097,10 +1103,12 @@ Rejected: wildcards, recursive descent, slices, filters, unions, functions, nega
 `
 
 const valuesHelp = `Structured values are strings by default. Use --json for a strict JSON value.
+For structured commands, --json may appear immediately before or after the value.
 
 Examples:
   etch set state.json status complete          # string "complete"
   etch set state.json count --json 12          # number 12
+  etch set state.json count 12 --json          # number 12
   etch append state.json events --json '{"kind":"prompt"}'
   etch append events.jsonl '{"kind":"prompt"}'
   etch set state.json status=complete count:=12

@@ -47,6 +47,9 @@ func TestHelpAllIncludesPlumbing(t *testing.T) {
 			t.Fatalf("help --all missing plumbing command %q:\n%s", shown, text)
 		}
 	}
+	if !strings.Contains(text, "Format-explicit command prefixes select the parser and writer") {
+		t.Fatalf("help --all missing advanced format warning:\n%s", text)
+	}
 }
 
 func TestHelpAllThroughCLI(t *testing.T) {
@@ -76,7 +79,7 @@ func TestHelpFlagIsShortReference(t *testing.T) {
 	if err != nil || code != exitOK {
 		t.Fatalf("runCLI(help) code=%d err=%v stderr=%s", code, err, errb.String())
 	}
-	if out.String() == shortHelp || !strings.Contains(out.String(), "Porcelain commands:") {
+	if out.String() == shortHelp || !strings.Contains(out.String(), "Common commands:") {
 		t.Fatalf("help did not produce long help:\n%s", out.String())
 	}
 }

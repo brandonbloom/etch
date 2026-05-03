@@ -1,7 +1,7 @@
 cat: Tables
 name: table column delete
 syntax: "etch table column delete <file> [<scope> [<table>]] <column>"
-desc: Delete a column from a CSV or Markdown table.
+desc: Ensure a column is absent from a CSV or Markdown table.
 example: "etch table column delete data.csv owner"
 file: data.csv
 before: |

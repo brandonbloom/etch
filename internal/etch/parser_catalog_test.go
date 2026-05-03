@@ -113,6 +113,26 @@ func TestDecodeStructuredCommandsRecordFormat(t *testing.T) {
 	}
 }
 
+func TestDecodeStructuredJSONFlagBeforeOrAfterValue(t *testing.T) {
+	tests := [][]string{
+		{"set", "state.json", "count", "--json", "12"},
+		{"set", "state.json", "count", "12", "--json"},
+		{"json", "append", "state.json", "items", "--json", `{"n":1}`},
+		{"json", "append", "state.json", "items", `{"n":1}`, "--json"},
+	}
+	for _, tokens := range tests {
+		t.Run(strings.Join(tokens, " "), func(t *testing.T) {
+			op, err := DecodeOperation(Statement{Tokens: tokens})
+			if err != nil {
+				t.Fatal(err)
+			}
+			if op.ValueMode != ValueModeJSON {
+				t.Fatalf("ValueMode = %s, want %s; op=%#v", op.ValueMode, ValueModeJSON, op)
+			}
+		})
+	}
+}
+
 func TestDecodeAssignmentSetRejectsDuplicateTargets(t *testing.T) {
 	if _, err := DecodeOperations(Statement{Tokens: []string{"set", "state.json", "a=1", "$.a=2"}}); err == nil {
 		t.Fatal("duplicate assignment targets succeeded")
@@ -194,7 +214,7 @@ func TestDecodeMarkdownTaskListCommands(t *testing.T) {
 	if _, err := DecodeOperation(Statement{Tokens: []string{"task", "add", "note.md", "Send", "--task"}}); err == nil || !strings.Contains(err.Error(), "--task is only accepted by list add") {
 		t.Fatalf("task add --task err = %v", err)
 	}
-	if _, err := DecodeOperation(Statement{Tokens: []string{"list", "add", "note.md", "Send", "--before", "A", "--after", "B"}}); err == nil || !strings.Contains(err.Error(), "mutually exclusive") {
+	if _, err := DecodeOperation(Statement{Tokens: []string{"list", "add", "note.md", "Send", "--before", "A", "--after", "B"}}); err == nil || err.Error() != "--before and --after are mutually exclusive" {
 		t.Fatalf("list add before/after err = %v", err)
 	}
 }

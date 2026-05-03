@@ -615,7 +615,7 @@ func mutateTable(td *tableData, op Operation) error {
 	case "table column delete":
 		idx, err := columnIndex(td.Header, op.Target.Column)
 		if err != nil {
-			return err
+			return nil
 		}
 		td.Header = append(td.Header[:idx], td.Header[idx+1:]...)
 		for i := range td.Rows {

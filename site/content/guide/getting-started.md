@@ -72,8 +72,8 @@ Read operations (`exists`, `missing`, `contains`) never commit.
 etch has extensive built-in documentation:
 
 ```sh
-etch help              # Porcelain commands
-etch help --all        # All commands including plumbing
+etch help              # Common commands
+etch help --all        # All commands, including advanced forms
 etch help model        # Mental model and transaction semantics
 etch help selectors    # JSONPath selector syntax
 etch help values       # String vs JSON value modes

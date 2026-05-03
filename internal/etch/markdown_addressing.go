@@ -76,25 +76,43 @@ type markdownPlacement struct {
 
 func markdownPlacementFromFlags(head, tail bool, before, after string) (markdownPlacement, error) {
 	var placements []markdownPlacement
+	var flags []string
 	if head {
 		placements = append(placements, markdownPlacement{Kind: markdownPlacementHead})
+		flags = append(flags, "--head")
 	}
 	if tail {
 		placements = append(placements, markdownPlacement{Kind: markdownPlacementTail})
+		flags = append(flags, "--tail")
 	}
 	if before != "" {
 		placements = append(placements, markdownPlacement{Kind: markdownPlacementBefore, Anchor: before})
+		flags = append(flags, "--before")
 	}
 	if after != "" {
 		placements = append(placements, markdownPlacement{Kind: markdownPlacementAfter, Anchor: after})
+		flags = append(flags, "--after")
 	}
 	if len(placements) > 1 {
-		return markdownPlacement{}, usagef("--head, --tail, --before, and --after are mutually exclusive")
+		return markdownPlacement{}, usagef("%s are mutually exclusive", formatMarkdownFlagList(flags))
 	}
 	if len(placements) == 0 {
 		return markdownPlacement{Kind: markdownPlacementDefault}, nil
 	}
 	return placements[0], nil
+}
+
+func formatMarkdownFlagList(flags []string) string {
+	switch len(flags) {
+	case 0:
+		return ""
+	case 1:
+		return flags[0]
+	case 2:
+		return flags[0] + " and " + flags[1]
+	default:
+		return strings.Join(flags[:len(flags)-1], ", ") + ", and " + flags[len(flags)-1]
+	}
 }
 
 func resolveMarkdownPlacementPoint(raw []byte, path string, scope markdownRange, placement markdownPlacement) (int, error) {
