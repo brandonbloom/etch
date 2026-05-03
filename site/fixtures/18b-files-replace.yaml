@@ -1,0 +1,12 @@
+cat: Files
+name: replace
+syntax: "etch replace <file> <content>"
+desc: Replace an existing file's entire content.
+example: 'etch replace notes/status.txt "complete"'
+file: notes/status.txt
+before: |
+  open
+args:
+  - replace
+  - notes/status.txt
+  - complete

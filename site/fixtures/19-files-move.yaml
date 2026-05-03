@@ -3,4 +3,14 @@ name: move
 syntax: "etch move <src> <dst>"
 desc: Move (rename) a file path.
 example: "etch move people/bob.md people/robert.md"
-verify: false
+setup:
+  - path: people/bob.md
+    content: |
+      # Bob
+results:
+  - people/bob.md
+  - people/robert.md
+args:
+  - move
+  - people/bob.md
+  - people/robert.md

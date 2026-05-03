@@ -3,4 +3,15 @@ name: copy
 syntax: "etch copy <src> <dst>"
 desc: Copy a file path.
 example: "etch copy templates/default.md tasks/new-task.md"
-verify: false
+setup:
+  - path: templates/default.md
+    content: |
+      # New task
+      
+      - [ ] Triage
+results:
+  - tasks/new-task.md
+args:
+  - copy
+  - templates/default.md
+  - tasks/new-task.md

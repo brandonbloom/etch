@@ -1,0 +1,18 @@
+cat: Tables
+name: table row insert
+syntax: "etch table row insert <file> [<scope> [<table>]] (--before <row>|--after <row>) '<row-json>'"
+desc: Insert a row before or after one matching row in a CSV or Markdown table.
+example: 'etch table row insert data.csv --after id=1 ''{"id":"2","status":"open","owner":"bob"}'''
+file: data.csv
+before: |
+  id,status,owner
+  1,done,alice
+  3,open,carol
+args:
+  - table
+  - row
+  - insert
+  - data.csv
+  - --after
+  - id=1
+  - '{"id":"2","status":"open","owner":"bob"}'

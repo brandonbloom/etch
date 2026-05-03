@@ -1,0 +1,17 @@
+cat: Tables
+name: table column rename
+syntax: "etch table column rename <file> [<scope> [<table>]] <old-column> <new-column>"
+desc: Rename a column in a CSV or Markdown table.
+example: "etch table column rename data.csv owner assignee"
+file: data.csv
+before: |
+  id,status,owner
+  1,open,alice
+  2,closed,bob
+args:
+  - table
+  - column
+  - rename
+  - data.csv
+  - owner
+  - assignee

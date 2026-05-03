@@ -20,8 +20,8 @@ var CAT_DESCS = {
   "JSONL": "Append-only operations on newline-delimited JSON logs.",
   "Sections": "Replace, append, or prepend content under Markdown headings.",
   "Tasks": "Open, close, and add task checkboxes and list items in Markdown.",
-  "Tables": "Set cells, add/delete rows and columns in CSV and Markdown pipe tables.",
-  "Files": "Create, move, and copy files.",
+  "Tables": "Set cells, insert/delete rows, and add/rename/delete columns in CSV and Markdown pipe tables.",
+  "Files": "Create, replace, move, and copy files.",
   "Guards": "Assert conditions without committing. Use in scripts to gate mutations.",
   "Scripts": "Run multiple commands as one atomic transaction.",
   "Inline fields": "Set Dataview-style inline fields in Markdown body text."
@@ -73,28 +73,17 @@ function renderDetail() {
   html += '<div class="detail-section"><div class="detail-label">Syntax</div><pre class="detail-pre">' + esc(c.syntax) + '</pre></div>';
   html += '<div class="detail-section"><div class="detail-label">Example</div><pre class="detail-pre detail-example"><span class="prompt">$</span> ' + esc(c.example) + '</pre></div>';
 
-  if (c.file && (c.before !== null || c.after !== null)) {
+  var results = commandResults(c);
+  if (results.length > 0) {
     html += '<div class="detail-section">';
-    html += '<div class="detail-label-row"><span class="detail-label">Result</span>';
-    html += '<span class="diff-file-tag">' + esc(c.file) + '</span>';
-    if (c.commit) {
-      html += '<span class="diff-commit-tag">' + esc(c.commit) + '</span>';
-    }
-    html += '<div class="diff-toggle">';
-    html += '<button class="toggle-btn' + (diffMode === 'inline' ? ' active' : '') + '" onclick="setDiffMode(\'inline\')">Inline</button>';
-    html += '<button class="toggle-btn' + (diffMode === 'side' ? ' active' : '') + '" onclick="setDiffMode(\'side\')">Side-by-side</button>';
-    html += '</div></div>';
+    html += renderCommitPreview(c, results);
 
-    var beforeLines = c.before ? c.before.split('\n') : [];
-    var afterLines = c.after ? c.after.split('\n') : [];
-
-    if (c.before === null) {
-      html += '<div class="diff-view">' + renderAllAdd(afterLines) + '</div>';
-    } else if (diffMode === 'side') {
-      html += '<div class="diff-view">' + renderSideBySide(beforeLines, afterLines) + '</div>';
-    } else {
-      html += '<div class="diff-view">' + renderInline(beforeLines, afterLines) + '</div>';
-    }
+    results.forEach(function(result) {
+      if (results.length > 1) {
+        html += '<div class="diff-result-label">' + esc(result.file) + '</div>';
+      }
+      html += '<div class="diff-view">' + renderResult(result) + '</div>';
+    });
     html += '</div>';
   }
 
@@ -139,10 +128,140 @@ function loadFromHash() {
   return false;
 }
 
+function commandResults(c) {
+  if (c.results && c.results.length > 0) {
+    return c.results.map(normalizeResult);
+  }
+  if (c.file && (c.before !== null || c.after !== null)) {
+    return [normalizeResult({ file: c.file, before: c.before, after: c.after })];
+  }
+  return [];
+}
+
+function renderCommitPreview(c, results) {
+  var html = '<div class="commit-preview">';
+  html += '<div class="commit-preview-head">';
+  html += '<div>';
+  html += '<div class="detail-label">Commit</div>';
+  html += '<div class="commit-message">' + esc(c.commit || 'No commit') + '</div>';
+  html += '</div>';
+  if (results.some(function(r) { return r.before !== null && r.after !== null; })) {
+    html += renderDiffToggle();
+  }
+  html += '</div>';
+  html += '<div class="diff-stat-list">';
+  results.forEach(function(result) {
+    var stat = diffStat(result);
+    html += '<div class="diff-stat-row">';
+    html += '<span class="diff-stat-file">' + esc(result.file) + '</span>';
+    html += '<span class="diff-stat-count">' + esc(statLabel(stat)) + '</span>';
+    html += '<span class="diff-stat-bars">' + statBars(stat) + '</span>';
+    html += '</div>';
+  });
+  html += '</div>';
+  html += '</div>';
+  return html;
+}
+
+function renderDiffToggle() {
+  var html = '<div class="diff-toggle">';
+  html += '<button class="toggle-btn' + (diffMode === 'inline' ? ' active' : '') + '" onclick="setDiffMode(\'inline\')">Inline</button>';
+  html += '<button class="toggle-btn' + (diffMode === 'side' ? ' active' : '') + '" onclick="setDiffMode(\'side\')">Side-by-side</button>';
+  html += '</div>';
+  return html;
+}
+
+function normalizeResult(r) {
+  return {
+    file: r.file,
+    before: typeof r.before === 'undefined' ? null : r.before,
+    after: typeof r.after === 'undefined' ? null : r.after
+  };
+}
+
+function splitLines(s) {
+  if (s === '') return [];
+  return s.split('\n');
+}
+
+function diffStat(result) {
+  var beforeLines = result.before === null ? [] : splitLines(result.before);
+  var afterLines = result.after === null ? [] : splitLines(result.after);
+  if (result.before === null) {
+    return { status: 'created', adds: afterLines.length, dels: 0 };
+  }
+  if (result.after === null) {
+    return { status: 'deleted', adds: 0, dels: beforeLines.length };
+  }
+  var ops = diffLines(beforeLines, afterLines);
+  var adds = 0, dels = 0;
+  for (var i = 0; i < ops.length; i++) {
+    if (ops[i].type === 'add') adds++;
+    if (ops[i].type === 'del') dels++;
+  }
+  return { status: adds || dels ? 'modified' : 'unchanged', adds: adds, dels: dels };
+}
+
+function statLabel(stat) {
+  var total = stat.adds + stat.dels;
+  if (total === 0) return stat.status === 'created' ? 'created empty file' : stat.status;
+  var pieces = [];
+  if (stat.adds) pieces.push('+' + stat.adds);
+  if (stat.dels) pieces.push('-' + stat.dels);
+  return total + ' ' + (total === 1 ? 'line' : 'lines') + ' (' + pieces.join(' ') + ')';
+}
+
+function statBars(stat) {
+  return repeatStat('+', stat.adds, 'diff-stat-add') + repeatStat('-', stat.dels, 'diff-stat-del');
+}
+
+function repeatStat(ch, count, cls) {
+  if (count <= 0) return '';
+  var shown = Math.min(count, 24);
+  var text = new Array(shown + 1).join(ch);
+  if (count > shown) text += '...';
+  return '<span class="' + cls + '">' + esc(text) + '</span>';
+}
+
+function renderResult(result) {
+  if (result.before === null && result.after === '') {
+    return renderEmptyFile('created empty file');
+  }
+  if (result.before === '' && result.after === null) {
+    return renderEmptyFile('deleted empty file');
+  }
+  if (result.before === null) {
+    return renderAllAdd(splitLines(result.after));
+  }
+  if (result.after === null) {
+    return renderAllDel(splitLines(result.before));
+  }
+  var beforeLines = splitLines(result.before);
+  var afterLines = splitLines(result.after);
+  if (diffMode === 'side') {
+    return renderSideBySide(beforeLines, afterLines);
+  }
+  return renderInline(beforeLines, afterLines);
+}
+
+function renderEmptyFile(label) {
+  return '<div class="diff-empty-file">' + esc(label) + '</div>';
+}
+
 function renderAllAdd(lines) {
+  if (lines.length === 0) return renderEmptyFile('created empty file');
   var html = '<table class="diff-table">';
   for (var i = 0; i < lines.length; i++) {
     html += '<tr class="diff-add"><td class="diff-ln">' + (i+1) + '</td><td class="diff-marker">+</td><td class="diff-code">' + esc(lines[i]) + '</td></tr>';
+  }
+  return html + '</table>';
+}
+
+function renderAllDel(lines) {
+  if (lines.length === 0) return renderEmptyFile('deleted empty file');
+  var html = '<table class="diff-table">';
+  for (var i = 0; i < lines.length; i++) {
+    html += '<tr class="diff-del"><td class="diff-ln">' + (i+1) + '</td><td class="diff-marker">-</td><td class="diff-code">' + esc(lines[i]) + '</td></tr>';
   }
   return html + '</table>';
 }
@@ -203,8 +322,8 @@ function diffLines(before, after) {
 }
 
 function esc(s) {
-  if (!s) return '';
-  return s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+  if (s === null || typeof s === 'undefined') return '';
+  return String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
 }
 
 function highlightWord(oldStr, newStr, delCls, addCls) {

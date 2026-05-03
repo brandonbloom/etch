@@ -1,6 +1,6 @@
 cat: Tables
 name: table row delete
-syntax: "etch table row delete <file> <match>"
+syntax: "etch table row delete <file> [<scope> [<table>]] <row>"
 desc: Delete rows matching a condition.
 example: "etch table row delete data.csv status=closed"
 file: data.csv
