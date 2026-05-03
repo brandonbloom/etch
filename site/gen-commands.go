@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"flag"
 	"fmt"
+	"html"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -52,6 +53,7 @@ type Diff struct {
 	AfterLine  int    `json:"after_line,omitempty"`
 	Marker     string `json:"marker"`
 	Text       string `json:"text"`
+	HTML       string `json:"html,omitempty"`
 }
 
 type Command struct {
@@ -438,7 +440,62 @@ func diffLines(before, after *string) []Diff {
 	for ; j < n; j++ {
 		rows = append(rows, Diff{Type: "add", AfterLine: j + 1, Marker: "+", Text: afterLines[j]})
 	}
+	return addIntralineHighlights(rows)
+}
+
+func addIntralineHighlights(rows []Diff) []Diff {
+	for i := 0; i+1 < len(rows); i++ {
+		if rows[i].Type != "del" || rows[i+1].Type != "add" {
+			continue
+		}
+		delHTML, addHTML, ok := intralineHTML(rows[i].Text, rows[i+1].Text)
+		if !ok {
+			continue
+		}
+		rows[i].HTML = delHTML
+		rows[i+1].HTML = addHTML
+		i++
+	}
 	return rows
+}
+
+func intralineHTML(before, after string) (string, string, bool) {
+	beforeRunes := []rune(before)
+	afterRunes := []rune(after)
+
+	prefix := 0
+	for prefix < len(beforeRunes) && prefix < len(afterRunes) && beforeRunes[prefix] == afterRunes[prefix] {
+		prefix++
+	}
+
+	beforeSuffix := len(beforeRunes)
+	afterSuffix := len(afterRunes)
+	for beforeSuffix > prefix && afterSuffix > prefix && beforeRunes[beforeSuffix-1] == afterRunes[afterSuffix-1] {
+		beforeSuffix--
+		afterSuffix--
+	}
+
+	if prefix == beforeSuffix && prefix == afterSuffix {
+		return "", "", false
+	}
+
+	return highlightRunes(beforeRunes, prefix, beforeSuffix, "diff-hl-del"),
+		highlightRunes(afterRunes, prefix, afterSuffix, "diff-hl-add"),
+		true
+}
+
+func highlightRunes(runes []rune, start, end int, class string) string {
+	var b strings.Builder
+	b.WriteString(html.EscapeString(string(runes[:start])))
+	if start < end {
+		b.WriteString(`<span class="`)
+		b.WriteString(class)
+		b.WriteString(`">`)
+		b.WriteString(html.EscapeString(string(runes[start:end])))
+		b.WriteString(`</span>`)
+	}
+	b.WriteString(html.EscapeString(string(runes[end:])))
+	return b.String()
 }
 
 func allLines(typ, marker string, lines []string, before bool) []Diff {

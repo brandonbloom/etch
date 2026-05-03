@@ -17,6 +17,7 @@
   --font-sans: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
   --font-mono: 'JetBrains Mono', 'SF Mono', 'Fira Code', monospace;
   --max-w: 860px;
+  --site-nav-height: 73px;
 }
 
 @media (prefers-color-scheme: dark) {
@@ -53,7 +54,11 @@ body {
 
 /* Nav */
 .nav {
+  position: sticky;
+  top: 0;
+  z-index: 100;
   border-bottom: 1px solid var(--border);
+  background: var(--bg);
   padding: 16px 0;
 }
 .nav-inner {
@@ -139,6 +144,7 @@ main { padding: 48px 0 80px; }
 
 /* Reference */
 .reference-container {
+  --reference-topic-nav-height: 58px;
   padding-top: 40px;
   padding-bottom: 80px;
 }
@@ -155,8 +161,8 @@ main { padding: 48px 0 80px; }
 }
 .reference-topic-nav {
   position: sticky;
-  top: 0;
-  z-index: 40;
+  top: var(--site-nav-height);
+  z-index: 60;
   display: flex;
   flex-wrap: nowrap;
   gap: 18px;
@@ -201,7 +207,7 @@ main { padding: 48px 0 80px; }
   color: var(--fg);
 }
 .reference-section {
-  scroll-margin-top: 132px;
+  scroll-margin-top: calc(var(--site-nav-height) + var(--reference-topic-nav-height));
   padding: 36px 0 40px;
   border-top: 1px solid var(--border);
 }
@@ -343,10 +349,10 @@ main { padding: 48px 0 80px; }
     grid-column: 1;
     grid-row: 1 / span 2;
     align-self: start;
-    top: 24px;
+    top: calc(var(--site-nav-height) + 24px);
     flex-direction: column;
     gap: 16px;
-    max-height: calc(100vh - 48px);
+    max-height: calc(100vh - var(--site-nav-height) - 48px);
     overflow-x: hidden;
     overflow-y: auto;
     margin: 0;
@@ -384,7 +390,7 @@ main { padding: 48px 0 80px; }
   }
 
   .reference-section {
-    scroll-margin-top: 28px;
+    scroll-margin-top: var(--site-nav-height);
   }
 }
 
@@ -546,13 +552,14 @@ pre code { background: none; padding: 0; font-size: inherit; }
 
 /* Command browser */
 .browser {
-  border: 1px solid var(--border);
-  border-radius: 8px;
-  overflow: hidden;
+  border: none;
+  border-radius: 0;
+  overflow: visible;
   margin-top: 8px;
 }
 .browser-static {
   --cheatsheet-catbar-height: 46px;
+  --cheatsheet-category-chrome-height: 132px;
   overflow: visible;
 }
 .browser-cats {
@@ -561,15 +568,16 @@ pre code { background: none; padding: 0; font-size: inherit; }
   gap: 0;
   overflow-x: auto;
   scrollbar-width: none;
-  border-bottom: 1px solid var(--border);
-  border-radius: 8px 8px 0 0;
+  border: 1px solid var(--border);
+  border-radius: 8px;
   background: var(--surface);
+  margin-bottom: 16px;
 }
 .browser-cats::-webkit-scrollbar { display: none; }
 .browser-static .browser-cats {
   position: sticky;
-  top: 0;
-  z-index: 30;
+  top: var(--site-nav-height);
+  z-index: 60;
   box-shadow: 0 1px 0 var(--border);
 }
 .cat-btn {
@@ -591,17 +599,21 @@ pre code { background: none; padding: 0; font-size: inherit; }
 .cat-btn.active { color: var(--accent); border-bottom-color: var(--accent); }
 
 .browser-category {
-  scroll-margin-top: 150px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--bg);
+  scroll-margin-top: calc(var(--site-nav-height) + var(--cheatsheet-catbar-height));
 }
 .browser-category + .browser-category {
-  border-top: 1px solid var(--border);
+  margin-top: 18px;
 }
 .browser-category-chrome {
   position: sticky;
-  top: var(--cheatsheet-catbar-height);
-  z-index: 20;
+  top: calc(var(--site-nav-height) + var(--cheatsheet-catbar-height));
+  z-index: 50;
   background: var(--bg);
   border-bottom: 1px solid var(--border);
+  border-radius: 7px 7px 0 0;
 }
 .browser-category-head {
   padding: 18px 24px 8px;
@@ -652,7 +664,7 @@ pre code { background: none; padding: 0; font-size: inherit; }
 .detail-empty { color: var(--fg-dim); font-size: 0.9rem; text-align: center; padding: 48px 0; }
 
 .command-detail {
-  scroll-margin-top: 190px;
+  scroll-margin-top: calc(var(--site-nav-height) + var(--cheatsheet-catbar-height) + var(--cheatsheet-category-chrome-height));
   padding-bottom: 28px;
   margin-bottom: 28px;
   border-bottom: 1px solid var(--border);
