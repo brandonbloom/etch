@@ -13,6 +13,7 @@ type HelpReference struct {
 type HelpTopic struct {
 	ID         string      `json:"id"`
 	Title      string      `json:"title"`
+	Group      string      `json:"group"`
 	Invocation string      `json:"invocation"`
 	Summary    string      `json:"summary"`
 	Aliases    []string    `json:"aliases,omitempty"`
@@ -60,6 +61,16 @@ Global flags:
 Use "etch help" for common commands, "etch help scripts" for batch scripts,
 or "etch help --all" for advanced commands too.
 `
+
+const (
+	helpGroupCommands   = "Commands"
+	helpGroupBasics     = "Basics"
+	helpGroupData       = "Data and Addressing"
+	helpGroupFamilies   = "Command Families"
+	helpGroupExecution  = "Execution and Safety"
+	helpCommandSummary  = "etch mutates structured files and commits each successful mutating invocation."
+	helpGlobalTopicText = "model, invocation, scripts, selectors, values, formats, addressing, fields, files, guards, section, tasks, table, plans, commits, security, conflicts"
+)
 
 func printHelp(w io.Writer, topic string, all bool) error {
 	if topic == "" {
@@ -129,12 +140,12 @@ func commandHelpTopic(all bool) HelpTopic {
 	title := "Common Commands"
 	invocation := "etch help"
 	heading := "Common commands"
-	linksText := helpTopicsText + ". Use --all for advanced commands."
+	linksText := helpGlobalTopicText + ". Use --all for advanced commands."
 	if all {
 		title = "Command Index"
 		invocation = "etch help --all"
 		heading = "Commands"
-		linksText = helpTopicsText
+		linksText = helpGlobalTopicText
 	}
 
 	blocks := []HelpBlock{
@@ -159,8 +170,9 @@ func commandHelpTopic(all bool) HelpTopic {
 	return HelpTopic{
 		ID:         referenceID(title),
 		Title:      title,
+		Group:      helpGroupCommands,
 		Invocation: invocation,
-		Summary:    "etch mutates structured files and commits each successful mutating invocation.",
+		Summary:    helpCommandSummary,
 		Blocks:     blocks,
 	}
 }
@@ -180,22 +192,25 @@ func helpCommandRows(all bool) []HelpCommandRow {
 	return rows
 }
 
-const helpTopicsText = "model, scripts, selectors, values, fields, plans, security, conflicts, addressing, section, tasks, table, csv"
-
 func helpTopicLinks() []HelpTopicLink {
 	return []HelpTopicLink{
 		{Title: "Model", ID: "model"},
+		{Title: "Invocation", ID: "invocation"},
 		{Title: "Scripts", ID: "scripts"},
 		{Title: "Selectors", ID: "selectors"},
 		{Title: "Values", ID: "values"},
-		{Title: "Fields", ID: "fields"},
-		{Title: "Plans", ID: "plans"},
-		{Title: "Security", ID: "security"},
-		{Title: "Conflicts", ID: "conflicts"},
-		{Title: "Addressing", ID: "addressing"},
+		{Title: "Formats", ID: "formats"},
+		{Title: "Markdown Addressing", ID: "markdown-addressing"},
+		{Title: "Inline Fields", ID: "fields"},
+		{Title: "Files", ID: "files"},
+		{Title: "Guards", ID: "guards"},
 		{Title: "Sections", ID: "sections"},
 		{Title: "Tasks", ID: "tasks"},
 		{Title: "Tables and CSV", ID: "tables-and-csv"},
+		{Title: "Plans", ID: "plans"},
+		{Title: "Commits", ID: "commits"},
+		{Title: "Security", ID: "security"},
+		{Title: "Conflicts", ID: "conflicts"},
 	}
 }
 
@@ -204,13 +219,39 @@ func namedHelpTopics() []HelpTopic {
 		{
 			ID:         "model",
 			Title:      "Model",
+			Group:      helpGroupBasics,
 			Invocation: "etch help model",
-			Summary:    "Mutating invocations read tracked inputs from HEAD, not from dirty checkout files. All operations in one invocation are planned together and commit as one transaction unless every mutating operation is a no-op.",
+			Summary:    "Mutating invocations plan from HEAD and commit as one transaction.",
 			Aliases:    []string{"model"},
+			Blocks: []HelpBlock{
+				{Kind: "paragraph", Text: "For tracked paths, etch reads base-tree bytes from HEAD, not from the live index or working tree. Dirty checkout edits are treated as concurrent local state and reconciled after the commit lands."},
+				{Kind: "paragraph", Text: "All operations in one invocation are planned together. If any operation fails, no commit is created. If every mutating operation is an idempotent no-op, etch exits 0 without creating a commit unless --allow-empty is supplied."},
+				{Kind: "paragraph", Text: "After a successful commit, etch materializes touched paths into the index and working tree unless --no-checkout is used."},
+			},
+		},
+		{
+			ID:         "invocation",
+			Title:      "Invocation",
+			Group:      helpGroupBasics,
+			Invocation: "etch help invocation",
+			Summary:    "Global flags appear before the command path; CWD is the path and capability boundary.",
+			Aliases:    []string{"invocation", "flags"},
+			Blocks: []HelpBlock{
+				{Kind: "heading", Heading: "Shapes"},
+				{Kind: "pre", Text: `  etch [flags] <command> [args...]
+  etch run [script]
+  etch --plan <command> [args...]
+  etch --dry-run <command> [args...]`},
+				{Kind: "paragraph", Text: "Path operands are relative to process CWD, not the repository root. Absolute paths, .. segments, .git path segments, and symlink escapes are rejected. Mutating invocations require CWD to be inside a git worktree."},
+				{Kind: "paragraph", Text: "Existing source paths must be tracked by default. --untracked admits untracked source paths under the same CWD boundary; those paths become tracked if the invocation commits."},
+				{Kind: "paragraph", Text: "--plan emits canonical JSON and --dry-run emits a git-am-compatible patch preview without side effects. --no-checkout skips post-commit checkout synchronization. --retries controls optimistic ref-CAS retry attempts."},
+				{Kind: "paragraph", Text: "--message replaces the generated commit message. --subject-prefix, --subject-suffix, --body-prefix, and --body-suffix modify generated messages and are mutually exclusive with --message."},
+			},
 		},
 		{
 			ID:         "scripts",
 			Title:      "Scripts",
+			Group:      helpGroupBasics,
 			Invocation: "etch help scripts",
 			Summary:    "etch run [script] executes a batch script as one transaction.",
 			Aliases:    []string{"scripts"},
@@ -232,6 +273,7 @@ EOF`},
 		{
 			ID:         "selectors",
 			Title:      "Selectors",
+			Group:      helpGroupData,
 			Invocation: "etch help selectors",
 			Summary:    "Selectors are singular JSONPath-style paths.",
 			Aliases:    []string{"selectors"},
@@ -242,11 +284,13 @@ EOF`},
   $.items[0].title
   $["key.with.dots"]`},
 				{Kind: "paragraph", Text: "Rejected: wildcards, recursive descent, slices, filters, unions, functions, negative indexes."},
+				{Kind: "paragraph", Text: "set may create missing object containers and final object members. append and add may create a missing final array under object-container rules. Syntax that can produce multiple matches is rejected before evaluation."},
 			},
 		},
 		{
 			ID:         "values",
 			Title:      "Values",
+			Group:      helpGroupData,
 			Invocation: "etch help values",
 			Summary:    "Structured values are strings by default. Use --json for a strict JSON value. For structured commands, --json may appear immediately before or after the value.",
 			Aliases:    []string{"values"},
@@ -259,16 +303,34 @@ EOF`},
   etch append events.jsonl '{"kind":"prompt"}'
   etch set state.json status=complete count:=12`},
 				{Kind: "paragraph", Text: "Assignment items are accepted by set only. NAME=value writes a string; NAME:=json writes JSON.\nJSONL and NDJSON append values are always strict JSON and do not use --json."},
+				{Kind: "paragraph", Text: "For add and remove, array membership uses semantic structural equality within the edited format, not byte-spelling equality."},
+			},
+		},
+		{
+			ID:         "formats",
+			Title:      "Formats",
+			Group:      helpGroupData,
+			Invocation: "etch help formats",
+			Summary:    "Porcelain commands infer formats from path extensions; plumbing commands make the format explicit.",
+			Aliases:    []string{"formats", "format", "json", "jsonl", "yaml", "frontmatter"},
+			Blocks: []HelpBlock{
+				{Kind: "paragraph", Text: "Porcelain commands infer .json, .jsonl/.ndjson, .yaml/.yml, .md/.markdown, and .csv behavior from the path. Format-explicit commands such as json set, yaml set, frontmatter set, jsonl append, md table, and csv row append skip inference."},
+				{Kind: "paragraph", Text: "JSON and YAML structured commands share selector and value semantics. JSON edits preserve surrounding representation where possible. YAML and frontmatter edits preserve comments, key order, anchors, aliases, indentation, and scalar spelling where the parser can preserve them."},
+				{Kind: "paragraph", Text: "For Markdown paths, bare structured selectors target YAML frontmatter. If frontmatter is missing, set, append, and add can create it; delete and remove are no-ops when the final target is absent."},
+				{Kind: "paragraph", Text: "JSONL and NDJSON append has no selector. The value is always strict JSON, missing logs are treated as empty, and non-empty logs must end at a record boundary."},
 			},
 		},
 		{
 			ID:         "fields",
-			Title:      "Fields",
+			Title:      "Inline Fields",
+			Group:      helpGroupData,
 			Invocation: "etch help fields",
 			Summary:    "Markdown fields: use frontmatter for note-global metadata; use inline fields for body-local metadata.",
 			Aliases:    []string{"fields"},
 			Blocks: []HelpBlock{
-				{Kind: "paragraph", Text: "Frontmatter fits whole-note schema fields such as owner, source, status, and stable IDs.\nInline fields fit metadata attached to a paragraph, list item, task, or local note context."},
+				{Kind: "paragraph", Text: "On Markdown paths, bare structured selectors mutate YAML frontmatter. Markdown address flags such as --body, --section, --item, and --task switch set and delete to Dataview-style inline fields in the Markdown body."},
+				{Kind: "paragraph", Text: "Frontmatter fits whole-note schema fields such as owner, source, status, and stable IDs. Inline fields fit metadata attached to a paragraph, list item, task, or local note context."},
+				{Kind: "paragraph", Text: "Existing fields match first by exact source field name, then by Dataview-normalized field name if the normalized match is unique. Dataview implicit fields such as file.name, task status, and task text are reserved and not writable."},
 				{Kind: "heading", Heading: "Examples"},
 				{Kind: "pre", Text: `  etch set note.md status Driving
   etch set note.md last "2026-05-02" --body
@@ -276,35 +338,12 @@ EOF`},
 			},
 		},
 		{
-			ID:         "plans",
-			Title:      "Plans",
-			Invocation: "etch help plans",
-			Summary:    "--plan emits JSON describing operations, input/output hashes, planned tree, and commit message.",
-			Aliases:    []string{"plans"},
-			Blocks:     []HelpBlock{{Kind: "paragraph", Text: "--dry-run lowers the same plan to a mailbox patch intended for git am."}},
-		},
-		{
-			ID:         "security",
-			Title:      "Security",
-			Invocation: "etch help security",
-			Summary:    "etch only accepts relative paths under CWD, rejects .. and .git path segments, and refuses symlink escapes.",
-			Aliases:    []string{"security"},
-			Blocks:     []HelpBlock{{Kind: "paragraph", Text: "It does not perform network operations. The implementation invokes git for repository/object/ref work."}},
-		},
-		{
-			ID:         "conflicts",
-			Title:      "Conflicts",
-			Invocation: "etch help conflicts",
-			Summary:    "When materialization cannot merge local checkout changes after the commit lands, etch leaves recovery text on stderr.",
-			Aliases:    []string{"conflicts"},
-			Blocks:     []HelpBlock{{Kind: "paragraph", Text: "The commit is durable once the ref update succeeds; resolve conflict markers, then commit or discard the checkout resolution."}},
-		},
-		{
-			ID:         "addressing",
-			Title:      "Addressing",
+			ID:         "markdown-addressing",
+			Title:      "Markdown Addressing",
+			Group:      helpGroupData,
 			Invocation: "etch help addressing",
 			Summary:    "Markdown addressing uses exact matching with syntax normalization and ambiguity errors.",
-			Aliases:    []string{"addressing"},
+			Aliases:    []string{"addressing", "markdown"},
 			Blocks: []HelpBlock{
 				{Kind: "paragraph", Text: `Section selectors accept either a title such as "Status" or an ATX heading such as "## Status".
 Title-only selectors search all ATX heading levels; ATX selectors include the heading level.`},
@@ -312,11 +351,48 @@ Title-only selectors search all ATX heading levels; ATX selectors include the he
 and Dataview inline field annotations. Inline Markdown remains source text, so "**Buy milk**"
 matches "**Buy milk**", not "Buy milk".`},
 				{Kind: "paragraph", Text: "Item type filters are task, plain, numbered, and bullet. Repeated filters combine across\nindependent axes, such as task+numbered. Contradictory filters fail before planning."},
+				{Kind: "paragraph", Text: "Placement flags such as --section, --before, and --after identify where Markdown list and task commands operate. --before and --after match list items, not arbitrary prose."},
+			},
+		},
+		{
+			ID:         "files",
+			Title:      "Files",
+			Group:      helpGroupFamilies,
+			Invocation: "etch help files",
+			Summary:    "File verbs create, replace, delete, move, and copy whole paths inside the transaction.",
+			Aliases:    []string{"files", "file"},
+			Blocks: []HelpBlock{
+				{Kind: "heading", Heading: "Commands"},
+				{Kind: "pre", Text: `  etch create <path> [<content>]
+  etch replace <path> <content>
+  etch delete <path>
+  etch move <src> <dst>
+  etch copy <src> <dst>`},
+				{Kind: "paragraph", Text: "create no-ops when an existing file already has the same content and fails when it has different content. Omitted create content uses {} for JSON paths and empty content for other paths."},
+				{Kind: "paragraph", Text: "replace requires an existing regular file. delete is idempotent when the path is absent from the transaction base. move and copy fail if their destination exists in the transaction base."},
+			},
+		},
+		{
+			ID:         "guards",
+			Title:      "Guards",
+			Group:      helpGroupFamilies,
+			Invocation: "etch help guards",
+			Summary:    "Guards assert preconditions for a transaction without printing values or making content changes.",
+			Aliases:    []string{"guards", "guard"},
+			Blocks: []HelpBlock{
+				{Kind: "heading", Heading: "Commands"},
+				{Kind: "pre", Text: `  etch exists <path>
+  etch missing <path>
+  etch contains <path> <literal>`},
+				{Kind: "paragraph", Text: "For tracked paths, guards read the admitted input view at HEAD, not dirty working-tree bytes. With --untracked, admitted untracked paths use working-tree bytes."},
+				{Kind: "paragraph", Text: "A failed guard exits 1 before mutation side effects. A satisfied guard contributes no content change and never creates a commit by itself. Guards are included in plans and dry-run output as checks."},
+				{Kind: "paragraph", Text: "contains matches literal bytes. It is not a regex, does not normalize line endings, and does not perform case folding. Multi-line literals use heredocs."},
 			},
 		},
 		{
 			ID:         "sections",
 			Title:      "Sections",
+			Group:      helpGroupFamilies,
 			Invocation: "etch help section",
 			Summary:    "Markdown sections are heading-delimited body ranges.",
 			Aliases:    []string{"section"},
@@ -333,7 +409,8 @@ between non-empty fragments.`},
 		},
 		{
 			ID:         "tasks",
-			Title:      "Tasks",
+			Title:      "Tasks and Lists",
+			Group:      helpGroupFamilies,
 			Invocation: "etch help tasks",
 			Summary:    "Markdown task/list commands operate on exact source-normalized item text.",
 			Aliases:    []string{"tasks"},
@@ -356,6 +433,7 @@ there is a single obvious list target.`},
 		{
 			ID:         "tables-and-csv",
 			Title:      "Tables and CSV",
+			Group:      helpGroupFamilies,
 			Invocation: "etch help table",
 			Summary:    "Tables are ordered rows and named columns of string cells.",
 			Aliases:    []string{"table", "csv"},
@@ -367,6 +445,62 @@ there is a single obvious list target.`},
 				{Kind: "heading", Heading: "Markdown"},
 				{Kind: "pre", Text: `  etch table set notes.md doc @0 all,status done
   etch table row append notes.md "## Inventory" '{"sku":"A1"}'`},
+				{Kind: "paragraph", Text: "For Markdown paths, scope is doc or an exact heading selector, and the optional table ordinal is @0, @1, and so on. For CSV paths, scope and table ordinal are omitted because the file is one table."},
+				{Kind: "paragraph", Text: "Ranges have the shape rows,columns. Rows and columns support all, zero-based ordinals, ordinal ranges, exact labels, and bracketed labels for spaces or selector punctuation. row-json is a strict JSON object keyed by column label."},
+			},
+		},
+		{
+			ID:         "plans",
+			Title:      "Plans",
+			Group:      helpGroupExecution,
+			Invocation: "etch help plans",
+			Summary:    "--plan emits canonical JSON describing operations, input/output hashes, planned tree, and commit message.",
+			Aliases:    []string{"plans", "plan", "dry-run"},
+			Blocks: []HelpBlock{
+				{Kind: "paragraph", Text: "A plan is computed by the same parser and evaluators as execution, stopped before side effects. It is based on HEAD for tracked paths and includes enough hashes to detect stale inputs and behavior changes."},
+				{Kind: "paragraph", Text: "--dry-run lowers the same plan to a mailbox patch intended for git am. Dry-run output is optimized for review; plan JSON is the canonical machine contract."},
+				{Kind: "paragraph", Text: "The plan hash is a SHA-256 hash of canonical JSON bytes and can be used by host runtimes as an approval-cache key."},
+			},
+		},
+		{
+			ID:         "commits",
+			Title:      "Commits",
+			Group:      helpGroupExecution,
+			Invocation: "etch help commits",
+			Summary:    "Every successful mutating invocation creates one local git commit unless all mutating operations are no-ops.",
+			Aliases:    []string{"commits", "commit", "messages"},
+			Blocks: []HelpBlock{
+				{Kind: "paragraph", Text: "Generated commit messages are built from normalized operation descriptors with bounded value previews. Full values live in file contents and are represented in plans by hashes."},
+				{Kind: "paragraph", Text: "Single-op commits use subjects such as etch set note.md title \"Hello\" when the preview fits. Multi-op commits use a summary subject and a Changes body."},
+				{Kind: "paragraph", Text: "--message replaces the generated message. --subject-prefix, --subject-suffix, --body-prefix, and --body-suffix modify generated messages and are mutually exclusive with --message."},
+				{Kind: "paragraph", Text: "Idempotent no-op operations do not contribute to the commit. If every mutating operation is a no-op, etch exits 0 with nothing to do unless --allow-empty is supplied."},
+			},
+		},
+		{
+			ID:         "security",
+			Title:      "Security",
+			Group:      helpGroupExecution,
+			Invocation: "etch help security",
+			Summary:    "etch is designed as a narrow CWD-scoped, git-backed mutation capability.",
+			Aliases:    []string{"security", "paths"},
+			Blocks: []HelpBlock{
+				{Kind: "paragraph", Text: "etch accepts only relative paths under CWD, rejects .. and .git path segments, and refuses symlink escapes. There is no repo-root mode, script-local root, or etch-specific environment variable that changes the path root."},
+				{Kind: "paragraph", Text: "etch does not perform network operations. The implementation invokes git only for local repository/object/ref/index work needed to plan, commit, preview, and materialize changes."},
+				{Kind: "paragraph", Text: "The script syntax has no variables, command substitution, globbing, pipes, conditionals, or process execution. Composition happens outside etch."},
+			},
+		},
+		{
+			ID:         "conflicts",
+			Title:      "Conflicts",
+			Group:      helpGroupExecution,
+			Invocation: "etch help conflicts",
+			Summary:    "When materialization cannot merge local checkout changes after the commit lands, etch leaves recovery text on stderr.",
+			Aliases:    []string{"conflicts", "checkout"},
+			Blocks: []HelpBlock{
+				{Kind: "paragraph", Text: "The ref update is the durability boundary. If materialization fails, the commit exists and is not rolled back."},
+				{Kind: "paragraph", Text: "Default materialization rebases touched index and working-tree states from old HEAD to new HEAD. Clean merges preserve staged and unstaged local changes; conflicts are written to the working tree when possible."},
+				{Kind: "paragraph", Text: "Resolve conflict markers, then commit or discard the working-tree resolution. For binary or unmergeable local changes, etch fails cleanly without overwriting the current working-tree file."},
+				{Kind: "paragraph", Text: "--no-checkout skips materialization entirely and reports that the working tree and index were not updated for touched paths."},
 			},
 		},
 	}

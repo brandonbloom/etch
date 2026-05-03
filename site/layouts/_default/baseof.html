@@ -32,7 +32,9 @@
       </div>
     </div>
   </nav>
-  <main class="container">
+  {{ $mainClasses := slice "container" }}
+  {{ if eq .Layout "reference" }}{{ $mainClasses = $mainClasses | append "reference-container" }}{{ end }}
+  <main class="{{ delimit $mainClasses " " }}">
     {{ block "main" . }}{{ end }}
   </main>
   <footer class="footer">

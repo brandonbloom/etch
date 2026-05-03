@@ -8,7 +8,7 @@ import (
 )
 
 func TestHelpTopicsSnapshotSmoke(t *testing.T) {
-	for _, topic := range []string{"", "model", "scripts", "selectors", "values", "fields", "plans", "security", "conflicts", "addressing", "section", "tasks", "table", "csv"} {
+	for _, topic := range []string{"", "model", "invocation", "scripts", "selectors", "values", "formats", "fields", "files", "guards", "plans", "commits", "security", "conflicts", "addressing", "markdown", "section", "tasks", "table", "csv"} {
 		var out bytes.Buffer
 		if err := printHelp(&out, topic, false); err != nil {
 			t.Fatalf("help %q: %v", topic, err)
@@ -80,6 +80,11 @@ func TestHelpJSONThroughCLI(t *testing.T) {
 	}
 	if reference.Topics[0].ID != "common-commands" || reference.Topics[0].Blocks[0].Kind != "command-table" {
 		t.Fatalf("unexpected first reference topic: %#v", reference.Topics[0])
+	}
+	for _, topic := range reference.Topics {
+		if topic.Group == "" {
+			t.Fatalf("reference topic missing group: %#v", topic)
+		}
 	}
 }
 

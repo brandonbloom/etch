@@ -11,8 +11,24 @@
   </header>
 
   <nav class="reference-topic-nav" aria-label="Reference topics">
+    {{ $groups := slice }}
     {{ range $reference.topics }}
-    <a href="#{{ .id }}">{{ .title }}</a>
+      {{ if not (in $groups .group) }}
+        {{ $groups = $groups | append .group }}
+      {{ end }}
+    {{ end }}
+    {{ range $groups }}
+    {{ $group := . }}
+    <div class="reference-topic-group">
+      <div class="reference-topic-group-title">{{ $group }}</div>
+      <div class="reference-topic-links">
+        {{ range $reference.topics }}
+          {{ if eq .group $group }}
+          <a href="#{{ .id }}">{{ .title }}</a>
+          {{ end }}
+        {{ end }}
+      </div>
+    </div>
     {{ end }}
   </nav>
 
@@ -22,12 +38,12 @@
       <header class="reference-section-head">
         <div class="reference-invocation">$ {{ .invocation }}</div>
         <h2>{{ .title }}</h2>
-        {{ with .summary }}<p>{{ . | markdownify }}</p>{{ end }}
+        {{ with .summary }}<p>{{ . }}</p>{{ end }}
       </header>
 
       {{ range .blocks }}
         {{ if eq .kind "paragraph" }}
-        <div class="reference-copy">{{ .text | markdownify }}</div>
+        <div class="reference-copy">{{ .text }}</div>
         {{ else if eq .kind "heading" }}
         <h3 class="reference-block-heading">{{ .heading }}</h3>
         {{ else if eq .kind "pre" }}

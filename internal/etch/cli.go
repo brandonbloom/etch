@@ -121,7 +121,7 @@ func runParsedCLI(opts GlobalOptions, rest []string, stdout, stderr io.Writer) (
 				continue
 			}
 			if topic != "" {
-				return exitUsage, usagef("usage: etch help [--all] [topic]")
+				return exitUsage, usagef("usage: etch help [--all] [topic] | etch help --json")
 			}
 			topic = arg
 		}
