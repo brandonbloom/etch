@@ -279,7 +279,9 @@ Markdown address flags such as `--body`, `--section`, and `--task` switch
 `set` and `delete` to Dataview-style inline fields in the Markdown body.
 Task/list commands use `--section`, `--before`, and `--after` to address where
 task and list mutations happen; `--before` and `--after` match list items, not
-arbitrary prose.
+arbitrary prose. Item matching ignores task/list markers, Dataview inline
+fields, numeric trailing reference-annotation links, and inline Markdown
+formatting.
 
 ## Transaction Model
 

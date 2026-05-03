@@ -4,8 +4,10 @@ import (
 	"bytes"
 	"strconv"
 	"strings"
+	"unicode"
 
 	goldast "github.com/yuin/goldmark/ast"
+	goldtext "github.com/yuin/goldmark/text"
 )
 
 type markdownRange struct {
@@ -430,6 +432,8 @@ func normalizeMarkdownItemText(source string) string {
 		source = parsed.Text
 	}
 	source = stripDataviewInlineFields(source)
+	source = stripTrailingMarkdownReferenceAnnotationLinks(source)
+	source = markdownInlineText(source)
 	return strings.TrimSpace(source)
 }
 
@@ -460,4 +464,117 @@ func stripDataviewInlineFields(source string) string {
 		out.WriteByte(source[i])
 	}
 	return out.String()
+}
+
+func stripTrailingMarkdownReferenceAnnotationLinks(source string) string {
+	for {
+		trimmed := strings.TrimRightFunc(source, unicode.IsSpace)
+		start, label, ok := trailingMarkdownLink(trimmed)
+		if !ok || !markdownReferenceAnnotationLinkLabel(label) {
+			return source
+		}
+		source = trimmed[:start]
+	}
+}
+
+func markdownInlineText(source string) string {
+	raw := []byte(source)
+	doc := markdownEngine.Parser().Parse(goldtext.NewReader(raw))
+	var out strings.Builder
+	_ = goldast.Walk(doc, func(n goldast.Node, entering bool) (goldast.WalkStatus, error) {
+		if !entering {
+			return goldast.WalkContinue, nil
+		}
+		switch x := n.(type) {
+		case *goldast.Text:
+			out.Write(x.Value(raw))
+			if x.SoftLineBreak() || x.HardLineBreak() {
+				out.WriteByte(' ')
+			}
+			return goldast.WalkSkipChildren, nil
+		case *goldast.String:
+			out.Write(x.Value)
+			return goldast.WalkSkipChildren, nil
+		case *goldast.AutoLink:
+			out.Write(x.Label(raw))
+			return goldast.WalkSkipChildren, nil
+		case *goldast.RawHTML:
+			return goldast.WalkSkipChildren, nil
+		default:
+			return goldast.WalkContinue, nil
+		}
+	})
+	return out.String()
+}
+
+func trailingMarkdownLink(source string) (int, string, bool) {
+	if len(source) == 0 || source[len(source)-1] != ')' || markdownSourceEscaped(source, len(source)-1) {
+		return 0, "", false
+	}
+	destStart, ok := matchingMarkdownSourceOpen(source, len(source)-1, '(', ')')
+	if !ok || destStart == 0 {
+		return 0, "", false
+	}
+	labelEnd := destStart - 1
+	if source[labelEnd] != ']' || markdownSourceEscaped(source, labelEnd) {
+		return 0, "", false
+	}
+	labelStart, ok := matchingMarkdownSourceOpen(source, labelEnd, '[', ']')
+	if !ok {
+		return 0, "", false
+	}
+	if labelStart > 0 && source[labelStart-1] == '!' && !markdownSourceEscaped(source, labelStart-1) {
+		return 0, "", false
+	}
+	return labelStart, source[labelStart+1 : labelEnd], true
+}
+
+func matchingMarkdownSourceOpen(source string, closeIndex int, open, close byte) (int, bool) {
+	depth := 0
+	for i := closeIndex; i >= 0; i-- {
+		if markdownSourceEscaped(source, i) {
+			continue
+		}
+		switch source[i] {
+		case close:
+			depth++
+		case open:
+			depth--
+			if depth == 0 {
+				return i, true
+			}
+		}
+	}
+	return 0, false
+}
+
+func markdownSourceEscaped(source string, index int) bool {
+	backslashes := 0
+	for i := index - 1; i >= 0 && source[i] == '\\'; i-- {
+		backslashes++
+	}
+	return backslashes%2 == 1
+}
+
+func markdownReferenceAnnotationLinkLabel(label string) bool {
+	label = strings.TrimSpace(label)
+	for len(label) >= 2 && label[0] == '[' && label[len(label)-1] == ']' {
+		label = strings.TrimSpace(label[1 : len(label)-1])
+	}
+	label = strings.TrimPrefix(label, "^")
+	label = strings.TrimSpace(label)
+	if label == "" {
+		return false
+	}
+	hasDigit := false
+	for _, r := range label {
+		switch {
+		case unicode.IsDigit(r):
+			hasDigit = true
+		case unicode.IsSpace(r) || r == ',' || r == ';' || r == ':' || r == '-' || r == '.':
+		default:
+			return false
+		}
+	}
+	return hasDigit
 }

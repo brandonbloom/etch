@@ -140,7 +140,7 @@ func TestMarkdownItemTypeConstraints(t *testing.T) {
 
 func TestMarkdownListItemsNormalizeAndClassify(t *testing.T) {
 	raw := []byte(strings.Join([]string{
-		"- [ ] Bullet task [done:: 2026-05-02]",
+		"- [ ] Bullet task [done:: 2026-05-02] [[62]](https://notes.granola.ai/d/57b65c7f-note)",
 		"1. [x] Numbered task",
 		"- Plain **bold** item",
 		"2) Plain numbered",
@@ -158,13 +158,44 @@ func TestMarkdownListItemsNormalizeAndClassify(t *testing.T) {
 	}{
 		{text: "Bullet task", task: true},
 		{text: "Numbered task", task: true, numbered: true},
-		{text: "Plain **bold** item"},
+		{text: "Plain bold item"},
 		{text: "Plain numbered", numbered: true},
 	}
 	for i, want := range wants {
 		if items[i].Normalized != want.text || items[i].Task != want.task || items[i].Numbered != want.numbered || items[i].Complex {
 			t.Fatalf("item %d = %#v, want %#v", i, items[i], want)
 		}
+	}
+}
+
+func TestResolveMarkdownItemIgnoresTrailingReferenceAnnotationLinks(t *testing.T) {
+	raw := []byte(strings.Join([]string{
+		"- [ ] Send follow-up [[62]](https://notes.granola.ai/d/57b65c7f-note) [63](https://notes.granola.ai/d/other)",
+		"- [ ] Read [docs](https://example.com)",
+		"",
+	}, "\n"))
+
+	item, err := resolveMarkdownTask(raw, "note.md", "Send follow-up", nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if string(raw[item.LineStart:item.LineEnd]) != "- [ ] Send follow-up [[62]](https://notes.granola.ai/d/57b65c7f-note) [63](https://notes.granola.ai/d/other)\n" {
+		t.Fatalf("citation task range = %q", raw[item.LineStart:item.LineEnd])
+	}
+
+	item, err = resolveMarkdownTask(raw, "note.md", "Read docs", nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if item.Normalized != "Read docs" {
+		t.Fatalf("ordinary link normalized to %q", item.Normalized)
+	}
+
+	if _, err := resolveMarkdownTask(raw, "note.md", "Read [docs](https://example.com)", nil); err != nil {
+		t.Fatalf("source-style link selector err = %v", err)
+	}
+	if _, err := resolveMarkdownTask(raw, "note.md", "Read", nil); err == nil || !strings.Contains(err.Error(), "not found") {
+		t.Fatalf("ordinary trailing link err = %v", err)
 	}
 }
 

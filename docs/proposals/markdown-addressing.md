@@ -106,18 +106,18 @@ meanings.
   `--item-type task --item-type numbered`. If a valid item-type combination has
   no matching source item, that is an ordinary no-match error, not a selector
   syntax error.
-- Item matching is source-normalized, not rendered-text-normalized. Etch
-  normalizes away the list marker, checkbox marker, surrounding whitespace, and
-  Dataview inline field annotations.
-- Inline Markdown syntax remains meaningful source text. `**Buy milk**` matches
-  `**Buy milk**`, not `Buy milk`; `[Buy milk](url)` matches the link source,
-  not just the rendered label.
-- The normalized source text must match exactly.
+- Item matching is rendered-text-normalized. Etch normalizes away the list
+  marker, checkbox marker, surrounding whitespace, Dataview inline field
+  annotations, and numeric trailing reference-annotation links, then compares
+  the rendered inline Markdown text.
+- Inline Markdown syntax is not part of the item identity. `**Buy milk**`
+  matches `Buy milk`; `[Buy milk](url)` matches `Buy milk`.
+- The normalized item text must match exactly.
 - Repeated matching items are ambiguous and cause an error. If the same text
   appears as both a numbered task and a bullet-list task, callers can add
   `--item-type numbered` or `--item-type bullet`.
 - Complex cases such as nested items, multiline items, or items whose normalized
-  source text is unstable should fail rather than guess.
+  item text is unstable should fail rather than guess.
 - Obsidian-compatible block IDs are deferred to
   [Markdown Block IDs](block-ids.md).
 
