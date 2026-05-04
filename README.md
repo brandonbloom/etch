@@ -34,10 +34,10 @@ transaction.
 ## Install
 
 ```sh
-go install github.com/brandonbloom/etch/cmd/etch@latest
+GOEXPERIMENT=jsonv2 go install github.com/brandonbloom/etch/cmd/etch@latest
 ```
 
-Requires Go 1.25.3+ and Git.
+Requires Go 1.26.2+ with `GOEXPERIMENT=jsonv2`, plus Git.
 
 ## Try it
 

@@ -27,7 +27,7 @@
 - [x] Move the exhaustive Command Index below the explanatory Reference topics.
 - [x] Tighten `README.md` into a GitHub landing page that links to the website
   for full docs.
-- [ ] Align Go and Git requirements across `README.md`, Overview, and
+- [x] Align Go and Git requirements across `README.md`, Overview, and
   Quickstart.
 - [ ] Add a human "try it by hand" Quickstart path before agent bootstrap.
 - [ ] Expand the Cheatsheet with workflow flags: `--plan`, `--dry-run`,

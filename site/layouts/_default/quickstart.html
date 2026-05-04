@@ -15,8 +15,9 @@
   <h2>1. Install</h2>
   <div class="copy-wrap">
     <button class="copy-btn" onclick="copyBlock(this)">Copy</button>
-    <pre><code>go install github.com/brandonbloom/etch/cmd/etch@latest</code></pre>
+    <pre><code>GOEXPERIMENT=jsonv2 go install github.com/brandonbloom/etch/cmd/etch@latest</code></pre>
   </div>
+  <p>Requires Go 1.26.2+ with <code>GOEXPERIMENT=jsonv2</code>, plus Git.</p>
 
   <h2>2. Bootstrap agent context</h2>
   <p>Start your agent with the bootstrap prompt from the repo you want to configure:</p>
