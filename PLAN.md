@@ -25,7 +25,7 @@
 - [x] Review [help and usage polish](docs/proposals/help-and-usage-polish.md).
 - [x] Make the generated Reference command tables workflow-ordered.
 - [x] Move the exhaustive Command Index below the explanatory Reference topics.
-- [ ] Tighten `README.md` into a GitHub landing page that links to the website
+- [x] Tighten `README.md` into a GitHub landing page that links to the website
   for full docs.
 - [ ] Align Go and Git requirements across `README.md`, Overview, and
   Quickstart.
