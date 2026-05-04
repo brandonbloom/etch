@@ -10,7 +10,7 @@
 
 <article class="content">
   <h1>Quickstart</h1>
-  <p>Install etch, then send its bootstrap prompt to an agent. The prompt asks the agent to add durable etch context to this repo's agent instructions; the command itself only prints text.</p>
+  <p>Install etch, send its bootstrap prompt to an agent, then make sure the agent is allowed to invoke etch in future sessions. The command itself only prints text.</p>
 
   <h2>1. Install</h2>
   <div class="copy-wrap">
@@ -54,8 +54,8 @@
     <pre><code>etch prompt --context</code></pre>
   </div>
 
-  <h2>3. Manual allow-list config</h2>
-  <p>Some agents require command allow-listing before future sessions can invoke etch. Add one of these manually if your tool needs it.</p>
+  <h2>3. Complete agent access</h2>
+  <p>Some agents require command allow-listing before future sessions can invoke etch. The bootstrap agent may offer to add the right config; use one of these shapes if your tool needs an explicit rule.</p>
   <p class="note">etch is designed to be safe for agents to invoke with any arguments: it is scoped to the current git repo and every mutation becomes a commit.</p>
 
   <div class="agent-config-grid">
@@ -91,6 +91,14 @@
       </div>
     </section>
   </div>
+
+  <h2>4. Verify a transaction</h2>
+  <p>Ask the agent to make a small structured change with etch. To check the binary directly instead, run one command from inside a Git worktree:</p>
+  <div class="copy-wrap">
+    <button class="copy-btn" onclick="copyBlock(this)">Copy</button>
+    <pre><code>etch set state.json status open</code></pre>
+  </div>
+  <p>The <code>set</code> command creates <code>state.json</code>, creates a commit, and materializes the new file into the checkout.</p>
 
   <p class="quickstart-finish">After the prompt and allow-listing are in place, future agents can use <code>etch help</code> and the <a href="{{ $referencePage.RelPermalink }}">reference</a> when they need exact syntax.</p>
 

@@ -29,7 +29,7 @@
   for full docs.
 - [x] Align Go and Git requirements across `README.md`, Overview, and
   Quickstart.
-- [ ] Add a human "try it by hand" Quickstart path before agent bootstrap.
+- [x] Add optional manual Quickstart verification/fallback after agent setup.
 - [ ] Expand the Cheatsheet with workflow flags: `--plan`, `--dry-run`,
   `--no-checkout`, `--untracked`, `--message`, `--subject-prefix`,
   `--subject-suffix`, `--body-prefix`, and `--body-suffix`.
