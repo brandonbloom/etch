@@ -23,8 +23,23 @@
 - [x] Externalize the adopter report into proposal docs.
 - [x] Review [format prefix safety](docs/proposals/format-prefix-safety.md).
 - [x] Review [help and usage polish](docs/proposals/help-and-usage-polish.md).
-- [ ] Review [site adoption readiness](docs/proposals/site-adoption-readiness.md).
-- [ ] Decide the implementation order after proposal review.
+- [x] Make the generated Reference command tables workflow-ordered.
+- [x] Move the exhaustive Command Index below the explanatory Reference topics.
+- [ ] Tighten `README.md` into a GitHub landing page that links to the website
+  for full docs.
+- [ ] Align Go and Git requirements across `README.md`, Overview, and
+  Quickstart.
+- [ ] Add a human "try it by hand" Quickstart path before agent bootstrap.
+- [ ] Expand the Cheatsheet with workflow flags: `--plan`, `--dry-run`,
+  `--no-checkout`, `--untracked`, `--message`, `--subject-prefix`,
+  `--subject-suffix`, `--body-prefix`, and `--body-suffix`.
+- [ ] Decide whether `--retries`, `--allow-empty`, and `--version` belong in the
+  Cheatsheet or the Reference only.
+- [ ] Add `etch prompt`, `etch prompt --bootstrap`, and
+  `etch prompt --context` to the Cheatsheet.
+- [ ] Name the MIT license on install-facing pages and where the site calls
+  Etch open-source software.
+- [ ] Decide whether to add a cookbook/examples page for 0.1.0 or defer it.
 
 # Review gates
 

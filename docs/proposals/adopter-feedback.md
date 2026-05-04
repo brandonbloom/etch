@@ -60,12 +60,14 @@ Related guidance: `etch help fields` and `etch help scripts`.
 ## 0.1.0 Release-Readiness Feedback
 
 The `Etch 0.1.0 -- Feedback Report` raised a separate set of release-readiness
-issues. These are not new adopter mutation families; they are safety and
-documentation proposals to review before implementation:
+issues. These are not new adopter mutation families. Safety and help behavior
+changes remain proposals to review before implementation:
 
 1. [Format prefix safety](format-prefix-safety.md)
 2. [Help and usage polish](help-and-usage-polish.md)
-3. [Site adoption readiness](site-adoption-readiness.md)
+
+Website, README, Cheatsheet, and release-readiness review tasks live in
+`PLAN.md` because they are execution work, not Etch behavior proposals.
 
 ## Shared Goals
 
