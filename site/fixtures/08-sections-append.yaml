@@ -1,4 +1,4 @@
-cat: Sections
+cat: Markdown
 name: section append
 syntax: |-
   etch section append <file> <heading> <content>

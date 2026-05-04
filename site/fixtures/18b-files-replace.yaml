@@ -1,4 +1,4 @@
-cat: Files
+cat: Whole files
 name: replace
 syntax: "etch replace <file> <content>"
 desc: Replace an existing file's entire content.

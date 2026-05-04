@@ -78,7 +78,7 @@ func TestHelpJSONThroughCLI(t *testing.T) {
 	if len(reference.Topics) == 0 {
 		t.Fatal("help --json returned no topics")
 	}
-	if reference.Topics[0].ID != "common-commands" || reference.Topics[0].Blocks[0].Kind != "command-table" {
+	if reference.Topics[0].ID != "common-commands" || len(commandTableHeadings(reference.Topics[0])) == 0 {
 		t.Fatalf("unexpected first reference topic: %#v", reference.Topics[0])
 	}
 	if got := reference.Topics[len(reference.Topics)-1].ID; got != "command-index" {
@@ -155,6 +155,69 @@ func TestHelpCommandRowsLinkToReferenceTopics(t *testing.T) {
 	assertCommandTopic(t, all, "md table set <path>", "tables-and-csv")
 }
 
+func TestHelpCommandRowsExposeCommonForms(t *testing.T) {
+	reference := BuildHelpReference()
+	common := topicByID(t, reference, "common-commands")
+	assertCommandForms(t, common, "set <path>", []string{
+		"set <path> <selector> <value>",
+		"set <path> <selector> --json <json>",
+		"set <path> <selector=value>...",
+		"set <path> <selector:=json>...",
+		"set <path.md> <field> <value> <address>",
+	})
+	assertCommandForms(t, common, "delete <path>", []string{
+		"delete <path>",
+		"delete <path> <selector>",
+		"delete <path.md> <field> <address>",
+	})
+	assertCommandForms(t, common, "append <path>", []string{
+		"append <path> <selector> <value>",
+		"append <path> <selector> --json <json>",
+		"append <path.jsonl> <json-value>",
+	})
+	assertCommandForms(t, common, "add <path>", []string{
+		"add <path> <selector> <value>",
+		"add <path> <selector> --json <json>",
+	})
+	assertCommandForms(t, common, "remove <path>", []string{
+		"remove <path> <selector> <value>",
+		"remove <path> <selector> --json <json>",
+	})
+	assertCommandForms(t, common, "task close <path>", []string{
+		"task close <path> <text> [<address>]",
+	})
+	assertCommandForms(t, common, "list add <path>", []string{
+		"list add <path> <text> [--task] [<placement>]",
+	})
+
+	index := topicByID(t, reference, "command-index")
+	if row, ok := commandRow(index, "set <path>"); !ok {
+		t.Fatal("command index missing set row")
+	} else if len(row.Forms) != 0 {
+		t.Fatalf("command index should keep compact signatures, got forms: %#v", row.Forms)
+	}
+}
+
+func TestMarkdownAddressingHelpIncludesAddressTables(t *testing.T) {
+	reference := BuildHelpReference()
+	addressing := topicByID(t, reference, "markdown-addressing")
+	assertDefinitionTerm(t, addressing, "Inline Field Address", "--body")
+	assertDefinitionTerm(t, addressing, "Inline Field Address", "--hidden")
+	assertDefinitionTerm(t, addressing, "Task/List Address", "--section <heading>")
+	assertDefinitionTerm(t, addressing, "Task/List Address", "--task")
+
+	var out bytes.Buffer
+	if err := printHelp(&out, "addressing", false); err != nil {
+		t.Fatal(err)
+	}
+	text := out.String()
+	for _, want := range []string{"Inline Field Address:", "--body", "Task/List Address:", "--task"} {
+		if !strings.Contains(text, want) {
+			t.Fatalf("help addressing missing %q:\n%s", want, text)
+		}
+	}
+}
+
 func topicByID(t *testing.T, reference HelpReference, id string) HelpTopic {
 	t.Helper()
 	for _, topic := range reference.Topics {
@@ -198,6 +261,33 @@ func assertCommandTopic(t *testing.T, topic HelpTopic, signaturePrefix, wantTopi
 	if row.TopicID != wantTopicID {
 		t.Fatalf("command row %q topic ID mismatch: want %q got %q", row.Signature, wantTopicID, row.TopicID)
 	}
+}
+
+func assertCommandForms(t *testing.T, topic HelpTopic, signaturePrefix string, want []string) {
+	t.Helper()
+	row, ok := commandRow(topic, signaturePrefix)
+	if !ok {
+		t.Fatalf("missing command row %q in topic %q", signaturePrefix, topic.ID)
+	}
+	if strings.Join(row.Forms, "\n") != strings.Join(want, "\n") {
+		t.Fatalf("command row %q forms mismatch:\nwant:\n%s\n\ngot:\n%s", row.Signature, strings.Join(want, "\n"), strings.Join(row.Forms, "\n"))
+	}
+}
+
+func assertDefinitionTerm(t *testing.T, topic HelpTopic, heading, term string) {
+	t.Helper()
+	for _, block := range topic.Blocks {
+		if block.Kind != "definition-table" || block.Heading != heading {
+			continue
+		}
+		for _, row := range block.Terms {
+			if row.Term == term {
+				return
+			}
+		}
+		t.Fatalf("definition table %q in topic %q missing term %q", heading, topic.ID, term)
+	}
+	t.Fatalf("missing definition table %q in topic %q", heading, topic.ID)
 }
 
 func commandRow(topic HelpTopic, signaturePrefix string) (HelpCommandRow, bool) {

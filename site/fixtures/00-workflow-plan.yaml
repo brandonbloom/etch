@@ -1,0 +1,5 @@
+cat: Workflow
+name: --plan
+syntax: "etch --plan <command> [args...]"
+desc: Print the canonical JSON transaction plan without creating a commit or changing files.
+example: "etch --plan set state.json status complete"

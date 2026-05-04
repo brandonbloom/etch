@@ -1,0 +1,7 @@
+cat: Workflow
+name: --body-prefix/suffix
+syntax: |-
+  etch --body-prefix <text> <command> [args...]
+  etch --body-suffix <text> <command> [args...]
+desc: Add a body block before or after the generated commit body.
+example: "etch --body-suffix 'Reviewed-by: agent' set state.json status complete"

@@ -30,19 +30,15 @@
 - [x] Align Go and Git requirements across `README.md`, Overview, and
   Quickstart.
 - [x] Add optional manual Quickstart verification/fallback after agent setup.
-- [ ] Expand the Cheatsheet with workflow flags: `--plan`, `--dry-run`,
-  `--no-checkout`, `--untracked`, `--message`, `--subject-prefix`,
-  `--subject-suffix`, `--body-prefix`, and `--body-suffix`.
-- [ ] Decide whether `--retries`, `--allow-empty`, and `--version` belong in the
-  Cheatsheet or the Reference only.
-- [ ] Add `etch prompt`, `etch prompt --bootstrap`, and
-  `etch prompt --context` to the Cheatsheet.
+- [x] Move fixture-backed examples into the Reference topics.
+- [ ] Decide whether the Cheatsheet page should be deleted or rebuilt as a
+  compact quick card.
 - [ ] Name the MIT license on install-facing pages and where the site calls
   Etch open-source software.
 - [ ] Decide whether to add a cookbook/examples page for 0.1.0 or defer it.
 
 # Review gates
 
-- [ ] Brandon reviews the Cheatsheet examples and behavior descriptions before
+- [ ] Brandon reviews the Reference examples and behavior descriptions before
   the docs changes are finalized.
 - [ ] Verify generated site/reference output after docs implementation.

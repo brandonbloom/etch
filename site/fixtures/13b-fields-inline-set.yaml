@@ -1,4 +1,4 @@
-cat: Inline fields
+cat: Fields
 name: set (inline)
 syntax: |-
   etch set <file> <field> <value> --task <text>

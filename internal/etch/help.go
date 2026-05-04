@@ -25,11 +25,18 @@ type HelpBlock struct {
 	Heading string           `json:"heading,omitempty"`
 	Text    string           `json:"text,omitempty"`
 	Rows    []HelpCommandRow `json:"rows,omitempty"`
+	Terms   []HelpTermRow    `json:"terms,omitempty"`
 	Links   []HelpTopicLink  `json:"links,omitempty"`
+}
+
+type HelpTermRow struct {
+	Term        string `json:"term"`
+	Description string `json:"description"`
 }
 
 type HelpCommandRow struct {
 	Signature   string       `json:"signature"`
+	Forms       []string     `json:"forms,omitempty"`
 	Class       CommandClass `json:"class"`
 	Description string       `json:"description"`
 	TopicID     string       `json:"topic_id,omitempty"`
@@ -110,7 +117,22 @@ func writeHelpBlock(w io.Writer, block HelpBlock) {
 	case "command-table":
 		fmt.Fprintf(w, "%s:\n", block.Heading)
 		for _, row := range block.Rows {
-			fmt.Fprintf(w, "  %-31s %-16s %s\n", row.Signature, row.Class, row.Description)
+			forms := helpCommandRowForms(row)
+			for i, form := range forms {
+				if i == 0 {
+					fmt.Fprintf(w, "  %-31s %-16s %s\n", form, row.Class, row.Description)
+					continue
+				}
+				fmt.Fprintf(w, "  %-31s %-16s\n", form, "")
+			}
+		}
+		fmt.Fprintln(w)
+	case "definition-table":
+		if block.Heading != "" {
+			fmt.Fprintf(w, "%s:\n", block.Heading)
+		}
+		for _, row := range block.Terms {
+			fmt.Fprintf(w, "  %-24s %s\n", row.Term, row.Description)
 		}
 		fmt.Fprintln(w)
 	case "topic-links":
@@ -151,6 +173,14 @@ func commandHelpTopic(all bool) HelpTopic {
 	}
 
 	blocks := helpCommandBlocks(all)
+	if !all {
+		blocks = append([]HelpBlock{
+			{
+				Kind: "paragraph",
+				Text: "The table shows common invocation forms, not every accepted flag placement or advanced format-explicit command. Follow the linked topics for behavior details, or use etch help --all for the full command index.",
+			},
+		}, blocks...)
+	}
 	if all {
 		blocks = append(blocks, HelpBlock{
 			Kind: "paragraph",
@@ -245,10 +275,15 @@ func helpCommandRowEntries(all bool) []helpCommandRowEntry {
 		if !v.Canonical || (!all && isPlumbingVerb(v)) {
 			continue
 		}
+		var forms []string
+		if !all {
+			forms = helpCommandForms(v.Name)
+		}
 		entries = append(entries, helpCommandRowEntry{
 			Name: v.Name,
 			Row: HelpCommandRow{
 				Signature:   v.Signature,
+				Forms:       forms,
 				Class:       v.Class,
 				Description: v.Description,
 				TopicID:     helpCommandTopicID(v.Name),
@@ -256,6 +291,85 @@ func helpCommandRowEntries(all bool) []helpCommandRowEntry {
 		})
 	}
 	return entries
+}
+
+func helpCommandRowForms(row HelpCommandRow) []string {
+	if len(row.Forms) > 0 {
+		return row.Forms
+	}
+	return []string{row.Signature}
+}
+
+func helpCommandForms(name string) []string {
+	switch name {
+	case "set":
+		return []string{
+			"set <path> <selector> <value>",
+			"set <path> <selector> --json <json>",
+			"set <path> <selector=value>...",
+			"set <path> <selector:=json>...",
+			"set <path.md> <field> <value> <address>",
+		}
+	case "delete":
+		return []string{
+			"delete <path>",
+			"delete <path> <selector>",
+			"delete <path.md> <field> <address>",
+		}
+	case "append":
+		return []string{
+			"append <path> <selector> <value>",
+			"append <path> <selector> --json <json>",
+			"append <path.jsonl> <json-value>",
+		}
+	case "add":
+		return []string{
+			"add <path> <selector> <value>",
+			"add <path> <selector> --json <json>",
+		}
+	case "remove":
+		return []string{
+			"remove <path> <selector> <value>",
+			"remove <path> <selector> --json <json>",
+		}
+	case "task close":
+		return []string{"task close <path> <text> [<address>]"}
+	case "task open":
+		return []string{"task open <path> <text> [<address>]"}
+	case "list add":
+		return []string{"list add <path> <text> [--task] [<placement>]"}
+	case "task add":
+		return []string{"task add <path> <text> [<placement>]"}
+	}
+
+	for _, format := range []string{"json", "yaml", "frontmatter"} {
+		switch name {
+		case format + " set":
+			return []string{
+				format + " set <path> <selector> <value>",
+				format + " set <path> <selector> --json <json>",
+				format + " set <path> <selector=value>...",
+				format + " set <path> <selector:=json>...",
+			}
+		case format + " append":
+			return []string{
+				format + " append <path> <selector> <value>",
+				format + " append <path> <selector> --json <json>",
+			}
+		case format + " add":
+			return []string{
+				format + " add <path> <selector> <value>",
+				format + " add <path> <selector> --json <json>",
+			}
+		case format + " remove":
+			return []string{
+				format + " remove <path> <selector> <value>",
+				format + " remove <path> <selector> --json <json>",
+			}
+		}
+	}
+
+	return nil
 }
 
 func helpCommandTopicID(name string) string {
@@ -391,6 +505,30 @@ func helpTopicLinks() []HelpTopicLink {
 	}
 }
 
+func markdownInlineFieldAddressTerms() []HelpTermRow {
+	return []HelpTermRow{
+		{Term: "--body", Description: "Address inline fields in the whole Markdown body."},
+		{Term: "--section <heading>", Description: "Limit the address to one heading section."},
+		{Term: "--item <text>", Description: "Address an inline field on one matching list item."},
+		{Term: "--task <text>", Description: "Address an inline field on one matching task item."},
+		{Term: "--item-type <type>", Description: "Filter --item or --task matches by task, plain, numbered, or bullet. Repeat to combine independent filters."},
+		{Term: "--head", Description: "Place a created inline field at the start of the addressed scope."},
+		{Term: "--tail", Description: "Place a created inline field at the end of the addressed scope."},
+		{Term: "--before <literal>", Description: "Place or narrow before a matching literal inside the addressed scope."},
+		{Term: "--after <literal>", Description: "Place or narrow after a matching literal inside the addressed scope."},
+		{Term: "--hidden", Description: "Use hidden Dataview field syntax. Accepted by set only."},
+	}
+}
+
+func markdownTaskListAddressTerms() []HelpTermRow {
+	return []HelpTermRow{
+		{Term: "--section <heading>", Description: "Limit the task/list command to one heading section."},
+		{Term: "--before <item>", Description: "For task close/open, narrow the search before a matching list item. For task/list add, place the new item before it."},
+		{Term: "--after <item>", Description: "For task close/open, narrow the search after a matching list item. For task/list add, place the new item after it."},
+		{Term: "--task", Description: "With list add, create a task item instead of a plain list item."},
+	}
+}
+
 func namedHelpTopics() []HelpTopic {
 	return []HelpTopic{
 		{
@@ -522,7 +660,7 @@ EOF`},
 			Summary:    "Markdown fields: use frontmatter for note-global metadata; use inline fields for body-local metadata.",
 			Aliases:    []string{"fields"},
 			Blocks: []HelpBlock{
-				{Kind: "paragraph", Text: "On Markdown paths, bare structured selectors mutate YAML frontmatter. Markdown address flags such as --body, --section, --item, and --task switch set and delete to Dataview-style inline fields in the Markdown body."},
+				{Kind: "paragraph", Text: "On Markdown paths, bare structured selectors mutate YAML frontmatter. Markdown address flags such as --body, --section, --item, and --task switch set and delete to Dataview-style inline fields in the Markdown body. Inline field values are strings; --json is not supported for Markdown inline fields."},
 				{Kind: "paragraph", Text: "Frontmatter fits whole-note schema fields such as owner, source, status, and stable IDs. Inline fields fit metadata attached to a paragraph, list item, task, or local note context."},
 				{Kind: "paragraph", Text: `Dataview inline fields are Markdown annotations shaped like [field:: value] or (field:: value). The bracket form is visible in reading view; the parenthesized form is hidden. Etch preserves the surrounding line or list item and rewrites only the addressed field annotation.`},
 				{Kind: "paragraph", Text: "Existing fields match first by exact source field name, then by Dataview-normalized field name if the normalized match is unique. Dataview implicit fields such as file.name, task status, and task text are reserved and not writable."},
@@ -541,6 +679,16 @@ EOF`},
 			Summary:    "Markdown addressing uses exact matching with syntax normalization and ambiguity errors.",
 			Aliases:    []string{"addressing", "markdown"},
 			Blocks: []HelpBlock{
+				{Kind: "paragraph", Text: "In command forms, <address> and <placement> stand for Markdown addressing flags. Inline field set/delete commands require an address. Task/list commands accept only the task/list subset."},
+				{Kind: "heading", Heading: "Forms"},
+				{Kind: "pre", Text: `  etch set <path.md> <field> <value> <address>
+  etch delete <path.md> <field> <address>
+  etch task close <path> <text> [<address>]
+  etch task open <path> <text> [<address>]
+  etch list add <path> <text> [--task] [<placement>]
+  etch task add <path> <text> [<placement>]`},
+				{Kind: "definition-table", Heading: "Inline Field Address", Terms: markdownInlineFieldAddressTerms()},
+				{Kind: "definition-table", Heading: "Task/List Address", Terms: markdownTaskListAddressTerms()},
 				{Kind: "paragraph", Text: `Section selectors accept either a title such as "Status" or an ATX heading such as "## Status".
 Title-only selectors search all ATX heading levels; ATX selectors include the heading level.`},
 				{Kind: "paragraph", Text: `List-item selectors normalize away the list marker, task checkbox, surrounding whitespace,
@@ -548,7 +696,7 @@ Dataview inline field annotations, and trailing numeric reference-annotation lin
 Markdown inline syntax is rendered to normalized item text, so "**Buy milk**" and
 "[Buy milk](https://example.com)" both match "Buy milk".`},
 				{Kind: "paragraph", Text: "Item type filters are task, plain, numbered, and bullet. Repeated filters combine across\nindependent axes, such as task+numbered. Contradictory filters fail before planning."},
-				{Kind: "paragraph", Text: "Placement flags such as --section, --before, and --after identify where Markdown list and task commands operate. --before and --after match list items, not arbitrary prose."},
+				{Kind: "paragraph", Text: "Task/list commands use --section to choose a heading body and --before/--after as list-item anchors. For task close/open, anchors narrow the search; for add commands, anchors choose the insertion point."},
 			},
 		},
 		{

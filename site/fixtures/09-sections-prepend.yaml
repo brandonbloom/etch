@@ -1,4 +1,4 @@
-cat: Sections
+cat: Markdown
 name: section prepend
 syntax: |-
   etch section prepend <file> <heading> <content>

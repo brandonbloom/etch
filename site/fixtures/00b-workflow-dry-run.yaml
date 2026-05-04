@@ -1,0 +1,7 @@
+cat: Workflow
+name: --dry-run
+syntax: |-
+  etch --dry-run <command> [args...]
+  etch -n <command> [args...]
+desc: Print a git-am-compatible patch preview without creating a commit or changing files.
+example: "etch --dry-run set state.json status complete"

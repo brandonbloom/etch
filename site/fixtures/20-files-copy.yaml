@@ -1,4 +1,4 @@
-cat: Files
+cat: Whole files
 name: copy
 syntax: "etch copy <src> <dst>"
 desc: Copy a file path.

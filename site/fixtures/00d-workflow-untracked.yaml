@@ -1,0 +1,5 @@
+cat: Workflow
+name: --untracked
+syntax: "etch --untracked <command> [args...]"
+desc: Admit untracked source paths under the current working directory; touched paths become tracked if the command commits.
+example: "etch --untracked set scratch.json status open"

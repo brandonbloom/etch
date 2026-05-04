@@ -1,4 +1,4 @@
-cat: Files
+cat: Whole files
 name: create
 syntax: "etch create <file> [<content>]"
 desc: Create a new file. Fails if the file already exists. JSON defaults to {}; other omitted content is empty.

@@ -1,0 +1,5 @@
+cat: Workflow
+name: --message
+syntax: "etch --message <message> <command> [args...]"
+desc: Override the generated commit message for one mutating invocation.
+example: "etch --message 'mark state complete' set state.json status complete"

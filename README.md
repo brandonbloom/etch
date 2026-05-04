@@ -58,7 +58,6 @@ new file into the checkout.
 
 - [Overview](https://brandonbloom.github.io/etch/)
 - [Quickstart](https://brandonbloom.github.io/etch/quickstart/)
-- [Cheatsheet](https://brandonbloom.github.io/etch/cheatsheet/)
 - [Reference](https://brandonbloom.github.io/etch/reference/)
 
 The CLI also includes reference help:

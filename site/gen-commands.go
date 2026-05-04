@@ -15,18 +15,19 @@ import (
 )
 
 type Fixture struct {
-	Cat     string   `yaml:"cat"`
-	Name    string   `yaml:"name"`
-	Syntax  string   `yaml:"syntax"`
-	Desc    string   `yaml:"desc"`
-	Example string   `yaml:"example"`
-	File    string   `yaml:"file"`
-	Before  *string  `yaml:"before"`
-	Setup   []File   `yaml:"setup"`
-	Results []string `yaml:"results"`
-	Args    []string `yaml:"args"`
-	Stdin   string   `yaml:"stdin"`
-	Verify  *bool    `yaml:"verify"`
+	Cat             string   `yaml:"cat"`
+	Name            string   `yaml:"name"`
+	Syntax          string   `yaml:"syntax"`
+	Desc            string   `yaml:"desc"`
+	Example         string   `yaml:"example"`
+	File            string   `yaml:"file"`
+	Before          *string  `yaml:"before"`
+	Setup           []File   `yaml:"setup"`
+	Results         []string `yaml:"results"`
+	Args            []string `yaml:"args"`
+	Stdin           string   `yaml:"stdin"`
+	Verify          *bool    `yaml:"verify"`
+	ReferenceTopics []string `yaml:"reference_topics"`
 }
 
 type File struct {
@@ -57,16 +58,17 @@ type Diff struct {
 }
 
 type Command struct {
-	Cat     string  `json:"cat"`
-	Name    string  `json:"name"`
-	Syntax  string  `json:"syntax"`
-	Desc    string  `json:"desc"`
-	Example string  `json:"example"`
-	File    *string `json:"file"`
-	Before  *string `json:"before"`
-	After   *string `json:"after"`
-	Commit  *string `json:"commit"`
-	Results []File  `json:"results,omitempty"`
+	Cat             string   `json:"cat"`
+	Name            string   `json:"name"`
+	Syntax          string   `json:"syntax"`
+	Desc            string   `json:"desc"`
+	Example         string   `json:"example"`
+	ReferenceTopics []string `json:"reference_topics,omitempty"`
+	File            *string  `json:"file"`
+	Before          *string  `json:"before"`
+	After           *string  `json:"after"`
+	Commit          *string  `json:"commit"`
+	Results         []File   `json:"results,omitempty"`
 }
 
 type PromptData struct {
@@ -114,16 +116,22 @@ func main() {
 			fatal("\n  error parsing %s: %v", base, err)
 		}
 
+		referenceTopics := f.ReferenceTopics
+		if referenceTopics == nil {
+			referenceTopics = referenceTopicsForFixture(f)
+		}
+
 		shouldVerify := f.Args != nil && (f.Verify == nil || *f.Verify)
 
 		if !shouldVerify {
 			fmt.Fprintf(os.Stderr, " (skip)\n")
 			commands = append(commands, Command{
-				Cat:     f.Cat,
-				Name:    f.Name,
-				Syntax:  strings.TrimRight(f.Syntax, "\n"),
-				Desc:    f.Desc,
-				Example: strings.TrimRight(f.Example, "\n"),
+				Cat:             f.Cat,
+				Name:            f.Name,
+				Syntax:          strings.TrimRight(f.Syntax, "\n"),
+				Desc:            f.Desc,
+				Example:         strings.TrimRight(f.Example, "\n"),
+				ReferenceTopics: referenceTopics,
 			})
 			continue
 		}
@@ -143,16 +151,17 @@ func main() {
 
 		fmt.Fprintf(os.Stderr, " ok\n")
 		commands = append(commands, Command{
-			Cat:     f.Cat,
-			Name:    f.Name,
-			Syntax:  strings.TrimRight(f.Syntax, "\n"),
-			Desc:    f.Desc,
-			Example: strings.TrimRight(f.Example, "\n"),
-			File:    filePtr,
-			Before:  beforePtr,
-			After:   afterPtr,
-			Commit:  &commitMsg,
-			Results: results,
+			Cat:             f.Cat,
+			Name:            f.Name,
+			Syntax:          strings.TrimRight(f.Syntax, "\n"),
+			Desc:            f.Desc,
+			Example:         strings.TrimRight(f.Example, "\n"),
+			ReferenceTopics: referenceTopics,
+			File:            filePtr,
+			Before:          beforePtr,
+			After:           afterPtr,
+			Commit:          &commitMsg,
+			Results:         results,
 		})
 	}
 
@@ -187,6 +196,50 @@ func main() {
 	fmt.Fprintf(os.Stderr, "wrote %s\n", *promptDataOutput)
 }
 
+func referenceTopicsForFixture(f Fixture) []string {
+	switch f.Cat {
+	case "Workflow":
+		switch f.Name {
+		case "--plan", "--dry-run":
+			return []string{"plans"}
+		case "--no-checkout":
+			return []string{"conflicts"}
+		case "--untracked":
+			return []string{"invocation"}
+		case "--message", "--subject-prefix/suffix", "--body-prefix/suffix":
+			return []string{"commits"}
+		default:
+			return nil
+		}
+	case "Mutate":
+		return []string{"values"}
+	case "Markdown":
+		if f.Name == "section replace" {
+			return []string{"sections", "markdown-addressing"}
+		}
+		return []string{"sections"}
+	case "Tasks":
+		if f.Name == "task close" {
+			return []string{"tasks", "markdown-addressing"}
+		}
+		return []string{"tasks"}
+	case "Fields":
+		return []string{"fields", "markdown-addressing"}
+	case "Tables":
+		return []string{"tables-and-csv"}
+	case "Whole files":
+		return []string{"files"}
+	case "Guards":
+		return []string{"guards"}
+	case "Scripts":
+		return []string{"scripts"}
+	case "JSONL":
+		return []string{"formats"}
+	default:
+		return nil
+	}
+}
+
 func writeReferenceData(etchBin, output string) (int, error) {
 	out, err := commandOutput("", etchBin, "help", "--json")
 	if err != nil {
@@ -216,7 +269,7 @@ func writeReferenceContent(output string) error {
 	var b strings.Builder
 	b.WriteString("---\n")
 	b.WriteString("title: Reference\n")
-	b.WriteString("description: CLI help topics generated from etch help.\n")
+	b.WriteString("description: Command behavior, addressing rules, workflow flags, and examples.\n")
 	b.WriteString("layout: reference\n")
 	b.WriteString("---\n\n")
 

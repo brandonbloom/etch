@@ -4,15 +4,16 @@
   {{ errorf "site/data/commands.json is missing or empty; run mise run site:verify before building the site" }}
 {{ end }}
 {{ $catDescs := dict
+  "Workflow" "Global flags appear before the command path and shape planning, preview, checkout, source admission, and commit messages."
   "Mutate" "Set, delete, append, add, and remove values in structured files."
   "JSONL" "Append-only operations on newline-delimited JSON logs."
-  "Sections" "Replace, append, or prepend content under Markdown headings."
+  "Markdown" "Replace, append, or prepend content under Markdown headings."
   "Tasks" "Open, close, and add task checkboxes and list items in Markdown."
   "Tables" "Set cells, insert/delete rows, and add/rename/delete columns in CSV and Markdown pipe tables."
-  "Files" "Create, replace, move, and copy files."
+  "Whole files" "Create, replace, move, and copy whole paths."
   "Guards" "Assert conditions without committing. Use in scripts to gate mutations."
   "Scripts" "Run multiple commands as one atomic transaction."
-  "Inline fields" "Set Dataview-style inline fields in Markdown body text."
+  "Fields" "Set Dataview-style inline fields in Markdown body text."
 }}
 {{ $cats := slice }}
 {{ range $commands }}

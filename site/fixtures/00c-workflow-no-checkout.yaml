@@ -1,0 +1,5 @@
+cat: Workflow
+name: --no-checkout
+syntax: "etch --no-checkout <command> [args...]"
+desc: Commit the transaction without materializing touched paths into the index and working tree.
+example: "etch --no-checkout set state.json status complete"

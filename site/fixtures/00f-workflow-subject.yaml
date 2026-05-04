@@ -1,0 +1,7 @@
+cat: Workflow
+name: --subject-prefix/suffix
+syntax: |-
+  etch --subject-prefix <text> <command> [args...]
+  etch --subject-suffix <text> <command> [args...]
+desc: Add text before or after the generated commit subject.
+example: "etch --subject-prefix '[agent] ' set state.json status complete"

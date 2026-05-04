@@ -3,11 +3,15 @@
 {{ if not $reference.topics }}
   {{ errorf "site/data/reference.json is missing or empty; run mise run site:verify before building the site" }}
 {{ end }}
+{{ $commands := hugo.Data.commands }}
+{{ if not $commands }}
+  {{ errorf "site/data/commands.json is missing or empty; run mise run site:verify before building the site" }}
+{{ end }}
 
 <article class="content reference-page">
   <header class="reference-hero">
     <h1>{{ .Title }}</h1>
-    <p>Generated from the same <code>etch help</code> topics available in the CLI.</p>
+    <p>Command behavior, addressing rules, workflow flags, and examples for day-to-day use.</p>
   </header>
 
   <nav class="reference-topic-nav" aria-label="Reference topics">
@@ -34,6 +38,7 @@
 
   <div class="reference-sections">
     {{ range $reference.topics }}
+    {{ $topic := . }}
     <section class="reference-section" id="{{ .id }}">
       <header class="reference-section-head">
         <div class="reference-invocation">$ {{ .invocation }}</div>
@@ -54,7 +59,7 @@
           <table class="reference-command-table">
             <thead>
               <tr>
-                <th>Command</th>
+                <th>{{ if eq $topic.id "common-commands" }}Common forms{{ else }}Command{{ end }}</th>
                 <th>Class</th>
                 <th>Description</th>
               </tr>
@@ -63,13 +68,40 @@
               {{ range .rows }}
               <tr>
                 <td>
-                  {{ if .topic_id }}
-                  <a class="reference-command-link" href="#{{ .topic_id }}"><code>{{ .signature }}</code></a>
-                  {{ else }}
-                  <code>{{ .signature }}</code>
-                  {{ end }}
+                  {{ $row := . }}
+                  {{ $forms := .forms }}
+                  {{ if not $forms }}{{ $forms = slice .signature }}{{ end }}
+                  <div class="reference-command-forms">
+                    {{ range $forms }}
+                      {{ if $row.topic_id }}
+                      <a class="reference-command-link" href="#{{ $row.topic_id }}"><code>{{ . }}</code></a>
+                      {{ else }}
+                      <code>{{ . }}</code>
+                      {{ end }}
+                    {{ end }}
+                  </div>
                 </td>
                 <td><span class="command-class command-class-{{ .class | anchorize }}">{{ .class }}</span></td>
+                <td>{{ .description }}</td>
+              </tr>
+              {{ end }}
+            </tbody>
+          </table>
+        </div>
+        {{ else if eq .kind "definition-table" }}
+        {{ with .heading }}<h3 class="reference-block-heading">{{ . }}</h3>{{ end }}
+        <div class="reference-table-wrap" aria-label="{{ .heading }}">
+          <table class="reference-definition-table">
+            <thead>
+              <tr>
+                <th>Form</th>
+                <th>Meaning</th>
+              </tr>
+            </thead>
+            <tbody>
+              {{ range .terms }}
+              <tr>
+                <td><code>{{ .term }}</code></td>
                 <td>{{ .description }}</td>
               </tr>
               {{ end }}
@@ -83,6 +115,74 @@
           {{ end }}
         </nav>
         {{ end }}
+      {{ end }}
+
+      {{ $examples := slice }}
+      {{ range $commands }}
+        {{ if in .reference_topics $topic.id }}
+          {{ $examples = $examples | append . }}
+        {{ end }}
+      {{ end }}
+      {{ if $examples }}
+      <div class="reference-examples">
+        <h3 class="reference-block-heading">Examples</h3>
+        {{ range $examples }}
+        {{ $cmd := . }}
+        <section class="reference-example" id="example-{{ $topic.id }}-{{ anchorize .cat }}-{{ anchorize .name }}">
+          <div class="reference-example-head">
+            <h4>{{ .name }}</h4>
+            <p>{{ .desc }}</p>
+          </div>
+
+          <div class="detail-section">
+            <div class="detail-label">Command</div>
+            <pre class="detail-pre detail-example"><span class="prompt">$</span> {{ .example }}</pre>
+          </div>
+
+          {{ with .results }}
+          <div class="detail-section">
+            <div class="commit-preview">
+              <div class="detail-label">Commit</div>
+              <div class="commit-message">{{ $cmd.commit }}</div>
+              <div class="diff-stat-list">
+                {{ range . }}
+                <div class="diff-stat-row">
+                  <span class="diff-stat-file">{{ .file }}</span>
+                  <span class="diff-stat-count">{{ .stat.label }}</span>
+                  <span class="diff-stat-bars">
+                    {{ with .stat.add_bar }}<span class="diff-stat-add">{{ . }}</span>{{ end }}{{ with .stat.del_bar }}<span class="diff-stat-del">{{ . }}</span>{{ end }}
+                  </span>
+                </div>
+                {{ end }}
+              </div>
+            </div>
+
+            {{ range . }}
+              {{ if gt (len $cmd.results) 1 }}
+              <div class="diff-result-label">{{ .file }}</div>
+              {{ end }}
+              <div class="diff-view">
+                {{ if .diff }}
+                <table class="diff-table">
+                  {{ range .diff }}
+                  <tr class="diff-{{ .type }}">
+                    <td class="diff-ln">{{ with .before_line }}{{ . }}{{ end }}</td>
+                    <td class="diff-ln">{{ with .after_line }}{{ . }}{{ end }}</td>
+                    <td class="diff-marker">{{ .marker }}</td>
+                    <td class="diff-code">{{ with .html }}{{ . | safeHTML }}{{ else }}{{ .text }}{{ end }}</td>
+                  </tr>
+                  {{ end }}
+                </table>
+                {{ else }}
+                <div class="diff-empty-file">{{ .stat.label }}</div>
+                {{ end }}
+              </div>
+            {{ end }}
+          </div>
+          {{ end }}
+        </section>
+        {{ end }}
+      </div>
       {{ end }}
     </section>
     {{ end }}
