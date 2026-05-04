@@ -1,0 +1,15 @@
+Structured values are strings by default. Use --json for a strict JSON value. For structured commands, --json may appear immediately before or after the value.
+
+Examples:
+  etch set state.json status complete          # string "complete"
+  etch set state.json count --json 12          # number 12
+  etch set state.json count 12 --json          # number 12
+  etch append state.json events --json '{"kind":"prompt"}'
+  etch append events.jsonl '{"kind":"prompt"}'
+  etch set state.json status=complete count:=12
+
+Assignment items are accepted by set only. NAME=value writes a string; NAME:=json writes JSON.
+JSONL and NDJSON append values are always strict JSON and do not use --json.
+
+For add and remove, array membership uses semantic structural equality within the edited format, not byte-spelling equality.
+

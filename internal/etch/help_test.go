@@ -2,466 +2,165 @@ package etch
 
 import (
 	"bytes"
-	"encoding/json"
+	"flag"
+	"fmt"
+	"io/fs"
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 )
 
-func TestHelpTopicsSnapshotSmoke(t *testing.T) {
-	for _, topic := range []string{"", "model", "invocation", "prompts", "prompt", "scripts", "selectors", "values", "formats", "fields", "files", "guards", "plans", "commits", "security", "conflicts", "addressing", "markdown", "section", "tasks", "table", "csv"} {
-		var out bytes.Buffer
-		if err := printHelp(&out, topic, false); err != nil {
-			t.Fatalf("help %q: %v", topic, err)
-		}
-		if out.Len() == 0 {
-			t.Fatalf("help %q produced no output", topic)
-		}
-	}
+var updateHelpSnapshots = flag.Bool("update-help-snapshots", false, "update generated help output snapshots")
+
+type helpSnapshotCase struct {
+	Path string
+	Args []string
 }
 
-func TestDefaultHelpTableExcludesPlumbing(t *testing.T) {
-	var out bytes.Buffer
-	if err := printHelp(&out, "", false); err != nil {
-		t.Fatal(err)
-	}
-	text := out.String()
-	for _, hidden := range []string{"json set", "jsonl append", "yaml set", "frontmatter set", "md section replace", "csv set"} {
-		if strings.Contains(text, hidden) {
-			t.Fatalf("default help contains plumbing command %q:\n%s", hidden, text)
-		}
-	}
-	for _, shown := range []string{"prompt [--context|--bootstrap]", "set <path>", "table set", "section replace", "section append", "section prepend", "task close", "list add", "replace <path>"} {
-		if !strings.Contains(text, shown) {
-			t.Fatalf("default help missing porcelain command %q:\n%s", shown, text)
-		}
-	}
-}
+func TestHelpOutputSnapshots(t *testing.T) {
+	expected := make(map[string]bool)
 
-func TestHelpAllIncludesPlumbing(t *testing.T) {
-	var out bytes.Buffer
-	if err := printHelp(&out, "", true); err != nil {
-		t.Fatal(err)
-	}
-	text := out.String()
-	for _, shown := range []string{"json set", "jsonl append", "yaml set", "frontmatter set", "md section replace", "csv set"} {
-		if !strings.Contains(text, shown) {
-			t.Fatalf("help --all missing plumbing command %q:\n%s", shown, text)
-		}
-	}
-	if !strings.Contains(text, "Format-explicit command prefixes select the parser and writer") {
-		t.Fatalf("help --all missing advanced format warning:\n%s", text)
-	}
-}
-
-func TestHelpAllThroughCLI(t *testing.T) {
-	var out, errb bytes.Buffer
-	code, err := runCLI([]string{"help", "--all"}, &out, &errb)
-	if err != nil || code != exitOK {
-		t.Fatalf("runCLI(help --all) code=%d err=%v stderr=%s", code, err, errb.String())
-	}
-	if !strings.Contains(out.String(), "json set") {
-		t.Fatalf("runCLI(help --all) did not include plumbing commands:\n%s", out.String())
-	}
-}
-
-func TestHelpJSONThroughCLI(t *testing.T) {
-	var out, errb bytes.Buffer
-	code, err := runCLI([]string{"help", "--json"}, &out, &errb)
-	if err != nil || code != exitOK {
-		t.Fatalf("runCLI(help --json) code=%d err=%v stderr=%s", code, err, errb.String())
+	for _, tc := range helpSnapshotCases() {
+		rel := "pages/" + tc.Path
+		expected[rel] = true
+		t.Run(strings.TrimSuffix(rel, ".txt"), func(t *testing.T) {
+			assertHelpSnapshot(t, rel, helpOutput(t, tc.Args...))
+		})
 	}
 
-	var reference HelpReference
-	if err := json.Unmarshal(out.Bytes(), &reference); err != nil {
-		t.Fatalf("help --json returned invalid JSON: %v\n%s", err, out.String())
-	}
-	if len(reference.Topics) == 0 {
-		t.Fatal("help --json returned no topics")
-	}
-	if reference.Topics[0].ID != "common-commands" || len(commandTableHeadings(reference.Topics[0])) == 0 {
-		t.Fatalf("unexpected first reference topic: %#v", reference.Topics[0])
-	}
-	if got := reference.Topics[len(reference.Topics)-1].ID; got != "command-index" {
-		t.Fatalf("command index should be last reference topic, got %q", got)
-	}
-	if got := reference.Topics[len(reference.Topics)-1].Group; got != helpGroupAppendix {
-		t.Fatalf("command index should be in bottom nav group %q, got %q", helpGroupAppendix, got)
-	}
-	for _, topic := range reference.Topics {
-		if topic.Group == "" {
-			t.Fatalf("reference topic missing group: %#v", topic)
-		}
-	}
-}
-
-func TestHelpCommandTablesUseWorkflowOrder(t *testing.T) {
-	reference := BuildHelpReference()
-	common := reference.Topics[0]
-	gotHeadings := strings.Join(commandTableHeadings(common), "\n")
-	wantHeadings := strings.Join([]string{
-		"Core structured edits",
-		"Markdown sections and lists",
-		"Tables",
-		"Files",
-		"Guards",
-		"Agent setup",
-	}, "\n")
-	if gotHeadings != wantHeadings {
-		t.Fatalf("common command headings mismatch:\nwant:\n%s\n\ngot:\n%s", wantHeadings, gotHeadings)
-	}
-
-	commonSignatures := commandTableSignatures(common)
-	assertSignatureBefore(t, commonSignatures, "remove <path>", "section replace <path>")
-	assertSignatureBefore(t, commonSignatures, "list add <path>", "table set <path>")
-	assertSignatureBefore(t, commonSignatures, "table column delete <path>", "create <path>")
-	assertSignatureBefore(t, commonSignatures, "copy <src>", "exists <path>")
-	assertSignatureBefore(t, commonSignatures, "contains <path>", "prompt [--context|--bootstrap]")
-
-	all := topicByID(t, reference, "command-index")
-	allHeadings := strings.Join(commandTableHeadings(all), "\n")
-	for _, want := range []string{
-		"Advanced structured formats",
-		"Advanced logs and Markdown",
-		"Advanced table formats",
-	} {
-		if !strings.Contains(allHeadings, want) {
-			t.Fatalf("help --all headings missing %q:\n%s", want, allHeadings)
-		}
-	}
-
-	allSignatures := commandTableSignatures(all)
-	assertSignatureBefore(t, allSignatures, "prompt [--context|--bootstrap]", "json set <path>")
-	assertSignatureBefore(t, allSignatures, "frontmatter remove <path>", "jsonl append <path>")
-	assertSignatureBefore(t, allSignatures, "md section prepend <path>", "csv set <path>")
-}
-
-func TestHelpCommandRowsLinkToReferenceTopics(t *testing.T) {
-	reference := BuildHelpReference()
-	common := topicByID(t, reference, "common-commands")
-	assertCommandTopic(t, common, "set <path>", "values")
-	assertCommandTopic(t, common, "delete <path>", "selectors")
-	assertCommandTopic(t, common, "section replace <path>", "sections")
-	assertCommandTopic(t, common, "task close <path>", "tasks")
-	assertCommandTopic(t, common, "table set <path>", "tables-and-csv")
-	assertCommandTopic(t, common, "create <path>", "files")
-	assertCommandTopic(t, common, "exists <path>", "guards")
-	assertCommandTopic(t, common, "prompt [--context|--bootstrap]", "prompts")
-
-	all := topicByID(t, reference, "command-index")
-	assertCommandTopic(t, all, "json set <path>", "formats")
-	assertCommandTopic(t, all, "jsonl append <path>", "formats")
-	assertCommandTopic(t, all, "md section replace <path>", "sections")
-	assertCommandTopic(t, all, "csv set <path>", "tables-and-csv")
-	assertCommandTopic(t, all, "md table set <path>", "tables-and-csv")
-}
-
-func TestHelpCommandRowsExposeCommonForms(t *testing.T) {
-	reference := BuildHelpReference()
-	common := topicByID(t, reference, "common-commands")
-	assertCommandForms(t, common, "set <path>", []string{
-		"set <path> <selector> <value>",
-		"set <path> <selector> --json <json>",
-		"set <path> <selector=value>...",
-		"set <path> <selector:=json>...",
-		"set <path.md> <field> <value> <address>",
-	})
-	assertCommandForms(t, common, "delete <path>", []string{
-		"delete <path>",
-		"delete <path> <selector>",
-		"delete <path.md> <field> <address>",
-	})
-	assertCommandForms(t, common, "append <path>", []string{
-		"append <path> <selector> <value>",
-		"append <path> <selector> --json <json>",
-		"append <path.jsonl> <json-value>",
-	})
-	assertCommandForms(t, common, "add <path>", []string{
-		"add <path> <selector> <value>",
-		"add <path> <selector> --json <json>",
-	})
-	assertCommandForms(t, common, "remove <path>", []string{
-		"remove <path> <selector> <value>",
-		"remove <path> <selector> --json <json>",
-	})
-	assertCommandForms(t, common, "task close <path>", []string{
-		"task close <path> <text> [<address>]",
-	})
-	assertCommandForms(t, common, "list add <path>", []string{
-		"list add <path> <text> [--task] [<placement>]",
+	expected["reference.json"] = true
+	t.Run("reference.json", func(t *testing.T) {
+		assertHelpSnapshot(t, "reference.json", helpOutput(t, "help", "--json"))
 	})
 
-	index := topicByID(t, reference, "command-index")
-	if row, ok := commandRow(index, "set <path>"); !ok {
-		t.Fatal("command index missing set row")
-	} else if len(row.Forms) != 0 {
-		t.Fatalf("command index should keep compact signatures, got forms: %#v", row.Forms)
-	}
+	assertNoExtraHelpSnapshots(t, expected)
 }
 
-func TestMarkdownAddressingHelpIncludesAddressTables(t *testing.T) {
-	reference := BuildHelpReference()
-	addressing := topicByID(t, reference, "markdown-addressing")
-	assertDefinitionTerm(t, addressing, "Inline Field Address", "--body")
-	assertDefinitionTerm(t, addressing, "Inline Field Address", "--hidden")
-	assertDefinitionTerm(t, addressing, "Task/List Address", "--section <heading>")
-	assertDefinitionTerm(t, addressing, "Task/List Address", "--task")
-
-	var out bytes.Buffer
-	if err := printHelp(&out, "addressing", false); err != nil {
-		t.Fatal(err)
-	}
-	text := out.String()
-	for _, want := range []string{"Inline Field Address:", "--body", "Task/List Address:", "--task"} {
-		if !strings.Contains(text, want) {
-			t.Fatalf("help addressing missing %q:\n%s", want, text)
+func TestHelpTopicAliasesMatchCanonicalOutput(t *testing.T) {
+	for _, topic := range namedHelpTopics() {
+		if len(topic.Aliases) == 0 {
+			t.Fatalf("help topic %q has no aliases", topic.ID)
+		}
+		canonical := helpOutput(t, "help", topic.Aliases[0])
+		for _, alias := range topic.Aliases[1:] {
+			t.Run(topic.ID+"/"+alias, func(t *testing.T) {
+				got := helpOutput(t, "help", alias)
+				if !bytes.Equal(got, canonical) {
+					t.Fatalf("help alias %q for topic %q differs from canonical alias %q", alias, topic.ID, topic.Aliases[0])
+				}
+			})
 		}
 	}
 }
 
-func topicByID(t *testing.T, reference HelpReference, id string) HelpTopic {
+func TestHelpFlagMatchesShortHelpSnapshot(t *testing.T) {
+	got := helpOutput(t, "--help")
+	want := helpOutput(t)
+	if !bytes.Equal(got, want) {
+		t.Fatalf("--help output differs from default short help:\n%s", firstSnapshotDiff(want, got))
+	}
+}
+
+func helpSnapshotCases() []helpSnapshotCase {
+	cases := []helpSnapshotCase{
+		{Path: "short.txt"},
+		{Path: "help.txt", Args: []string{"help"}},
+		{Path: "help-all.txt", Args: []string{"help", "--all"}},
+	}
+	for _, topic := range namedHelpTopics() {
+		cases = append(cases, helpSnapshotCase{
+			Path: "topics/" + topic.ID + ".txt",
+			Args: []string{"help", topic.Aliases[0]},
+		})
+	}
+	return cases
+}
+
+func helpOutput(t *testing.T, args ...string) []byte {
 	t.Helper()
-	for _, topic := range reference.Topics {
-		if topic.ID == id {
-			return topic
-		}
-	}
-	t.Fatalf("missing topic %q", id)
-	return HelpTopic{}
-}
-
-func commandTableHeadings(topic HelpTopic) []string {
-	var headings []string
-	for _, block := range topic.Blocks {
-		if block.Kind == "command-table" {
-			headings = append(headings, block.Heading)
-		}
-	}
-	return headings
-}
-
-func commandTableSignatures(topic HelpTopic) []string {
-	var signatures []string
-	for _, block := range topic.Blocks {
-		if block.Kind != "command-table" {
-			continue
-		}
-		for _, row := range block.Rows {
-			signatures = append(signatures, row.Signature)
-		}
-	}
-	return signatures
-}
-
-func assertCommandTopic(t *testing.T, topic HelpTopic, signaturePrefix, wantTopicID string) {
-	t.Helper()
-	row, ok := commandRow(topic, signaturePrefix)
-	if !ok {
-		t.Fatalf("missing command row %q in topic %q", signaturePrefix, topic.ID)
-	}
-	if row.TopicID != wantTopicID {
-		t.Fatalf("command row %q topic ID mismatch: want %q got %q", row.Signature, wantTopicID, row.TopicID)
-	}
-}
-
-func assertCommandForms(t *testing.T, topic HelpTopic, signaturePrefix string, want []string) {
-	t.Helper()
-	row, ok := commandRow(topic, signaturePrefix)
-	if !ok {
-		t.Fatalf("missing command row %q in topic %q", signaturePrefix, topic.ID)
-	}
-	if strings.Join(row.Forms, "\n") != strings.Join(want, "\n") {
-		t.Fatalf("command row %q forms mismatch:\nwant:\n%s\n\ngot:\n%s", row.Signature, strings.Join(want, "\n"), strings.Join(row.Forms, "\n"))
-	}
-}
-
-func assertDefinitionTerm(t *testing.T, topic HelpTopic, heading, term string) {
-	t.Helper()
-	for _, block := range topic.Blocks {
-		if block.Kind != "definition-table" || block.Heading != heading {
-			continue
-		}
-		for _, row := range block.Terms {
-			if row.Term == term {
-				return
-			}
-		}
-		t.Fatalf("definition table %q in topic %q missing term %q", heading, topic.ID, term)
-	}
-	t.Fatalf("missing definition table %q in topic %q", heading, topic.ID)
-}
-
-func commandRow(topic HelpTopic, signaturePrefix string) (HelpCommandRow, bool) {
-	for _, block := range topic.Blocks {
-		if block.Kind != "command-table" {
-			continue
-		}
-		for _, row := range block.Rows {
-			if strings.HasPrefix(row.Signature, signaturePrefix) {
-				return row, true
-			}
-		}
-	}
-	return HelpCommandRow{}, false
-}
-
-func assertSignatureBefore(t *testing.T, signatures []string, beforePrefix, afterPrefix string) {
-	t.Helper()
-	before := signatureIndex(signatures, beforePrefix)
-	after := signatureIndex(signatures, afterPrefix)
-	if before == -1 || after == -1 {
-		t.Fatalf("missing signatures %q or %q in:\n%s", beforePrefix, afterPrefix, strings.Join(signatures, "\n"))
-	}
-	if before >= after {
-		t.Fatalf("%q should come before %q in:\n%s", beforePrefix, afterPrefix, strings.Join(signatures, "\n"))
-	}
-}
-
-func signatureIndex(signatures []string, prefix string) int {
-	for i, signature := range signatures {
-		if strings.HasPrefix(signature, prefix) {
-			return i
-		}
-	}
-	return -1
-}
-
-func TestHelpFlagIsShortReference(t *testing.T) {
 	var out, errb bytes.Buffer
-	code, err := runCLI([]string{"--help"}, &out, &errb)
+	code, err := runCLI(args, &out, &errb)
 	if err != nil || code != exitOK {
-		t.Fatalf("runCLI(--help) code=%d err=%v stderr=%s", code, err, errb.String())
+		t.Fatalf("runCLI(%s) code=%d err=%v stderr=%s", strings.Join(args, " "), code, err, errb.String())
 	}
-	if out.String() != shortHelp {
-		t.Fatalf("--help output mismatch:\n%s", out.String())
+	if errb.Len() != 0 {
+		t.Fatalf("runCLI(%s) wrote stderr: %s", strings.Join(args, " "), errb.String())
+	}
+	return out.Bytes()
+}
+
+func assertHelpSnapshot(t *testing.T, rel string, got []byte) {
+	t.Helper()
+	path := helpSnapshotPath(rel)
+	if *updateHelpSnapshots {
+		if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
+			t.Fatalf("creating snapshot dir: %v", err)
+		}
+		if err := os.WriteFile(path, got, 0o644); err != nil {
+			t.Fatalf("writing snapshot %s: %v", path, err)
+		}
+		return
 	}
 
-	out.Reset()
-	errb.Reset()
-	code, err = runCLI([]string{"help"}, &out, &errb)
-	if err != nil || code != exitOK {
-		t.Fatalf("runCLI(help) code=%d err=%v stderr=%s", code, err, errb.String())
+	want, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatalf("reading snapshot %s: %v\nRun `go test ./internal/etch -update-help-snapshots` to regenerate help snapshots.", path, err)
 	}
-	if out.String() == shortHelp || !strings.Contains(out.String(), "Core structured edits:") {
-		t.Fatalf("help did not produce long help:\n%s", out.String())
+	if !bytes.Equal(got, want) {
+		t.Fatalf("snapshot %s mismatch\n%s\nRun `go test ./internal/etch -update-help-snapshots` to regenerate help snapshots.", path, firstSnapshotDiff(want, got))
 	}
 }
 
-func TestShortHelpMentionsCoreFlags(t *testing.T) {
-	for _, want := range []string{"--plan", "-n, --dry-run", "--no-checkout", "--untracked", "--allow-empty"} {
-		if !strings.Contains(shortHelp, want) {
-			t.Fatalf("short help missing %s", want)
-		}
+func assertNoExtraHelpSnapshots(t *testing.T, expected map[string]bool) {
+	t.Helper()
+	if *updateHelpSnapshots {
+		return
 	}
-	if !strings.Contains(shortHelp, "etch prompt") {
-		t.Fatalf("short help missing prompt guidance:\n%s", shortHelp)
+	root := helpSnapshotPath("")
+	if err := filepath.WalkDir(root, func(path string, d fs.DirEntry, err error) error {
+		if err != nil {
+			return err
+		}
+		if d.IsDir() {
+			return nil
+		}
+		rel, err := filepath.Rel(root, path)
+		if err != nil {
+			return err
+		}
+		rel = filepath.ToSlash(rel)
+		if !expected[rel] {
+			t.Errorf("unexpected help snapshot %s", filepath.Join(root, filepath.FromSlash(rel)))
+		}
+		return nil
+	}); err != nil {
+		t.Fatalf("walking help snapshots: %v", err)
 	}
 }
 
-func TestPromptThroughCLI(t *testing.T) {
-	var out, errb bytes.Buffer
-	code, err := runCLI([]string{"prompt"}, &out, &errb)
-	if err != nil || code != exitOK {
-		t.Fatalf("prompt code=%d err=%v stderr=%s", code, err, errb.String())
-	}
-	text := out.String()
-	for _, want := range []string{"# etch Bootstrap Prompt", "etch prompt --context", "# etch Agent Context"} {
-		if !strings.Contains(text, want) {
-			t.Fatalf("prompt output missing %q:\n%s", want, text)
-		}
-	}
-
-	out.Reset()
-	errb.Reset()
-	code, err = runCLI([]string{"prompt", "--context"}, &out, &errb)
-	if err != nil || code != exitOK {
-		t.Fatalf("prompt --context code=%d err=%v stderr=%s", code, err, errb.String())
-	}
-	text = out.String()
-	for _, want := range []string{"# etch Agent Context", "etch help --all", "conflicts"} {
-		if !strings.Contains(text, want) {
-			t.Fatalf("prompt --context output missing %q:\n%s", want, text)
-		}
-	}
-	if strings.Contains(text, "# etch Bootstrap Prompt") {
-		t.Fatalf("prompt --context included bootstrap wrapper:\n%s", text)
-	}
-	if len(text) > 2400 {
-		t.Fatalf("prompt --context should stay terse, got %d bytes:\n%s", len(text), text)
-	}
-
-	out.Reset()
-	errb.Reset()
-	code, err = runCLI([]string{"prompt", "--context", "--bootstrap"}, &out, &errb)
-	if err == nil || code != exitUsage {
-		t.Fatalf("prompt conflicting flags code=%d err=%v stdout=%s stderr=%s", code, err, out.String(), errb.String())
-	}
+func helpSnapshotPath(rel string) string {
+	return filepath.Join("testdata", "help", filepath.FromSlash(rel))
 }
 
-func TestScriptsHelpIncludesQuotingExamples(t *testing.T) {
-	var out bytes.Buffer
-	if err := printHelp(&out, "scripts", false); err != nil {
-		t.Fatal(err)
+func firstSnapshotDiff(want, got []byte) string {
+	wantLines := strings.Split(string(want), "\n")
+	gotLines := strings.Split(string(got), "\n")
+	max := len(wantLines)
+	if len(gotLines) > max {
+		max = len(gotLines)
 	}
-	text := out.String()
-	for _, want := range []string{
-		`set posts/hello.md title "Hello, world"`,
-		`append events.jsonl '{"kind":"prompt","name":"first"}'`,
-		`set state.json payload --json '{"name":"first"}'`,
-		`$FOO is not expanded.`,
-	} {
-		if !strings.Contains(text, want) {
-			t.Fatalf("scripts help missing %q:\n%s", want, text)
+	for i := 0; i < max; i++ {
+		if lineAt(wantLines, i) != lineAt(gotLines, i) {
+			return fmt.Sprintf("first difference at line %d\nwant: %q\ngot:  %q", i+1, lineAt(wantLines, i), lineAt(gotLines, i))
 		}
 	}
+	return "outputs differ"
 }
 
-func TestShellCompletionThroughCLI(t *testing.T) {
-	var out, errb bytes.Buffer
-	code, err := runCLI([]string{"--generate-shell-completion"}, &out, &errb)
-	if err != nil || code != exitOK {
-		t.Fatalf("command completion code=%d err=%v stderr=%s", code, err, errb.String())
+func lineAt(lines []string, i int) string {
+	if i >= len(lines) {
+		return "<missing>"
 	}
-	for _, want := range []string{"set\n", "help\n"} {
-		if !strings.Contains(out.String(), want) {
-			t.Fatalf("command completion missing %q:\n%s", want, out.String())
-		}
-	}
-
-	out.Reset()
-	errb.Reset()
-	code, err = runCLI([]string{"-", "--generate-shell-completion"}, &out, &errb)
-	if err != nil || code != exitOK {
-		t.Fatalf("flag completion code=%d err=%v stderr=%s", code, err, errb.String())
-	}
-	for _, want := range []string{"--plan\n", "-n\n", "--subject-prefix\n", "--body-suffix\n"} {
-		if !strings.Contains(out.String(), want) {
-			t.Fatalf("flag completion missing %q:\n%s", want, out.String())
-		}
-	}
-
-	out.Reset()
-	errb.Reset()
-	code, err = runCLI([]string{"prompt", "-", "--generate-shell-completion"}, &out, &errb)
-	if err != nil || code != exitOK {
-		t.Fatalf("prompt flag completion code=%d err=%v stderr=%s", code, err, errb.String())
-	}
-	for _, want := range []string{"--context\n", "--bootstrap\n"} {
-		if !strings.Contains(out.String(), want) {
-			t.Fatalf("prompt flag completion missing %q:\n%s", want, out.String())
-		}
-	}
-}
-
-func TestCommandPathCompletionsUseCatalog(t *testing.T) {
-	got := strings.Join(commandCompletions([]string{"md", "table", "row", ""}), "\n")
-	for _, want := range []string{"append", "insert", "delete"} {
-		if !strings.Contains(got, want) {
-			t.Fatalf("nested command completions missing %q: %q", want, got)
-		}
-	}
-
-	got = strings.Join(commandLocalFlagCompletions([]string{"set", "state.json", "count"}), "\n")
-	if !strings.Contains(got, "--json") {
-		t.Fatalf("local flag completions missing --json: %q", got)
-	}
+	return lines[i]
 }

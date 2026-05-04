@@ -1,0 +1,16 @@
+Global flags appear before the command path; CWD is the path and capability boundary.
+
+Shapes:
+  etch [flags] <command> [args...]
+  etch run [script]
+  etch --plan <command> [args...]
+  etch --dry-run <command> [args...]
+
+Path operands are relative to process CWD, not the repository root. Absolute paths, .. segments, .git path segments, and symlink escapes are rejected. Mutating invocations require CWD to be inside a git worktree.
+
+Existing source paths must be tracked by default. --untracked admits untracked source paths under the same CWD boundary; those paths become tracked if the invocation commits.
+
+--plan emits canonical JSON and --dry-run emits a git-am-compatible patch preview without side effects. --no-checkout skips post-commit checkout synchronization. --retries controls optimistic ref-CAS retry attempts.
+
+--message replaces the generated commit message. --subject-prefix, --subject-suffix, --body-prefix, and --body-suffix modify generated messages and are mutually exclusive with --message.
+

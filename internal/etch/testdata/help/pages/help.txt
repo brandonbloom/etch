@@ -1,0 +1,54 @@
+etch mutates structured files and commits each successful mutating invocation.
+
+The table shows common invocation forms, not every accepted flag placement or advanced format-explicit command. Follow the linked topics for behavior details, or use etch help --all for the full command index.
+
+Core structured edits:
+  set <path> <selector> <value>   idempotent       Set JSON/YAML/frontmatter or Markdown inline fields.
+  set <path> <selector> --json <json>
+  set <path> <selector=value>...
+  set <path> <selector:=json>...
+  set <path.md> <field> <value> <address>
+  delete <path>                   idempotent       Delete a file or selected JSON/YAML/frontmatter/inline-field value.
+  delete <path> <selector>
+  delete <path.md> <field> <address>
+  append <path> <selector> <value> non-idempotent   Append a value to an array, or a JSONL record to .jsonl/.ndjson.
+  append <path> <selector> --json <json>
+  append <path.jsonl> <json-value>
+  add <path> <selector> <value>   idempotent       Ensure an array contains a value.
+  add <path> <selector> --json <json>
+  remove <path> <selector> <value> idempotent       Ensure an array does not contain a value.
+  remove <path> <selector> --json <json>
+
+Markdown sections and lists:
+  section replace <path> <heading> <content> idempotent       Replace the body under one Markdown heading.
+  section append <path> <heading> <content> non-idempotent   Append a block fragment under one Markdown heading.
+  section prepend <path> <heading> <content> non-idempotent   Prepend a block fragment under one Markdown heading.
+  task close <path> <text> [<address>] idempotent       Ensure one Markdown task is closed.
+  task open <path> <text> [<address>] idempotent       Ensure one Markdown task is open, creating it when a destination is addressed.
+  task add <path> <text> [<placement>] non-idempotent   Add one open Markdown task.
+  list add <path> <text> [--task] [<placement>] non-idempotent   Add one Markdown list item.
+
+Tables:
+  table set <path> [<scope> [<table>]] <range> <value> idempotent       Set CSV or Markdown table cells.
+  table row append <path> [<scope> [<table>]] <row-json> non-idempotent   Append a CSV or Markdown table row.
+  table row insert <path> [<scope> [<table>]] (--before <row>|--after <row>) <row-json> non-idempotent   Insert a CSV or Markdown table row.
+  table row delete <path> [<scope> [<table>]] <row> idempotent       Delete table rows.
+  table column add <path> [<scope> [<table>]] <column> [--after <column>] [--default <value>] idempotent       Ensure a table column exists.
+  table column rename <path> [<scope> [<table>]] <old-column> <new-column> idempotent       Rename a table column.
+  table column delete <path> [<scope> [<table>]] <column> idempotent       Ensure a table column is absent.
+
+Files:
+  create <path> [<content>]       idempotent       Create a new file; omitted content uses an extension-aware default.
+  replace <path> <content>        idempotent       Replace an existing file's entire content.
+  move <src> <dst>                idempotent       Move a file path.
+  copy <src> <dst>                idempotent       Copy a file path.
+
+Guards:
+  exists <path>                   guard            Guard that a path exists in the admitted input view.
+  missing <path>                  guard            Guard that a path is missing in the admitted input view.
+  contains <path> <literal>       guard            Guard that admitted file bytes contain a literal.
+
+Agent setup:
+  prompt [--context|--bootstrap]  introspection    Print agent setup or durable context prompts.
+
+Topics: model, invocation, prompts, scripts, selectors, values, formats, addressing, fields, files, guards, section, tasks, table, plans, commits, security, conflicts. Use --all for advanced commands.

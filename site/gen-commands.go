@@ -81,6 +81,7 @@ func main() {
 	fixturesDir := flag.String("fixtures", "site/fixtures", "fixtures directory")
 	output := flag.String("output", "site/data/commands.json", "output JSON file")
 	referenceOutput := flag.String("reference-output", "site/content/reference.md", "output Markdown file for CLI help reference")
+	referenceDataInput := flag.String("reference-data-input", "internal/etch/testdata/help/reference.json", "input JSON file for CLI help reference")
 	referenceDataOutput := flag.String("reference-data-output", "site/data/reference.json", "output JSON file for CLI help reference")
 	promptDataOutput := flag.String("prompt-data-output", "site/data/prompts.json", "output JSON file for CLI prompt snippets")
 	flag.Parse()
@@ -179,7 +180,7 @@ func main() {
 		fatal("writing output: %v", err)
 	}
 
-	referenceTopics, err := writeReferenceData(*etchBin, *referenceDataOutput)
+	referenceTopics, err := writeReferenceData(*referenceDataInput, *referenceDataOutput)
 	if err != nil {
 		fatal("writing reference data: %v", err)
 	}
@@ -240,26 +241,26 @@ func referenceTopicsForFixture(f Fixture) []string {
 	}
 }
 
-func writeReferenceData(etchBin, output string) (int, error) {
-	out, err := commandOutput("", etchBin, "help", "--json")
+func writeReferenceData(input, output string) (int, error) {
+	data, err := os.ReadFile(input)
 	if err != nil {
-		return 0, err
+		return 0, fmt.Errorf("reading committed help snapshot %s: %w", input, err)
 	}
-	if !json.Valid([]byte(out)) {
-		return 0, fmt.Errorf("etch help --json returned invalid JSON")
+	if !json.Valid(data) {
+		return 0, fmt.Errorf("committed help snapshot %s is invalid JSON", input)
 	}
 
 	if err := os.MkdirAll(filepath.Dir(output), 0o755); err != nil {
 		return 0, fmt.Errorf("creating reference data dir: %w", err)
 	}
-	if err := os.WriteFile(output, []byte(out), 0o644); err != nil {
+	if err := os.WriteFile(output, data, 0o644); err != nil {
 		return 0, err
 	}
 
 	var reference struct {
 		Topics []struct{} `json:"topics"`
 	}
-	if err := json.Unmarshal([]byte(out), &reference); err != nil {
+	if err := json.Unmarshal(data, &reference); err != nil {
 		return 0, fmt.Errorf("counting reference topics: %w", err)
 	}
 	return len(reference.Topics), nil

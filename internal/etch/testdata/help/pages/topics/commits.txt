@@ -1,0 +1,10 @@
+Every successful mutating invocation creates one local git commit unless all mutating operations are no-ops.
+
+Generated commit messages are built from normalized operation descriptors with bounded value previews. Full values live in file contents and are represented in plans by hashes.
+
+Single-op commits use subjects such as etch set note.md title "Hello" when the preview fits. Multi-op commits use a summary subject and a Changes body.
+
+--message replaces the generated message. --subject-prefix, --subject-suffix, --body-prefix, and --body-suffix modify generated messages and are mutually exclusive with --message.
+
+Idempotent no-op operations do not contribute to the commit. If every mutating operation is a no-op, etch exits 0 with nothing to do unless --allow-empty is supplied.
+

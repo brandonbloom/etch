@@ -1,0 +1,8 @@
+etch is designed as a narrow CWD-scoped, git-backed mutation capability.
+
+etch accepts only relative paths under CWD, rejects .. and .git path segments, and refuses symlink escapes. There is no repo-root mode, script-local root, or etch-specific environment variable that changes the path root.
+
+etch does not perform network operations. The implementation invokes git only for local repository/object/ref/index work needed to plan, commit, preview, and materialize changes.
+
+The script syntax has no variables, command substitution, globbing, pipes, conditionals, or process execution. Composition happens outside etch.
+

@@ -1,0 +1,13 @@
+File verbs create, replace, delete, move, and copy whole paths inside the transaction.
+
+Commands:
+  etch create <path> [<content>]
+  etch replace <path> <content>
+  etch delete <path>
+  etch move <src> <dst>
+  etch copy <src> <dst>
+
+create no-ops when an existing file already has the same content and fails when it has different content. Omitted create content uses {} for JSON paths and empty content for other paths.
+
+replace requires an existing regular file. delete is idempotent when the path is absent from the transaction base. move and copy fail if their destination exists in the transaction base.
+

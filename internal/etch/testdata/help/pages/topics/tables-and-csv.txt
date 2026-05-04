@@ -1,0 +1,15 @@
+Tables are ordered rows and named columns of string cells.
+
+CSV:
+  etch table set data.csv all,status done
+  etch table row append data.csv '{"id":"1","status":"open"}'
+  etch table column add data.csv owner --default Brandon
+
+Markdown:
+  etch table set notes.md doc @0 all,status done
+  etch table row append notes.md "## Inventory" '{"sku":"A1"}'
+
+For Markdown paths, scope is doc or an exact heading selector, and the optional table ordinal is @0, @1, and so on. For CSV paths, scope and table ordinal are omitted because the file is one table.
+
+Ranges have the shape rows,columns. Rows and columns support all, zero-based ordinals, ordinal ranges, exact labels, and bracketed labels for spaces or selector punctuation. row-json is a strict JSON object keyed by column label.
+

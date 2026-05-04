@@ -40,8 +40,7 @@ jobs:
       - uses: jdx/mise-action@v4
         with:
           install: false
-      - run: mise run site:verify
-      - run: go tool hugo --source site --minify
+      - run: mise run site
       - uses: actions/upload-pages-artifact@v3
         with:
           path: site/public

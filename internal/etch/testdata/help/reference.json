@@ -1,0 +1,1456 @@
+{
+  "topics": [
+    {
+      "id": "common-commands",
+      "title": "Common Commands",
+      "group": "Commands",
+      "invocation": "etch help",
+      "summary": "etch mutates structured files and commits each successful mutating invocation.",
+      "blocks": [
+        {
+          "kind": "paragraph",
+          "text": "The table shows common invocation forms, not every accepted flag placement or advanced format-explicit command. Follow the linked topics for behavior details, or use etch help --all for the full command index."
+        },
+        {
+          "kind": "command-table",
+          "heading": "Core structured edits",
+          "rows": [
+            {
+              "signature": "set <path> <selector> [--json] <value>|<selector=value>...",
+              "forms": [
+                "set <path> <selector> <value>",
+                "set <path> <selector> --json <json>",
+                "set <path> <selector=value>...",
+                "set <path> <selector:=json>...",
+                "set <path.md> <field> <value> <address>"
+              ],
+              "class": "idempotent",
+              "description": "Set JSON/YAML/frontmatter or Markdown inline fields.",
+              "topic_id": "values"
+            },
+            {
+              "signature": "delete <path> [<selector>]",
+              "forms": [
+                "delete <path>",
+                "delete <path> <selector>",
+                "delete <path.md> <field> <address>"
+              ],
+              "class": "idempotent",
+              "description": "Delete a file or selected JSON/YAML/frontmatter/inline-field value.",
+              "topic_id": "selectors"
+            },
+            {
+              "signature": "append <path> <selector> [--json] <value>|<path.jsonl> <json-value>",
+              "forms": [
+                "append <path> <selector> <value>",
+                "append <path> <selector> --json <json>",
+                "append <path.jsonl> <json-value>"
+              ],
+              "class": "non-idempotent",
+              "description": "Append a value to an array, or a JSONL record to .jsonl/.ndjson.",
+              "topic_id": "values"
+            },
+            {
+              "signature": "add <path> <selector> [--json] <value>",
+              "forms": [
+                "add <path> <selector> <value>",
+                "add <path> <selector> --json <json>"
+              ],
+              "class": "idempotent",
+              "description": "Ensure an array contains a value.",
+              "topic_id": "values"
+            },
+            {
+              "signature": "remove <path> <selector> [--json] <value>",
+              "forms": [
+                "remove <path> <selector> <value>",
+                "remove <path> <selector> --json <json>"
+              ],
+              "class": "idempotent",
+              "description": "Ensure an array does not contain a value.",
+              "topic_id": "values"
+            }
+          ]
+        },
+        {
+          "kind": "command-table",
+          "heading": "Markdown sections and lists",
+          "rows": [
+            {
+              "signature": "section replace <path> <heading> <content>",
+              "class": "idempotent",
+              "description": "Replace the body under one Markdown heading.",
+              "topic_id": "sections"
+            },
+            {
+              "signature": "section append <path> <heading> <content>",
+              "class": "non-idempotent",
+              "description": "Append a block fragment under one Markdown heading.",
+              "topic_id": "sections"
+            },
+            {
+              "signature": "section prepend <path> <heading> <content>",
+              "class": "non-idempotent",
+              "description": "Prepend a block fragment under one Markdown heading.",
+              "topic_id": "sections"
+            },
+            {
+              "signature": "task close <path> <text> [--section <heading>] [--before <item>] [--after <item>]",
+              "forms": [
+                "task close <path> <text> [<address>]"
+              ],
+              "class": "idempotent",
+              "description": "Ensure one Markdown task is closed.",
+              "topic_id": "tasks"
+            },
+            {
+              "signature": "task open <path> <text> [--section <heading>] [--before <item>] [--after <item>]",
+              "forms": [
+                "task open <path> <text> [<address>]"
+              ],
+              "class": "idempotent",
+              "description": "Ensure one Markdown task is open, creating it when a destination is addressed.",
+              "topic_id": "tasks"
+            },
+            {
+              "signature": "task add <path> <text> [--section <heading>] [--before <item>] [--after <item>]",
+              "forms": [
+                "task add <path> <text> [<placement>]"
+              ],
+              "class": "non-idempotent",
+              "description": "Add one open Markdown task.",
+              "topic_id": "tasks"
+            },
+            {
+              "signature": "list add <path> <text> [--section <heading>] [--task] [--before <item>] [--after <item>]",
+              "forms": [
+                "list add <path> <text> [--task] [<placement>]"
+              ],
+              "class": "non-idempotent",
+              "description": "Add one Markdown list item.",
+              "topic_id": "tasks"
+            }
+          ]
+        },
+        {
+          "kind": "command-table",
+          "heading": "Tables",
+          "rows": [
+            {
+              "signature": "table set <path> [<scope> [<table>]] <range> <value>",
+              "class": "idempotent",
+              "description": "Set CSV or Markdown table cells.",
+              "topic_id": "tables-and-csv"
+            },
+            {
+              "signature": "table row append <path> [<scope> [<table>]] <row-json>",
+              "class": "non-idempotent",
+              "description": "Append a CSV or Markdown table row.",
+              "topic_id": "tables-and-csv"
+            },
+            {
+              "signature": "table row insert <path> [<scope> [<table>]] (--before <row>|--after <row>) <row-json>",
+              "class": "non-idempotent",
+              "description": "Insert a CSV or Markdown table row.",
+              "topic_id": "tables-and-csv"
+            },
+            {
+              "signature": "table row delete <path> [<scope> [<table>]] <row>",
+              "class": "idempotent",
+              "description": "Delete table rows.",
+              "topic_id": "tables-and-csv"
+            },
+            {
+              "signature": "table column add <path> [<scope> [<table>]] <column> [--after <column>] [--default <value>]",
+              "class": "idempotent",
+              "description": "Ensure a table column exists.",
+              "topic_id": "tables-and-csv"
+            },
+            {
+              "signature": "table column rename <path> [<scope> [<table>]] <old-column> <new-column>",
+              "class": "idempotent",
+              "description": "Rename a table column.",
+              "topic_id": "tables-and-csv"
+            },
+            {
+              "signature": "table column delete <path> [<scope> [<table>]] <column>",
+              "class": "idempotent",
+              "description": "Ensure a table column is absent.",
+              "topic_id": "tables-and-csv"
+            }
+          ]
+        },
+        {
+          "kind": "command-table",
+          "heading": "Files",
+          "rows": [
+            {
+              "signature": "create <path> [<content>]",
+              "class": "idempotent",
+              "description": "Create a new file; omitted content uses an extension-aware default.",
+              "topic_id": "files"
+            },
+            {
+              "signature": "replace <path> <content>",
+              "class": "idempotent",
+              "description": "Replace an existing file's entire content.",
+              "topic_id": "files"
+            },
+            {
+              "signature": "move <src> <dst>",
+              "class": "idempotent",
+              "description": "Move a file path.",
+              "topic_id": "files"
+            },
+            {
+              "signature": "copy <src> <dst>",
+              "class": "idempotent",
+              "description": "Copy a file path.",
+              "topic_id": "files"
+            }
+          ]
+        },
+        {
+          "kind": "command-table",
+          "heading": "Guards",
+          "rows": [
+            {
+              "signature": "exists <path>",
+              "class": "guard",
+              "description": "Guard that a path exists in the admitted input view.",
+              "topic_id": "guards"
+            },
+            {
+              "signature": "missing <path>",
+              "class": "guard",
+              "description": "Guard that a path is missing in the admitted input view.",
+              "topic_id": "guards"
+            },
+            {
+              "signature": "contains <path> <literal>",
+              "class": "guard",
+              "description": "Guard that admitted file bytes contain a literal.",
+              "topic_id": "guards"
+            }
+          ]
+        },
+        {
+          "kind": "command-table",
+          "heading": "Agent setup",
+          "rows": [
+            {
+              "signature": "prompt [--context|--bootstrap]",
+              "class": "introspection",
+              "description": "Print agent setup or durable context prompts.",
+              "topic_id": "prompts"
+            }
+          ]
+        },
+        {
+          "kind": "topic-links",
+          "text": "model, invocation, prompts, scripts, selectors, values, formats, addressing, fields, files, guards, section, tasks, table, plans, commits, security, conflicts. Use --all for advanced commands.",
+          "links": [
+            {
+              "title": "Model",
+              "id": "model"
+            },
+            {
+              "title": "Invocation",
+              "id": "invocation"
+            },
+            {
+              "title": "Prompts",
+              "id": "prompts"
+            },
+            {
+              "title": "Scripts",
+              "id": "scripts"
+            },
+            {
+              "title": "Selectors",
+              "id": "selectors"
+            },
+            {
+              "title": "Values",
+              "id": "values"
+            },
+            {
+              "title": "Formats",
+              "id": "formats"
+            },
+            {
+              "title": "Markdown Addressing",
+              "id": "markdown-addressing"
+            },
+            {
+              "title": "Inline Fields",
+              "id": "fields"
+            },
+            {
+              "title": "Files",
+              "id": "files"
+            },
+            {
+              "title": "Guards",
+              "id": "guards"
+            },
+            {
+              "title": "Sections",
+              "id": "sections"
+            },
+            {
+              "title": "Tasks",
+              "id": "tasks"
+            },
+            {
+              "title": "Tables and CSV",
+              "id": "tables-and-csv"
+            },
+            {
+              "title": "Plans",
+              "id": "plans"
+            },
+            {
+              "title": "Commits",
+              "id": "commits"
+            },
+            {
+              "title": "Security",
+              "id": "security"
+            },
+            {
+              "title": "Conflicts",
+              "id": "conflicts"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "model",
+      "title": "Model",
+      "group": "Basics",
+      "invocation": "etch help model",
+      "summary": "Mutating invocations plan from HEAD and commit as one transaction.",
+      "aliases": [
+        "model"
+      ],
+      "blocks": [
+        {
+          "kind": "paragraph",
+          "text": "For tracked paths, etch reads base-tree bytes from HEAD, not from the live index or working tree. Dirty checkout edits are treated as concurrent local state and reconciled after the commit lands."
+        },
+        {
+          "kind": "paragraph",
+          "text": "All operations in one invocation are planned together. If any operation fails, no commit is created. If every mutating operation is an idempotent no-op, etch exits 0 without creating a commit unless --allow-empty is supplied."
+        },
+        {
+          "kind": "paragraph",
+          "text": "After a successful commit, etch materializes touched paths into the index and working tree unless --no-checkout is used."
+        }
+      ]
+    },
+    {
+      "id": "invocation",
+      "title": "Invocation",
+      "group": "Basics",
+      "invocation": "etch help invocation",
+      "summary": "Global flags appear before the command path; CWD is the path and capability boundary.",
+      "aliases": [
+        "invocation",
+        "flags"
+      ],
+      "blocks": [
+        {
+          "kind": "heading",
+          "heading": "Shapes"
+        },
+        {
+          "kind": "pre",
+          "text": "  etch [flags] <command> [args...]\n  etch run [script]\n  etch --plan <command> [args...]\n  etch --dry-run <command> [args...]"
+        },
+        {
+          "kind": "paragraph",
+          "text": "Path operands are relative to process CWD, not the repository root. Absolute paths, .. segments, .git path segments, and symlink escapes are rejected. Mutating invocations require CWD to be inside a git worktree."
+        },
+        {
+          "kind": "paragraph",
+          "text": "Existing source paths must be tracked by default. --untracked admits untracked source paths under the same CWD boundary; those paths become tracked if the invocation commits."
+        },
+        {
+          "kind": "paragraph",
+          "text": "--plan emits canonical JSON and --dry-run emits a git-am-compatible patch preview without side effects. --no-checkout skips post-commit checkout synchronization. --retries controls optimistic ref-CAS retry attempts."
+        },
+        {
+          "kind": "paragraph",
+          "text": "--message replaces the generated commit message. --subject-prefix, --subject-suffix, --body-prefix, and --body-suffix modify generated messages and are mutually exclusive with --message."
+        }
+      ]
+    },
+    {
+      "id": "prompts",
+      "title": "Prompts",
+      "group": "Basics",
+      "invocation": "etch help prompts",
+      "summary": "etch prompt prints agent-facing Markdown. By default it prints a one-shot bootstrap prompt; --context prints durable instructions for future agent context.",
+      "aliases": [
+        "prompts",
+        "prompt"
+      ],
+      "blocks": [
+        {
+          "kind": "heading",
+          "heading": "Commands"
+        },
+        {
+          "kind": "pre",
+          "text": "  etch prompt\n  etch prompt --bootstrap\n  etch prompt --context"
+        },
+        {
+          "kind": "paragraph",
+          "text": "etch prompt has no side effects. The default bootstrap prompt is meant to start an agent, such as codex \"$(etch prompt)\" or claude \"$(etch prompt)\", so the agent can install durable etch guidance into this repository's agent instructions."
+        },
+        {
+          "kind": "paragraph",
+          "text": "etch prompt --context prints the durable guidance directly. Add that text to AGENTS.md, CLAUDE.md, or another project instruction file when you want future agents to know when and how to use etch."
+        }
+      ]
+    },
+    {
+      "id": "scripts",
+      "title": "Scripts",
+      "group": "Basics",
+      "invocation": "etch help scripts",
+      "summary": "etch run [script] executes a batch script as one transaction.",
+      "aliases": [
+        "scripts"
+      ],
+      "blocks": [
+        {
+          "kind": "paragraph",
+          "text": "The script path is optional. Omit it or pass \"-\" to read the script from stdin.\nEvery statement is planned together against one base tree, so later statements see earlier statements.\nIf parsing, guards, or mutations fail, the batch produces no commit.\nOn success, the whole batch produces one commit unless every mutating statement is a no-op."
+        },
+        {
+          "kind": "paragraph",
+          "text": "Script lines use shell-style quoting, but no shell expansion. Quote values with spaces.\nQuote JSON values as one token, usually with single quotes:"
+        },
+        {
+          "kind": "pre",
+          "text": "  set posts/hello.md title \"Hello, world\"\n  append events.jsonl '{\"kind\":\"prompt\",\"name\":\"first\"}'\n  set state.json payload --json '{\"name\":\"first\"}'"
+        },
+        {
+          "kind": "paragraph",
+          "text": "Multi-line values use heredocs. Heredoc bodies are literal text, and the\nterminator line contains only the delimiter:"
+        },
+        {
+          "kind": "pre",
+          "text": "section replace posts/hello.md \"## Summary\" <<EOF\n$FOO is not expanded.\nEOF"
+        }
+      ]
+    },
+    {
+      "id": "selectors",
+      "title": "Selectors",
+      "group": "Data and Addressing",
+      "invocation": "etch help selectors",
+      "summary": "Selectors are singular JSONPath-style paths.",
+      "aliases": [
+        "selectors"
+      ],
+      "blocks": [
+        {
+          "kind": "heading",
+          "heading": "Accepted"
+        },
+        {
+          "kind": "pre",
+          "text": "  $.agents.assistant.last_run\n  agents.assistant.last_run\n  $.items[0].title\n  $[\"key.with.dots\"]"
+        },
+        {
+          "kind": "paragraph",
+          "text": "Rejected: wildcards, recursive descent, slices, filters, unions, functions, negative indexes."
+        },
+        {
+          "kind": "paragraph",
+          "text": "set may create missing object containers and final object members. append and add may create a missing final array under object-container rules. Syntax that can produce multiple matches is rejected before evaluation."
+        }
+      ]
+    },
+    {
+      "id": "values",
+      "title": "Values",
+      "group": "Data and Addressing",
+      "invocation": "etch help values",
+      "summary": "Structured values are strings by default. Use --json for a strict JSON value. For structured commands, --json may appear immediately before or after the value.",
+      "aliases": [
+        "values"
+      ],
+      "blocks": [
+        {
+          "kind": "heading",
+          "heading": "Examples"
+        },
+        {
+          "kind": "pre",
+          "text": "  etch set state.json status complete          # string \"complete\"\n  etch set state.json count --json 12          # number 12\n  etch set state.json count 12 --json          # number 12\n  etch append state.json events --json '{\"kind\":\"prompt\"}'\n  etch append events.jsonl '{\"kind\":\"prompt\"}'\n  etch set state.json status=complete count:=12"
+        },
+        {
+          "kind": "paragraph",
+          "text": "Assignment items are accepted by set only. NAME=value writes a string; NAME:=json writes JSON.\nJSONL and NDJSON append values are always strict JSON and do not use --json."
+        },
+        {
+          "kind": "paragraph",
+          "text": "For add and remove, array membership uses semantic structural equality within the edited format, not byte-spelling equality."
+        }
+      ]
+    },
+    {
+      "id": "formats",
+      "title": "Formats",
+      "group": "Data and Addressing",
+      "invocation": "etch help formats",
+      "summary": "Porcelain commands infer formats from path extensions; plumbing commands make the format explicit.",
+      "aliases": [
+        "formats",
+        "format",
+        "json",
+        "jsonl",
+        "yaml",
+        "frontmatter"
+      ],
+      "blocks": [
+        {
+          "kind": "paragraph",
+          "text": "Porcelain commands infer .json, .jsonl/.ndjson, .yaml/.yml, .md/.markdown, and .csv behavior from the path. Format-explicit commands such as json set, yaml set, frontmatter set, jsonl append, md table, and csv row append choose their parser and writer directly."
+        },
+        {
+          "kind": "paragraph",
+          "text": "When a format-explicit JSON, YAML, or JSONL command writes a path whose extension advertises a different Etch-supported structured format, Etch validates the final bytes against the inferred format before committing. Unknown and extensionless paths are not guessed."
+        },
+        {
+          "kind": "paragraph",
+          "text": "JSON and YAML structured commands share selector and value semantics. JSON edits preserve surrounding representation where possible. YAML and frontmatter edits preserve comments, key order, anchors, aliases, indentation, and scalar spelling where the parser can preserve them."
+        },
+        {
+          "kind": "paragraph",
+          "text": "For Markdown paths, bare structured selectors target YAML frontmatter. If frontmatter is missing, set, append, and add can create it; delete and remove are no-ops when the final target is absent."
+        },
+        {
+          "kind": "paragraph",
+          "text": "JSONL and NDJSON append has no selector. The value is always strict JSON, missing logs are treated as empty, and non-empty logs must end at a record boundary."
+        }
+      ]
+    },
+    {
+      "id": "fields",
+      "title": "Inline Fields",
+      "group": "Data and Addressing",
+      "invocation": "etch help fields",
+      "summary": "Markdown fields: use frontmatter for note-global metadata; use inline fields for body-local metadata.",
+      "aliases": [
+        "fields"
+      ],
+      "blocks": [
+        {
+          "kind": "paragraph",
+          "text": "On Markdown paths, bare structured selectors mutate YAML frontmatter. Markdown address flags such as --body, --section, --item, and --task switch set and delete to Dataview-style inline fields in the Markdown body. Inline field values are strings; --json is not supported for Markdown inline fields."
+        },
+        {
+          "kind": "paragraph",
+          "text": "Frontmatter fits whole-note schema fields such as owner, source, status, and stable IDs. Inline fields fit metadata attached to a paragraph, list item, task, or local note context."
+        },
+        {
+          "kind": "paragraph",
+          "text": "Dataview inline fields are Markdown annotations shaped like [field:: value] or (field:: value). The bracket form is visible in reading view; the parenthesized form is hidden. Etch preserves the surrounding line or list item and rewrites only the addressed field annotation."
+        },
+        {
+          "kind": "paragraph",
+          "text": "Existing fields match first by exact source field name, then by Dataview-normalized field name if the normalized match is unique. Dataview implicit fields such as file.name, task status, and task text are reserved and not writable."
+        },
+        {
+          "kind": "paragraph",
+          "text": "For full Dataview metadata syntax and indexing behavior, see https://blacksmithgu.github.io/obsidian-dataview/."
+        },
+        {
+          "kind": "heading",
+          "heading": "Examples"
+        },
+        {
+          "kind": "pre",
+          "text": "  etch set note.md status Driving\n  etch set note.md last \"2026-05-02\" --body\n  etch set note.md done \"2026-05-01\" --task \"Send follow-up\""
+        }
+      ]
+    },
+    {
+      "id": "markdown-addressing",
+      "title": "Markdown Addressing",
+      "group": "Data and Addressing",
+      "invocation": "etch help addressing",
+      "summary": "Markdown addressing uses exact matching with syntax normalization and ambiguity errors.",
+      "aliases": [
+        "addressing",
+        "markdown"
+      ],
+      "blocks": [
+        {
+          "kind": "paragraph",
+          "text": "In command forms, <address> and <placement> stand for Markdown addressing flags. Inline field set/delete commands require an address. Task/list commands accept only the task/list subset."
+        },
+        {
+          "kind": "heading",
+          "heading": "Forms"
+        },
+        {
+          "kind": "pre",
+          "text": "  etch set <path.md> <field> <value> <address>\n  etch delete <path.md> <field> <address>\n  etch task close <path> <text> [<address>]\n  etch task open <path> <text> [<address>]\n  etch list add <path> <text> [--task] [<placement>]\n  etch task add <path> <text> [<placement>]"
+        },
+        {
+          "kind": "definition-table",
+          "heading": "Inline Field Address",
+          "terms": [
+            {
+              "term": "--body",
+              "description": "Address inline fields in the whole Markdown body."
+            },
+            {
+              "term": "--section <heading>",
+              "description": "Limit the address to one heading section."
+            },
+            {
+              "term": "--item <text>",
+              "description": "Address an inline field on one matching list item."
+            },
+            {
+              "term": "--task <text>",
+              "description": "Address an inline field on one matching task item."
+            },
+            {
+              "term": "--item-type <type>",
+              "description": "Filter --item or --task matches by task, plain, numbered, or bullet. Repeat to combine independent filters."
+            },
+            {
+              "term": "--head",
+              "description": "Place a created inline field at the start of the addressed scope."
+            },
+            {
+              "term": "--tail",
+              "description": "Place a created inline field at the end of the addressed scope."
+            },
+            {
+              "term": "--before <literal>",
+              "description": "Place or narrow before a matching literal inside the addressed scope."
+            },
+            {
+              "term": "--after <literal>",
+              "description": "Place or narrow after a matching literal inside the addressed scope."
+            },
+            {
+              "term": "--hidden",
+              "description": "Use hidden Dataview field syntax. Accepted by set only."
+            }
+          ]
+        },
+        {
+          "kind": "definition-table",
+          "heading": "Task/List Address",
+          "terms": [
+            {
+              "term": "--section <heading>",
+              "description": "Limit the task/list command to one heading section."
+            },
+            {
+              "term": "--before <item>",
+              "description": "For task close/open, narrow the search before a matching list item. For task/list add, place the new item before it."
+            },
+            {
+              "term": "--after <item>",
+              "description": "For task close/open, narrow the search after a matching list item. For task/list add, place the new item after it."
+            },
+            {
+              "term": "--task",
+              "description": "With list add, create a task item instead of a plain list item."
+            }
+          ]
+        },
+        {
+          "kind": "paragraph",
+          "text": "Section selectors accept either a title such as \"Status\" or an ATX heading such as \"## Status\".\nTitle-only selectors search all ATX heading levels; ATX selectors include the heading level."
+        },
+        {
+          "kind": "paragraph",
+          "text": "List-item selectors normalize away the list marker, task checkbox, surrounding whitespace,\nDataview inline field annotations, and trailing numeric reference-annotation links.\nMarkdown inline syntax is rendered to normalized item text, so \"**Buy milk**\" and\n\"[Buy milk](https://example.com)\" both match \"Buy milk\"."
+        },
+        {
+          "kind": "paragraph",
+          "text": "Item type filters are task, plain, numbered, and bullet. Repeated filters combine across\nindependent axes, such as task+numbered. Contradictory filters fail before planning."
+        },
+        {
+          "kind": "paragraph",
+          "text": "Task/list commands use --section to choose a heading body and --before/--after as list-item anchors. For task close/open, anchors narrow the search; for add commands, anchors choose the insertion point."
+        }
+      ]
+    },
+    {
+      "id": "files",
+      "title": "Files",
+      "group": "Command Families",
+      "invocation": "etch help files",
+      "summary": "File verbs create, replace, delete, move, and copy whole paths inside the transaction.",
+      "aliases": [
+        "files",
+        "file"
+      ],
+      "blocks": [
+        {
+          "kind": "heading",
+          "heading": "Commands"
+        },
+        {
+          "kind": "pre",
+          "text": "  etch create <path> [<content>]\n  etch replace <path> <content>\n  etch delete <path>\n  etch move <src> <dst>\n  etch copy <src> <dst>"
+        },
+        {
+          "kind": "paragraph",
+          "text": "create no-ops when an existing file already has the same content and fails when it has different content. Omitted create content uses {} for JSON paths and empty content for other paths."
+        },
+        {
+          "kind": "paragraph",
+          "text": "replace requires an existing regular file. delete is idempotent when the path is absent from the transaction base. move and copy fail if their destination exists in the transaction base."
+        }
+      ]
+    },
+    {
+      "id": "guards",
+      "title": "Guards",
+      "group": "Command Families",
+      "invocation": "etch help guards",
+      "summary": "Guards assert preconditions for a transaction without printing values or making content changes.",
+      "aliases": [
+        "guards",
+        "guard"
+      ],
+      "blocks": [
+        {
+          "kind": "heading",
+          "heading": "Commands"
+        },
+        {
+          "kind": "pre",
+          "text": "  etch exists <path>\n  etch missing <path>\n  etch contains <path> <literal>"
+        },
+        {
+          "kind": "paragraph",
+          "text": "For tracked paths, guards read the admitted input view at HEAD, not dirty working-tree bytes. With --untracked, admitted untracked paths use working-tree bytes."
+        },
+        {
+          "kind": "paragraph",
+          "text": "A failed guard exits 1 before mutation side effects. A satisfied guard contributes no content change and never creates a commit by itself. Guards are included in plans and dry-run output as checks."
+        },
+        {
+          "kind": "paragraph",
+          "text": "contains matches literal bytes. It is not a regex, does not normalize line endings, and does not perform case folding. Multi-line literals use heredocs."
+        }
+      ]
+    },
+    {
+      "id": "sections",
+      "title": "Sections",
+      "group": "Command Families",
+      "invocation": "etch help section",
+      "summary": "Markdown sections are heading-delimited body ranges.",
+      "aliases": [
+        "section"
+      ],
+      "blocks": [
+        {
+          "kind": "heading",
+          "heading": "Commands"
+        },
+        {
+          "kind": "pre",
+          "text": "  etch section replace note.md \"## Status\" \"done\"\n  etch section append note.md Status \"new block\"\n  etch section prepend note.md Status \"new block\""
+        },
+        {
+          "kind": "paragraph",
+          "text": "Section selectors accept either a title such as Status or an ATX heading such as ## Status.\nRepeated matching headings are ambiguous. Section payloads are Markdown block fragments:\nreplace preserves existing boundary blank lines, and append/prepend use one blank line\nbetween non-empty fragments."
+        }
+      ]
+    },
+    {
+      "id": "tasks",
+      "title": "Tasks and Lists",
+      "group": "Command Families",
+      "invocation": "etch help tasks",
+      "summary": "Markdown task/list commands operate on exact source-normalized item text.",
+      "aliases": [
+        "tasks"
+      ],
+      "blocks": [
+        {
+          "kind": "heading",
+          "heading": "Commands"
+        },
+        {
+          "kind": "pre",
+          "text": "  etch task close note.md \"Send follow-up\" --section Actions\n  etch task open note.md \"Send follow-up\" --section Actions\n  etch list add note.md \"Launch notes\" --section Actions\n  etch task add note.md \"Send follow-up\" --section Actions"
+        },
+        {
+          "kind": "paragraph",
+          "text": "task close changes [ ] to [x] and never creates missing tasks.\ntask open ensures an open task: it reopens [x]/[X], no-ops on [ ], and creates\nmissing tasks only when a destination address such as --section, --before, or\n--after is supplied. Custom checkbox statuses fail.\n--before and --after match list items, not arbitrary prose.\nlist add and task add create source from plain item text; do not include \"- \" or \"- [ ]\".\nWithout --section, --before, or --after, list insertion succeeds only when\nthere is a single obvious list target."
+        }
+      ]
+    },
+    {
+      "id": "tables-and-csv",
+      "title": "Tables and CSV",
+      "group": "Command Families",
+      "invocation": "etch help table",
+      "summary": "Tables are ordered rows and named columns of string cells.",
+      "aliases": [
+        "table",
+        "csv"
+      ],
+      "blocks": [
+        {
+          "kind": "heading",
+          "heading": "CSV"
+        },
+        {
+          "kind": "pre",
+          "text": "  etch table set data.csv all,status done\n  etch table row append data.csv '{\"id\":\"1\",\"status\":\"open\"}'\n  etch table column add data.csv owner --default Brandon"
+        },
+        {
+          "kind": "heading",
+          "heading": "Markdown"
+        },
+        {
+          "kind": "pre",
+          "text": "  etch table set notes.md doc @0 all,status done\n  etch table row append notes.md \"## Inventory\" '{\"sku\":\"A1\"}'"
+        },
+        {
+          "kind": "paragraph",
+          "text": "For Markdown paths, scope is doc or an exact heading selector, and the optional table ordinal is @0, @1, and so on. For CSV paths, scope and table ordinal are omitted because the file is one table."
+        },
+        {
+          "kind": "paragraph",
+          "text": "Ranges have the shape rows,columns. Rows and columns support all, zero-based ordinals, ordinal ranges, exact labels, and bracketed labels for spaces or selector punctuation. row-json is a strict JSON object keyed by column label."
+        }
+      ]
+    },
+    {
+      "id": "plans",
+      "title": "Plans",
+      "group": "Execution and Safety",
+      "invocation": "etch help plans",
+      "summary": "--plan emits canonical JSON describing operations, input/output hashes, planned tree, and commit message.",
+      "aliases": [
+        "plans",
+        "plan",
+        "dry-run"
+      ],
+      "blocks": [
+        {
+          "kind": "paragraph",
+          "text": "A plan is computed by the same parser and evaluators as execution, stopped before side effects. It is based on HEAD for tracked paths and includes enough hashes to detect stale inputs and behavior changes."
+        },
+        {
+          "kind": "paragraph",
+          "text": "--dry-run lowers the same plan to a mailbox patch intended for git am. Dry-run output is optimized for review; plan JSON is the canonical machine contract."
+        },
+        {
+          "kind": "paragraph",
+          "text": "The plan hash is a SHA-256 hash of canonical JSON bytes and can be used by host runtimes as an approval-cache key."
+        }
+      ]
+    },
+    {
+      "id": "commits",
+      "title": "Commits",
+      "group": "Execution and Safety",
+      "invocation": "etch help commits",
+      "summary": "Every successful mutating invocation creates one local git commit unless all mutating operations are no-ops.",
+      "aliases": [
+        "commits",
+        "commit",
+        "messages"
+      ],
+      "blocks": [
+        {
+          "kind": "paragraph",
+          "text": "Generated commit messages are built from normalized operation descriptors with bounded value previews. Full values live in file contents and are represented in plans by hashes."
+        },
+        {
+          "kind": "paragraph",
+          "text": "Single-op commits use subjects such as etch set note.md title \"Hello\" when the preview fits. Multi-op commits use a summary subject and a Changes body."
+        },
+        {
+          "kind": "paragraph",
+          "text": "--message replaces the generated message. --subject-prefix, --subject-suffix, --body-prefix, and --body-suffix modify generated messages and are mutually exclusive with --message."
+        },
+        {
+          "kind": "paragraph",
+          "text": "Idempotent no-op operations do not contribute to the commit. If every mutating operation is a no-op, etch exits 0 with nothing to do unless --allow-empty is supplied."
+        }
+      ]
+    },
+    {
+      "id": "security",
+      "title": "Security",
+      "group": "Execution and Safety",
+      "invocation": "etch help security",
+      "summary": "etch is designed as a narrow CWD-scoped, git-backed mutation capability.",
+      "aliases": [
+        "security",
+        "paths"
+      ],
+      "blocks": [
+        {
+          "kind": "paragraph",
+          "text": "etch accepts only relative paths under CWD, rejects .. and .git path segments, and refuses symlink escapes. There is no repo-root mode, script-local root, or etch-specific environment variable that changes the path root."
+        },
+        {
+          "kind": "paragraph",
+          "text": "etch does not perform network operations. The implementation invokes git only for local repository/object/ref/index work needed to plan, commit, preview, and materialize changes."
+        },
+        {
+          "kind": "paragraph",
+          "text": "The script syntax has no variables, command substitution, globbing, pipes, conditionals, or process execution. Composition happens outside etch."
+        }
+      ]
+    },
+    {
+      "id": "conflicts",
+      "title": "Conflicts",
+      "group": "Execution and Safety",
+      "invocation": "etch help conflicts",
+      "summary": "When materialization cannot merge local checkout changes after the commit lands, etch leaves recovery text on stderr.",
+      "aliases": [
+        "conflicts",
+        "checkout"
+      ],
+      "blocks": [
+        {
+          "kind": "paragraph",
+          "text": "The ref update is the durability boundary. If materialization fails, the commit exists and is not rolled back."
+        },
+        {
+          "kind": "paragraph",
+          "text": "Default materialization rebases touched index and working-tree states from old HEAD to new HEAD. Clean merges preserve staged and unstaged local changes; conflicts are written to the working tree when possible."
+        },
+        {
+          "kind": "paragraph",
+          "text": "Resolve conflict markers, then commit or discard the working-tree resolution. For binary or unmergeable local changes, etch fails cleanly without overwriting the current working-tree file."
+        },
+        {
+          "kind": "paragraph",
+          "text": "--no-checkout skips materialization entirely and reports that the working tree and index were not updated for touched paths."
+        }
+      ]
+    },
+    {
+      "id": "command-index",
+      "title": "Command Index",
+      "group": "Appendix",
+      "invocation": "etch help --all",
+      "summary": "etch mutates structured files and commits each successful mutating invocation.",
+      "blocks": [
+        {
+          "kind": "command-table",
+          "heading": "Core structured edits",
+          "rows": [
+            {
+              "signature": "set <path> <selector> [--json] <value>|<selector=value>...",
+              "class": "idempotent",
+              "description": "Set JSON/YAML/frontmatter or Markdown inline fields.",
+              "topic_id": "values"
+            },
+            {
+              "signature": "delete <path> [<selector>]",
+              "class": "idempotent",
+              "description": "Delete a file or selected JSON/YAML/frontmatter/inline-field value.",
+              "topic_id": "selectors"
+            },
+            {
+              "signature": "append <path> <selector> [--json] <value>|<path.jsonl> <json-value>",
+              "class": "non-idempotent",
+              "description": "Append a value to an array, or a JSONL record to .jsonl/.ndjson.",
+              "topic_id": "values"
+            },
+            {
+              "signature": "add <path> <selector> [--json] <value>",
+              "class": "idempotent",
+              "description": "Ensure an array contains a value.",
+              "topic_id": "values"
+            },
+            {
+              "signature": "remove <path> <selector> [--json] <value>",
+              "class": "idempotent",
+              "description": "Ensure an array does not contain a value.",
+              "topic_id": "values"
+            }
+          ]
+        },
+        {
+          "kind": "command-table",
+          "heading": "Markdown sections and lists",
+          "rows": [
+            {
+              "signature": "section replace <path> <heading> <content>",
+              "class": "idempotent",
+              "description": "Replace the body under one Markdown heading.",
+              "topic_id": "sections"
+            },
+            {
+              "signature": "section append <path> <heading> <content>",
+              "class": "non-idempotent",
+              "description": "Append a block fragment under one Markdown heading.",
+              "topic_id": "sections"
+            },
+            {
+              "signature": "section prepend <path> <heading> <content>",
+              "class": "non-idempotent",
+              "description": "Prepend a block fragment under one Markdown heading.",
+              "topic_id": "sections"
+            },
+            {
+              "signature": "task close <path> <text> [--section <heading>] [--before <item>] [--after <item>]",
+              "class": "idempotent",
+              "description": "Ensure one Markdown task is closed.",
+              "topic_id": "tasks"
+            },
+            {
+              "signature": "task open <path> <text> [--section <heading>] [--before <item>] [--after <item>]",
+              "class": "idempotent",
+              "description": "Ensure one Markdown task is open, creating it when a destination is addressed.",
+              "topic_id": "tasks"
+            },
+            {
+              "signature": "task add <path> <text> [--section <heading>] [--before <item>] [--after <item>]",
+              "class": "non-idempotent",
+              "description": "Add one open Markdown task.",
+              "topic_id": "tasks"
+            },
+            {
+              "signature": "list add <path> <text> [--section <heading>] [--task] [--before <item>] [--after <item>]",
+              "class": "non-idempotent",
+              "description": "Add one Markdown list item.",
+              "topic_id": "tasks"
+            }
+          ]
+        },
+        {
+          "kind": "command-table",
+          "heading": "Tables",
+          "rows": [
+            {
+              "signature": "table set <path> [<scope> [<table>]] <range> <value>",
+              "class": "idempotent",
+              "description": "Set CSV or Markdown table cells.",
+              "topic_id": "tables-and-csv"
+            },
+            {
+              "signature": "table row append <path> [<scope> [<table>]] <row-json>",
+              "class": "non-idempotent",
+              "description": "Append a CSV or Markdown table row.",
+              "topic_id": "tables-and-csv"
+            },
+            {
+              "signature": "table row insert <path> [<scope> [<table>]] (--before <row>|--after <row>) <row-json>",
+              "class": "non-idempotent",
+              "description": "Insert a CSV or Markdown table row.",
+              "topic_id": "tables-and-csv"
+            },
+            {
+              "signature": "table row delete <path> [<scope> [<table>]] <row>",
+              "class": "idempotent",
+              "description": "Delete table rows.",
+              "topic_id": "tables-and-csv"
+            },
+            {
+              "signature": "table column add <path> [<scope> [<table>]] <column> [--after <column>] [--default <value>]",
+              "class": "idempotent",
+              "description": "Ensure a table column exists.",
+              "topic_id": "tables-and-csv"
+            },
+            {
+              "signature": "table column rename <path> [<scope> [<table>]] <old-column> <new-column>",
+              "class": "idempotent",
+              "description": "Rename a table column.",
+              "topic_id": "tables-and-csv"
+            },
+            {
+              "signature": "table column delete <path> [<scope> [<table>]] <column>",
+              "class": "idempotent",
+              "description": "Ensure a table column is absent.",
+              "topic_id": "tables-and-csv"
+            }
+          ]
+        },
+        {
+          "kind": "command-table",
+          "heading": "Files",
+          "rows": [
+            {
+              "signature": "create <path> [<content>]",
+              "class": "idempotent",
+              "description": "Create a new file; omitted content uses an extension-aware default.",
+              "topic_id": "files"
+            },
+            {
+              "signature": "replace <path> <content>",
+              "class": "idempotent",
+              "description": "Replace an existing file's entire content.",
+              "topic_id": "files"
+            },
+            {
+              "signature": "move <src> <dst>",
+              "class": "idempotent",
+              "description": "Move a file path.",
+              "topic_id": "files"
+            },
+            {
+              "signature": "copy <src> <dst>",
+              "class": "idempotent",
+              "description": "Copy a file path.",
+              "topic_id": "files"
+            }
+          ]
+        },
+        {
+          "kind": "command-table",
+          "heading": "Guards",
+          "rows": [
+            {
+              "signature": "exists <path>",
+              "class": "guard",
+              "description": "Guard that a path exists in the admitted input view.",
+              "topic_id": "guards"
+            },
+            {
+              "signature": "missing <path>",
+              "class": "guard",
+              "description": "Guard that a path is missing in the admitted input view.",
+              "topic_id": "guards"
+            },
+            {
+              "signature": "contains <path> <literal>",
+              "class": "guard",
+              "description": "Guard that admitted file bytes contain a literal.",
+              "topic_id": "guards"
+            }
+          ]
+        },
+        {
+          "kind": "command-table",
+          "heading": "Agent setup",
+          "rows": [
+            {
+              "signature": "prompt [--context|--bootstrap]",
+              "class": "introspection",
+              "description": "Print agent setup or durable context prompts.",
+              "topic_id": "prompts"
+            }
+          ]
+        },
+        {
+          "kind": "command-table",
+          "heading": "Advanced structured formats",
+          "rows": [
+            {
+              "signature": "json set <path> <selector> [--json] <value>|<selector=value>...",
+              "class": "idempotent",
+              "description": "Set JSON values.",
+              "topic_id": "formats"
+            },
+            {
+              "signature": "json delete <path> <selector>",
+              "class": "idempotent",
+              "description": "Delete a JSON value.",
+              "topic_id": "formats"
+            },
+            {
+              "signature": "json append <path> <selector> [--json] <value>",
+              "class": "non-idempotent",
+              "description": "Append to a JSON array.",
+              "topic_id": "formats"
+            },
+            {
+              "signature": "json add <path> <selector> [--json] <value>",
+              "class": "idempotent",
+              "description": "Ensure a JSON array contains a value.",
+              "topic_id": "formats"
+            },
+            {
+              "signature": "json remove <path> <selector> [--json] <value>",
+              "class": "idempotent",
+              "description": "Remove matching values from a JSON array.",
+              "topic_id": "formats"
+            },
+            {
+              "signature": "yaml set <path> <selector> [--json] <value>|<selector=value>...",
+              "class": "idempotent",
+              "description": "Set YAML values.",
+              "topic_id": "formats"
+            },
+            {
+              "signature": "yaml delete <path> <selector>",
+              "class": "idempotent",
+              "description": "Delete a YAML value.",
+              "topic_id": "formats"
+            },
+            {
+              "signature": "yaml append <path> <selector> [--json] <value>",
+              "class": "non-idempotent",
+              "description": "Append to a YAML sequence.",
+              "topic_id": "formats"
+            },
+            {
+              "signature": "yaml add <path> <selector> [--json] <value>",
+              "class": "idempotent",
+              "description": "Ensure a YAML sequence contains a value.",
+              "topic_id": "formats"
+            },
+            {
+              "signature": "yaml remove <path> <selector> [--json] <value>",
+              "class": "idempotent",
+              "description": "Remove matching values from a YAML sequence.",
+              "topic_id": "formats"
+            },
+            {
+              "signature": "frontmatter set <path> <selector> [--json] <value>|<selector=value>...",
+              "class": "idempotent",
+              "description": "Set Markdown YAML frontmatter.",
+              "topic_id": "formats"
+            },
+            {
+              "signature": "frontmatter delete <path> <selector>",
+              "class": "idempotent",
+              "description": "Delete Markdown YAML frontmatter.",
+              "topic_id": "formats"
+            },
+            {
+              "signature": "frontmatter append <path> <selector> [--json] <value>",
+              "class": "non-idempotent",
+              "description": "Append to a frontmatter sequence.",
+              "topic_id": "formats"
+            },
+            {
+              "signature": "frontmatter add <path> <selector> [--json] <value>",
+              "class": "idempotent",
+              "description": "Ensure a frontmatter sequence contains a value.",
+              "topic_id": "formats"
+            },
+            {
+              "signature": "frontmatter remove <path> <selector> [--json] <value>",
+              "class": "idempotent",
+              "description": "Remove matching values from a frontmatter sequence.",
+              "topic_id": "formats"
+            }
+          ]
+        },
+        {
+          "kind": "command-table",
+          "heading": "Advanced logs and Markdown",
+          "rows": [
+            {
+              "signature": "jsonl append <path> <json-value>",
+              "class": "non-idempotent",
+              "description": "Append one compact JSON value as a JSONL/NDJSON record.",
+              "topic_id": "formats"
+            },
+            {
+              "signature": "md section replace <path> <heading> <content>",
+              "class": "idempotent",
+              "description": "Replace the body under one Markdown heading.",
+              "topic_id": "sections"
+            },
+            {
+              "signature": "md section append <path> <heading> <content>",
+              "class": "non-idempotent",
+              "description": "Append a block fragment under one Markdown heading.",
+              "topic_id": "sections"
+            },
+            {
+              "signature": "md section prepend <path> <heading> <content>",
+              "class": "non-idempotent",
+              "description": "Prepend a block fragment under one Markdown heading.",
+              "topic_id": "sections"
+            }
+          ]
+        },
+        {
+          "kind": "command-table",
+          "heading": "Advanced table formats",
+          "rows": [
+            {
+              "signature": "csv set <path> <range> <value>",
+              "class": "idempotent",
+              "description": "Set CSV cells.",
+              "topic_id": "tables-and-csv"
+            },
+            {
+              "signature": "csv row append <path> <row-json>",
+              "class": "non-idempotent",
+              "description": "Append a CSV row.",
+              "topic_id": "tables-and-csv"
+            },
+            {
+              "signature": "csv row insert <path> (--before <row>|--after <row>) <row-json>",
+              "class": "non-idempotent",
+              "description": "Insert a CSV row.",
+              "topic_id": "tables-and-csv"
+            },
+            {
+              "signature": "csv row delete <path> <row>",
+              "class": "idempotent",
+              "description": "Delete CSV rows.",
+              "topic_id": "tables-and-csv"
+            },
+            {
+              "signature": "csv column add <path> <column> [--after <column>] [--default <value>]",
+              "class": "idempotent",
+              "description": "Ensure a CSV column exists.",
+              "topic_id": "tables-and-csv"
+            },
+            {
+              "signature": "csv column rename <path> <old-column> <new-column>",
+              "class": "idempotent",
+              "description": "Rename a CSV column.",
+              "topic_id": "tables-and-csv"
+            },
+            {
+              "signature": "csv column delete <path> <column>",
+              "class": "idempotent",
+              "description": "Ensure a CSV column is absent.",
+              "topic_id": "tables-and-csv"
+            },
+            {
+              "signature": "md table set <path> <scope> [<table>] <range> <value>",
+              "class": "idempotent",
+              "description": "Set Markdown table cells.",
+              "topic_id": "tables-and-csv"
+            },
+            {
+              "signature": "md table row append <path> <scope> [<table>] <row-json>",
+              "class": "non-idempotent",
+              "description": "Append a Markdown table row.",
+              "topic_id": "tables-and-csv"
+            },
+            {
+              "signature": "md table row insert <path> <scope> [<table>] (--before <row>|--after <row>) <row-json>",
+              "class": "non-idempotent",
+              "description": "Insert a Markdown table row.",
+              "topic_id": "tables-and-csv"
+            },
+            {
+              "signature": "md table row delete <path> <scope> [<table>] <row>",
+              "class": "idempotent",
+              "description": "Delete Markdown table rows.",
+              "topic_id": "tables-and-csv"
+            },
+            {
+              "signature": "md table column add <path> <scope> [<table>] <column> [--after <column>] [--default <value>]",
+              "class": "idempotent",
+              "description": "Ensure a Markdown table column exists.",
+              "topic_id": "tables-and-csv"
+            },
+            {
+              "signature": "md table column rename <path> <scope> [<table>] <old-column> <new-column>",
+              "class": "idempotent",
+              "description": "Rename a Markdown table column.",
+              "topic_id": "tables-and-csv"
+            },
+            {
+              "signature": "md table column delete <path> <scope> [<table>] <column>",
+              "class": "idempotent",
+              "description": "Ensure a Markdown table column is absent.",
+              "topic_id": "tables-and-csv"
+            }
+          ]
+        },
+        {
+          "kind": "paragraph",
+          "text": "Format-explicit command prefixes select the parser and writer. If the path extension advertises a different Etch-supported structured format, Etch validates the final bytes against the inferred format before committing."
+        },
+        {
+          "kind": "topic-links",
+          "text": "model, invocation, prompts, scripts, selectors, values, formats, addressing, fields, files, guards, section, tasks, table, plans, commits, security, conflicts",
+          "links": [
+            {
+              "title": "Model",
+              "id": "model"
+            },
+            {
+              "title": "Invocation",
+              "id": "invocation"
+            },
+            {
+              "title": "Prompts",
+              "id": "prompts"
+            },
+            {
+              "title": "Scripts",
+              "id": "scripts"
+            },
+            {
+              "title": "Selectors",
+              "id": "selectors"
+            },
+            {
+              "title": "Values",
+              "id": "values"
+            },
+            {
+              "title": "Formats",
+              "id": "formats"
+            },
+            {
+              "title": "Markdown Addressing",
+              "id": "markdown-addressing"
+            },
+            {
+              "title": "Inline Fields",
+              "id": "fields"
+            },
+            {
+              "title": "Files",
+              "id": "files"
+            },
+            {
+              "title": "Guards",
+              "id": "guards"
+            },
+            {
+              "title": "Sections",
+              "id": "sections"
+            },
+            {
+              "title": "Tasks",
+              "id": "tasks"
+            },
+            {
+              "title": "Tables and CSV",
+              "id": "tables-and-csv"
+            },
+            {
+              "title": "Plans",
+              "id": "plans"
+            },
+            {
+              "title": "Commits",
+              "id": "commits"
+            },
+            {
+              "title": "Security",
+              "id": "security"
+            },
+            {
+              "title": "Conflicts",
+              "id": "conflicts"
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}

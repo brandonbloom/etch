@@ -13,17 +13,22 @@ run = "mkdir -p ./bin && go build -o ./bin/ ./cmd/..."
 description = "Run all Go tests"
 run = "go test ./..."
 
-[tasks."site:verify"]
-description = "Verify cheatsheet fixtures and generate site reference data"
-depends = ["build"]
-run = "go run site/gen-commands.go"
+[tasks."help:snapshots"]
+description = "Update committed help output snapshots"
+run = "go test ./internal/etch -update-help-snapshots"
 
 [tasks.site]
 description = "Build the site into site/public"
-depends = ["site:verify"]
-run = "go tool hugo --source site --cleanDestinationDir"
+depends = ["build"]
+run = [
+  "go run site/gen-commands.go",
+  "go tool hugo --source site --cleanDestinationDir --minify",
+]
 
 [tasks."site:serve"]
 description = "Start the site dev server"
-depends = ["site:verify"]
-run = "go tool hugo server --source site --cleanDestinationDir"
+depends = ["build"]
+run = [
+  "go run site/gen-commands.go",
+  "go tool hugo server --source site --cleanDestinationDir",
+]

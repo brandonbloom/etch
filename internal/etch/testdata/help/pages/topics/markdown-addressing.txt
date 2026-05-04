@@ -1,0 +1,43 @@
+Markdown addressing uses exact matching with syntax normalization and ambiguity errors.
+
+In command forms, <address> and <placement> stand for Markdown addressing flags. Inline field set/delete commands require an address. Task/list commands accept only the task/list subset.
+
+Forms:
+  etch set <path.md> <field> <value> <address>
+  etch delete <path.md> <field> <address>
+  etch task close <path> <text> [<address>]
+  etch task open <path> <text> [<address>]
+  etch list add <path> <text> [--task] [<placement>]
+  etch task add <path> <text> [<placement>]
+
+Inline Field Address:
+  --body                   Address inline fields in the whole Markdown body.
+  --section <heading>      Limit the address to one heading section.
+  --item <text>            Address an inline field on one matching list item.
+  --task <text>            Address an inline field on one matching task item.
+  --item-type <type>       Filter --item or --task matches by task, plain, numbered, or bullet. Repeat to combine independent filters.
+  --head                   Place a created inline field at the start of the addressed scope.
+  --tail                   Place a created inline field at the end of the addressed scope.
+  --before <literal>       Place or narrow before a matching literal inside the addressed scope.
+  --after <literal>        Place or narrow after a matching literal inside the addressed scope.
+  --hidden                 Use hidden Dataview field syntax. Accepted by set only.
+
+Task/List Address:
+  --section <heading>      Limit the task/list command to one heading section.
+  --before <item>          For task close/open, narrow the search before a matching list item. For task/list add, place the new item before it.
+  --after <item>           For task close/open, narrow the search after a matching list item. For task/list add, place the new item after it.
+  --task                   With list add, create a task item instead of a plain list item.
+
+Section selectors accept either a title such as "Status" or an ATX heading such as "## Status".
+Title-only selectors search all ATX heading levels; ATX selectors include the heading level.
+
+List-item selectors normalize away the list marker, task checkbox, surrounding whitespace,
+Dataview inline field annotations, and trailing numeric reference-annotation links.
+Markdown inline syntax is rendered to normalized item text, so "**Buy milk**" and
+"[Buy milk](https://example.com)" both match "Buy milk".
+
+Item type filters are task, plain, numbered, and bullet. Repeated filters combine across
+independent axes, such as task+numbered. Contradictory filters fail before planning.
+
+Task/list commands use --section to choose a heading body and --before/--after as list-item anchors. For task close/open, anchors narrow the search; for add commands, anchors choose the insertion point.
+

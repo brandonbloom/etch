@@ -1,11 +1,11 @@
 {{ define "main" }}
 {{ $reference := hugo.Data.reference }}
 {{ if not $reference.topics }}
-  {{ errorf "site/data/reference.json is missing or empty; run mise run site:verify before building the site" }}
+  {{ errorf "site/data/reference.json is missing or empty; run mise run site before building the site" }}
 {{ end }}
 {{ $commands := hugo.Data.commands }}
 {{ if not $commands }}
-  {{ errorf "site/data/commands.json is missing or empty; run mise run site:verify before building the site" }}
+  {{ errorf "site/data/commands.json is missing or empty; run mise run site before building the site" }}
 {{ end }}
 
 <article class="content reference-page">

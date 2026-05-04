@@ -1,0 +1,8 @@
+Mutating invocations plan from HEAD and commit as one transaction.
+
+For tracked paths, etch reads base-tree bytes from HEAD, not from the live index or working tree. Dirty checkout edits are treated as concurrent local state and reconciled after the commit lands.
+
+All operations in one invocation are planned together. If any operation fails, no commit is created. If every mutating operation is an idempotent no-op, etch exits 0 without creating a commit unless --allow-empty is supplied.
+
+After a successful commit, etch materializes touched paths into the index and working tree unless --no-checkout is used.
+

@@ -1,11 +1,11 @@
 {{ define "main" }}
 {{ $prompts := hugo.Data.prompts }}
 {{ if or (not $prompts.bootstrap) (not $prompts.context) }}
-  {{ errorf "site/data/prompts.json is missing or empty; run mise run site:verify before building the site" }}
+  {{ errorf "site/data/prompts.json is missing or empty; run mise run site before building the site" }}
 {{ end }}
 {{ $referencePage := .Site.GetPage "/reference" }}
 {{ if not $referencePage }}
-  {{ errorf "reference page is missing; run mise run site:verify before building the site" }}
+  {{ errorf "reference page is missing; run mise run site before building the site" }}
 {{ end }}
 
 <article class="content">

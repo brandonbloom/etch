@@ -123,7 +123,7 @@ func writeHelpBlock(w io.Writer, block HelpBlock) {
 					fmt.Fprintf(w, "  %-31s %-16s %s\n", form, row.Class, row.Description)
 					continue
 				}
-				fmt.Fprintf(w, "  %-31s %-16s\n", form, "")
+				fmt.Fprintf(w, "  %s\n", form)
 			}
 		}
 		fmt.Fprintln(w)

@@ -1,0 +1,17 @@
+Markdown task/list commands operate on exact source-normalized item text.
+
+Commands:
+  etch task close note.md "Send follow-up" --section Actions
+  etch task open note.md "Send follow-up" --section Actions
+  etch list add note.md "Launch notes" --section Actions
+  etch task add note.md "Send follow-up" --section Actions
+
+task close changes [ ] to [x] and never creates missing tasks.
+task open ensures an open task: it reopens [x]/[X], no-ops on [ ], and creates
+missing tasks only when a destination address such as --section, --before, or
+--after is supplied. Custom checkbox statuses fail.
+--before and --after match list items, not arbitrary prose.
+list add and task add create source from plain item text; do not include "- " or "- [ ]".
+Without --section, --before, or --after, list insertion succeeds only when
+there is a single obvious list target.
+

@@ -1,0 +1,12 @@
+Selectors are singular JSONPath-style paths.
+
+Accepted:
+  $.agents.assistant.last_run
+  agents.assistant.last_run
+  $.items[0].title
+  $["key.with.dots"]
+
+Rejected: wildcards, recursive descent, slices, filters, unions, functions, negative indexes.
+
+set may create missing object containers and final object members. append and add may create a missing final array under object-container rules. Syntax that can produce multiple matches is rejected before evaluation.
+

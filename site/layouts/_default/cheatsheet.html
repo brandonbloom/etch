@@ -1,7 +1,7 @@
 {{ define "main" }}
 {{ $commands := hugo.Data.commands }}
 {{ if not $commands }}
-  {{ errorf "site/data/commands.json is missing or empty; run mise run site:verify before building the site" }}
+  {{ errorf "site/data/commands.json is missing or empty; run mise run site before building the site" }}
 {{ end }}
 {{ $catDescs := dict
   "Workflow" "Global flags appear before the command path and shape planning, preview, checkout, source admission, and commit messages."

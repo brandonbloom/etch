@@ -41,4 +41,6 @@
 
 - [ ] Brandon reviews the Reference examples and behavior descriptions before
   the docs changes are finalized.
+- [ ] Brandon reviews the committed help page snapshots before a broader
+  release.
 - [ ] Verify generated site/reference output after docs implementation.

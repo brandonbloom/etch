@@ -1,0 +1,13 @@
+Guards assert preconditions for a transaction without printing values or making content changes.
+
+Commands:
+  etch exists <path>
+  etch missing <path>
+  etch contains <path> <literal>
+
+For tracked paths, guards read the admitted input view at HEAD, not dirty working-tree bytes. With --untracked, admitted untracked paths use working-tree bytes.
+
+A failed guard exits 1 before mutation side effects. A satisfied guard contributes no content change and never creates a commit by itself. Guards are included in plans and dry-run output as checks.
+
+contains matches literal bytes. It is not a regex, does not normalize line endings, and does not perform case folding. Multi-line literals use heredocs.
+

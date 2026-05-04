@@ -1,0 +1,8 @@
+--plan emits canonical JSON describing operations, input/output hashes, planned tree, and commit message.
+
+A plan is computed by the same parser and evaluators as execution, stopped before side effects. It is based on HEAD for tracked paths and includes enough hashes to detect stale inputs and behavior changes.
+
+--dry-run lowers the same plan to a mailbox patch intended for git am. Dry-run output is optimized for review; plan JSON is the canonical machine contract.
+
+The plan hash is a SHA-256 hash of canonical JSON bytes and can be used by host runtimes as an approval-cache key.
+

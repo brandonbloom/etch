@@ -1,0 +1,83 @@
+etch mutates structured files and commits each successful mutating invocation.
+
+Core structured edits:
+  set <path> <selector> [--json] <value>|<selector=value>... idempotent       Set JSON/YAML/frontmatter or Markdown inline fields.
+  delete <path> [<selector>]      idempotent       Delete a file or selected JSON/YAML/frontmatter/inline-field value.
+  append <path> <selector> [--json] <value>|<path.jsonl> <json-value> non-idempotent   Append a value to an array, or a JSONL record to .jsonl/.ndjson.
+  add <path> <selector> [--json] <value> idempotent       Ensure an array contains a value.
+  remove <path> <selector> [--json] <value> idempotent       Ensure an array does not contain a value.
+
+Markdown sections and lists:
+  section replace <path> <heading> <content> idempotent       Replace the body under one Markdown heading.
+  section append <path> <heading> <content> non-idempotent   Append a block fragment under one Markdown heading.
+  section prepend <path> <heading> <content> non-idempotent   Prepend a block fragment under one Markdown heading.
+  task close <path> <text> [--section <heading>] [--before <item>] [--after <item>] idempotent       Ensure one Markdown task is closed.
+  task open <path> <text> [--section <heading>] [--before <item>] [--after <item>] idempotent       Ensure one Markdown task is open, creating it when a destination is addressed.
+  task add <path> <text> [--section <heading>] [--before <item>] [--after <item>] non-idempotent   Add one open Markdown task.
+  list add <path> <text> [--section <heading>] [--task] [--before <item>] [--after <item>] non-idempotent   Add one Markdown list item.
+
+Tables:
+  table set <path> [<scope> [<table>]] <range> <value> idempotent       Set CSV or Markdown table cells.
+  table row append <path> [<scope> [<table>]] <row-json> non-idempotent   Append a CSV or Markdown table row.
+  table row insert <path> [<scope> [<table>]] (--before <row>|--after <row>) <row-json> non-idempotent   Insert a CSV or Markdown table row.
+  table row delete <path> [<scope> [<table>]] <row> idempotent       Delete table rows.
+  table column add <path> [<scope> [<table>]] <column> [--after <column>] [--default <value>] idempotent       Ensure a table column exists.
+  table column rename <path> [<scope> [<table>]] <old-column> <new-column> idempotent       Rename a table column.
+  table column delete <path> [<scope> [<table>]] <column> idempotent       Ensure a table column is absent.
+
+Files:
+  create <path> [<content>]       idempotent       Create a new file; omitted content uses an extension-aware default.
+  replace <path> <content>        idempotent       Replace an existing file's entire content.
+  move <src> <dst>                idempotent       Move a file path.
+  copy <src> <dst>                idempotent       Copy a file path.
+
+Guards:
+  exists <path>                   guard            Guard that a path exists in the admitted input view.
+  missing <path>                  guard            Guard that a path is missing in the admitted input view.
+  contains <path> <literal>       guard            Guard that admitted file bytes contain a literal.
+
+Agent setup:
+  prompt [--context|--bootstrap]  introspection    Print agent setup or durable context prompts.
+
+Advanced structured formats:
+  json set <path> <selector> [--json] <value>|<selector=value>... idempotent       Set JSON values.
+  json delete <path> <selector>   idempotent       Delete a JSON value.
+  json append <path> <selector> [--json] <value> non-idempotent   Append to a JSON array.
+  json add <path> <selector> [--json] <value> idempotent       Ensure a JSON array contains a value.
+  json remove <path> <selector> [--json] <value> idempotent       Remove matching values from a JSON array.
+  yaml set <path> <selector> [--json] <value>|<selector=value>... idempotent       Set YAML values.
+  yaml delete <path> <selector>   idempotent       Delete a YAML value.
+  yaml append <path> <selector> [--json] <value> non-idempotent   Append to a YAML sequence.
+  yaml add <path> <selector> [--json] <value> idempotent       Ensure a YAML sequence contains a value.
+  yaml remove <path> <selector> [--json] <value> idempotent       Remove matching values from a YAML sequence.
+  frontmatter set <path> <selector> [--json] <value>|<selector=value>... idempotent       Set Markdown YAML frontmatter.
+  frontmatter delete <path> <selector> idempotent       Delete Markdown YAML frontmatter.
+  frontmatter append <path> <selector> [--json] <value> non-idempotent   Append to a frontmatter sequence.
+  frontmatter add <path> <selector> [--json] <value> idempotent       Ensure a frontmatter sequence contains a value.
+  frontmatter remove <path> <selector> [--json] <value> idempotent       Remove matching values from a frontmatter sequence.
+
+Advanced logs and Markdown:
+  jsonl append <path> <json-value> non-idempotent   Append one compact JSON value as a JSONL/NDJSON record.
+  md section replace <path> <heading> <content> idempotent       Replace the body under one Markdown heading.
+  md section append <path> <heading> <content> non-idempotent   Append a block fragment under one Markdown heading.
+  md section prepend <path> <heading> <content> non-idempotent   Prepend a block fragment under one Markdown heading.
+
+Advanced table formats:
+  csv set <path> <range> <value>  idempotent       Set CSV cells.
+  csv row append <path> <row-json> non-idempotent   Append a CSV row.
+  csv row insert <path> (--before <row>|--after <row>) <row-json> non-idempotent   Insert a CSV row.
+  csv row delete <path> <row>     idempotent       Delete CSV rows.
+  csv column add <path> <column> [--after <column>] [--default <value>] idempotent       Ensure a CSV column exists.
+  csv column rename <path> <old-column> <new-column> idempotent       Rename a CSV column.
+  csv column delete <path> <column> idempotent       Ensure a CSV column is absent.
+  md table set <path> <scope> [<table>] <range> <value> idempotent       Set Markdown table cells.
+  md table row append <path> <scope> [<table>] <row-json> non-idempotent   Append a Markdown table row.
+  md table row insert <path> <scope> [<table>] (--before <row>|--after <row>) <row-json> non-idempotent   Insert a Markdown table row.
+  md table row delete <path> <scope> [<table>] <row> idempotent       Delete Markdown table rows.
+  md table column add <path> <scope> [<table>] <column> [--after <column>] [--default <value>] idempotent       Ensure a Markdown table column exists.
+  md table column rename <path> <scope> [<table>] <old-column> <new-column> idempotent       Rename a Markdown table column.
+  md table column delete <path> <scope> [<table>] <column> idempotent       Ensure a Markdown table column is absent.
+
+Format-explicit command prefixes select the parser and writer. If the path extension advertises a different Etch-supported structured format, Etch validates the final bytes against the inferred format before committing.
+
+Topics: model, invocation, prompts, scripts, selectors, values, formats, addressing, fields, files, guards, section, tasks, table, plans, commits, security, conflicts

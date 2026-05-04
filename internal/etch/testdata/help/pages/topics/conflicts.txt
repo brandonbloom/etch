@@ -1,0 +1,10 @@
+When materialization cannot merge local checkout changes after the commit lands, etch leaves recovery text on stderr.
+
+The ref update is the durability boundary. If materialization fails, the commit exists and is not rolled back.
+
+Default materialization rebases touched index and working-tree states from old HEAD to new HEAD. Clean merges preserve staged and unstaged local changes; conflicts are written to the working tree when possible.
+
+Resolve conflict markers, then commit or discard the working-tree resolution. For binary or unmergeable local changes, etch fails cleanly without overwriting the current working-tree file.
+
+--no-checkout skips materialization entirely and reports that the working tree and index were not updated for touched paths.
+

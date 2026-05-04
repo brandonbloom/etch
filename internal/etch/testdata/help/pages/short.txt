@@ -1,0 +1,21 @@
+usage: etch [flags] <command> [args...]
+       etch run [script]
+
+Global flags must appear before the command path.
+
+Global flags:
+  --plan                 emit canonical JSON plan
+  -n, --dry-run          emit git-am-compatible patch preview
+  --no-checkout          commit without materializing touched paths
+  --untracked            admit untracked source paths under CWD
+  --message <m>          override generated commit message
+  --subject-prefix <s>   prepend literal text to generated commit subject
+  --subject-suffix <s>   append literal text to generated commit subject
+  --body-prefix <s>      prepend a block to generated commit body
+  --body-suffix <s>      append a block to generated commit body
+  --retries <n>          retry CAS conflicts, default 3
+  --allow-empty          permit empty commit for mutating invocations
+  --version              print version and exit
+
+Use "etch help" for common commands, "etch help scripts" for batch scripts,
+"etch help --all" for advanced commands, or "etch prompt" for agent setup.

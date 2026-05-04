@@ -1,0 +1,11 @@
+etch prompt prints agent-facing Markdown. By default it prints a one-shot bootstrap prompt; --context prints durable instructions for future agent context.
+
+Commands:
+  etch prompt
+  etch prompt --bootstrap
+  etch prompt --context
+
+etch prompt has no side effects. The default bootstrap prompt is meant to start an agent, such as codex "$(etch prompt)" or claude "$(etch prompt)", so the agent can install durable etch guidance into this repository's agent instructions.
+
+etch prompt --context prints the durable guidance directly. Add that text to AGENTS.md, CLAUDE.md, or another project instruction file when you want future agents to know when and how to use etch.
+
