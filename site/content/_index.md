@@ -42,4 +42,4 @@ Everyone keeps rolling forward through git history.
 GOEXPERIMENT=jsonv2 go install github.com/brandonbloom/etch/cmd/etch@latest
 ```
 
-Requires Go 1.26.2+ with `GOEXPERIMENT=jsonv2`, plus Git. Then see the [quickstart]({{< ref "/quickstart" >}}) to set up etch in your project.
+Requires Go 1.26.2+ with `GOEXPERIMENT=jsonv2`, plus Git. etch is released under the MIT License. Then see the [quickstart]({{< ref "/quickstart" >}}) to set up etch in your project.
