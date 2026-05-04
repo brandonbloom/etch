@@ -31,8 +31,8 @@
   Quickstart.
 - [x] Add optional manual Quickstart verification/fallback after agent setup.
 - [x] Move fixture-backed examples into the Reference topics.
-- [ ] Decide whether the Cheatsheet page should be deleted or rebuilt as a
-  compact quick card.
+- [x] Delete the obsolete quick-reference page now that Reference carries
+  examples.
 - [ ] Name the MIT license on install-facing pages and where the site calls
   Etch open-source software.
 - [ ] Decide whether to add a cookbook/examples page for 0.1.0 or defer it.

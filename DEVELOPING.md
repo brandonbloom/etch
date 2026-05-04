@@ -8,7 +8,7 @@ agents.
 When changing command syntax, command behavior, help text, or command metadata,
 update the published-reference sources in the same change. Check the README,
 `spec.md`, committed help snapshots under `internal/etch/testdata/help/`, and
-the website inputs under `site/`, including the cheatsheet fixtures in
+the website inputs under `site/`, including the Reference example fixtures in
 `site/fixtures/`.
 
 Regenerate help snapshots after changing help output:

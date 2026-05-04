@@ -1,4 +1,0 @@
----
-title: Cheatsheet
-layout: cheatsheet
----

@@ -66,7 +66,7 @@ changes remain proposals to review before implementation:
 1. [Format prefix safety](format-prefix-safety.md)
 2. [Help and usage polish](help-and-usage-polish.md)
 
-Website, README, Cheatsheet, and release-readiness review tasks live in
+Website, README, Reference/help, and release-readiness review tasks live in
 `PLAN.md` because they are execution work, not Etch behavior proposals.
 
 ## Shared Goals
